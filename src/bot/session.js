@@ -404,12 +404,11 @@ function formatPairingCode(code) {
 function extractStatusCode(lastDisconnect) {
   const err = lastDisconnect?.error;
   if (!err) return 0;
-  return (
-    err.output?.statusCode ??
-    err.statusCode ??
-    err.error?.output?.statusCode ??
-    err.data?.attrs?.code ??
-    (typeof err === 'object' && Number(err.status)) ||
-    0
-  );
+
+  if (err.output?.statusCode != null) return Number(err.output.statusCode);
+  if (err.statusCode != null) return Number(err.statusCode);
+  if (err.error?.output?.statusCode != null) return Number(err.error.output.statusCode);
+  if (err.data?.attrs?.code != null) return Number(err.data.attrs.code);
+  if (typeof err === 'object' && err.status != null) return Number(err.status);
+  return 0;
 }
