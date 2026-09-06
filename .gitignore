@@ -1,7 +1,0 @@
-node_modules/
-data/
-sessions/
-logs/
-*.log
-.env
-.DS_Store

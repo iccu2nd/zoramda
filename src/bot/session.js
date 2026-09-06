@@ -149,13 +149,16 @@ export class BotSession {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
-      const registered = !!this.sock?.authState?.creds?.registered;
+      // Prefer creds.me — registered flag can lag after pairing restart (515)
+      const hasAccount =
+        !!this.sock?.authState?.creds?.me ||
+        !!this.sock?.authState?.creds?.registered;
 
-      // Pairing code flow: request code once when WA is ready (qr event fires)
+      // Pairing: request code once when WA is ready and no account yet
       if (
         this.authMethod === 'pairing' &&
         this.pairingPhone &&
-        !registered &&
+        !hasAccount &&
         !this._pairingRequested
       ) {
         this._pairingRequested = true;
@@ -175,7 +178,7 @@ export class BotSession {
         return;
       }
 
-      // QR flow
+      // QR flow only when not in pairing mode
       if (this.authMethod !== 'pairing') {
         this.status = 'qr';
         this.pairingCode = null;
@@ -209,41 +212,67 @@ export class BotSession {
     }
 
     if (connection === 'close') {
-      const statusCode = lastDisconnect?.error?.output?.statusCode
-        ?? lastDisconnect?.error?.statusCode
-        ?? 0;
-
+      const statusCode = extractStatusCode(lastDisconnect);
       const isLoggedOut = statusCode === DisconnectReason.loggedOut;
+      const isRestartRequired =
+        statusCode === DisconnectReason.restartRequired || statusCode === 515;
 
-      this.status = 'disconnected';
-      this.uptimeStart = null;
-      this.qrDataUrl = null;
-      // keep pairingCode briefly visible only if still pairing; clear on hard close
-      if (isLoggedOut || this.authMethod !== 'pairing') {
-        this.pairingCode = null;
-      }
-      await this._persistStatus();
-
-      this.logger.warn({ statusCode, isLoggedOut }, 'Connection closed');
+      this.logger.warn({ statusCode, isLoggedOut, isRestartRequired }, 'Connection closed');
 
       await this._cleanupSocket();
 
       if (isLoggedOut) {
+        this.status = 'disconnected';
+        this.uptimeStart = null;
+        this.qrDataUrl = null;
+        this.pairingCode = null;
+        this.pairingPhone = null;
+        this._pairingRequested = false;
+        this.authMethod = 'qr';
+        await this._persistStatus();
         this.logger.info('Logged out – clearing auth state');
         try {
           fs.rmSync(this.authDir, { recursive: true, force: true });
         } catch {}
         this.isIntentionallyStopped = true;
-        this.pairingCode = null;
-        this.pairingPhone = null;
-        this._pairingRequested = false;
         return;
       }
 
-      // Do not auto-reconnect while waiting for user to enter pairing code
-      if (this.authMethod === 'pairing' && this.pairingCode) {
+      // 515 after pairing/QR success: WA asks for immediate reconnect with saved creds
+      if (isRestartRequired && !this.isIntentionallyStopped) {
+        this.logger.info('Restart required (515) – reconnecting with saved session');
+        this.status = 'connecting';
+        this.qrDataUrl = null;
+        this.pairingCode = null;
+        // Switch off pairing mode so we do NOT request a new code
+        this.authMethod = 'qr';
+        this.pairingPhone = null;
+        this._pairingRequested = false;
+        await this._persistStatus();
+        // Brief pause so multi-file auth state finishes writing to disk
+        this._scheduleReconnect({ immediate: true, delayMs: 1200 });
         return;
       }
+
+      // Still waiting for user to enter pairing code on phone — keep UI, no reconnect loop
+      if (
+        this.authMethod === 'pairing' &&
+        this.pairingCode &&
+        !this.isIntentionallyStopped
+      ) {
+        this.status = 'pairing';
+        this.uptimeStart = null;
+        this.qrDataUrl = null;
+        await this._persistStatus();
+        this.logger.info('Waiting for pairing code entry on phone');
+        return;
+      }
+
+      this.status = 'disconnected';
+      this.uptimeStart = null;
+      this.qrDataUrl = null;
+      this.pairingCode = null;
+      await this._persistStatus();
 
       if (!this.isIntentionallyStopped) {
         this._scheduleReconnect();
@@ -251,20 +280,30 @@ export class BotSession {
     }
   }
 
-  _scheduleReconnect() {
+  /**
+   * @param {{ immediate?: boolean, delayMs?: number }} [opts]
+   */
+  _scheduleReconnect(opts = {}) {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     if (this.reconnectAttempts >= this.maxReconnect) {
       this.logger.error('Max reconnect attempts reached');
       return;
     }
     this.reconnectAttempts += 1;
-    // Exponential backoff capped
-    const delay = Math.min(1000 * Math.pow(1.5, this.reconnectAttempts), 60_000);
+
+    let delay;
+    if (opts.immediate) {
+      delay = opts.delayMs ?? 1000;
+    } else {
+      delay = Math.min(1000 * Math.pow(1.5, this.reconnectAttempts), 60_000);
+    }
+
     this.logger.info({ attempt: this.reconnectAttempts, delay }, 'Scheduling reconnect');
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       if (!this.isIntentionallyStopped) {
-        this.start().catch((err) => {
+        // Always resume with saved session (QR path). Pairing only for first link.
+        this.start({ method: 'qr' }).catch((err) => {
           this.logger.error({ err: err.message }, 'Reconnect failed');
         });
       }
@@ -357,4 +396,20 @@ function formatPairingCode(code) {
   const clean = String(code).replace(/\s|-/g, '').toUpperCase();
   if (clean.length === 8) return `${clean.slice(0, 4)}-${clean.slice(4)}`;
   return clean;
+}
+
+/**
+ * Unwrap Baileys lastDisconnect status code from nested Boom / wrapper shapes.
+ */
+function extractStatusCode(lastDisconnect) {
+  const err = lastDisconnect?.error;
+  if (!err) return 0;
+  return (
+    err.output?.statusCode ??
+    err.statusCode ??
+    err.error?.output?.statusCode ??
+    err.data?.attrs?.code ??
+    (typeof err === 'object' && Number(err.status)) ||
+    0
+  );
 }
