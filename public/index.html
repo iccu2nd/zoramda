@@ -1,122 +1,89 @@
 <!DOCTYPE html>
-<html lang="id" data-theme="light">
+<html lang="id">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <meta name="theme-color" content="#eef0f4" />
-  <title>ZoraBot</title>
-  <script>
-    (function () {
-      try {
-        var t = localStorage.getItem('zora-theme');
-        document.documentElement.setAttribute('data-theme', t === 'dark' ? 'dark' : 'light');
-      } catch (e) {}
-    })();
-  </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Inter:wght@600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-  <link rel="stylesheet" href="/css/style.css" />
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ZoraBot</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+<link rel="stylesheet" href="/css/styles.css" />
+<script>
+  // Applied immediately, before paint, so there is never a light-mode flash.
+  document.documentElement.setAttribute('data-theme', localStorage.getItem('zora-theme') || 'light');
+</script>
 </head>
 <body>
-  <div id="app" class="app">
+  <div class="auth-shell">
+    <div class="auth-card">
+      <div class="brand"><span class="mark">Z</span> ZoraBot</div>
+      <h1 id="formTitle">Sign in</h1>
+      <p class="sub" id="formSub">Manage your WhatsApp bots</p>
 
-    <div id="view-auth" class="view hidden">
-      <div class="auth-shell">
-        <div class="auth-card">
-          <div class="auth-brand">
-            <span class="brand-mark">Zora<span class="brand-accent">Bot</span></span>
-            <p class="auth-tagline">WhatsApp Gateway</p>
-          </div>
+      <div class="auth-error" id="authError"></div>
 
-          <div class="auth-tabs" role="tablist">
-            <button type="button" class="auth-tab active" data-tab="login">Masuk</button>
-            <button type="button" class="auth-tab" data-tab="register">Daftar</button>
-          </div>
-
-          <form id="form-login" class="auth-form">
-            <div class="field">
-              <label for="login-user">Username</label>
-              <input id="login-user" type="text" name="username" autocomplete="username" required minlength="3" placeholder="username" />
-            </div>
-            <div class="field">
-              <label for="login-pass">Password</label>
-              <input id="login-pass" type="password" name="password" autocomplete="current-password" required minlength="6" placeholder="••••••••" />
-            </div>
-            <p id="login-error" class="form-error hidden"></p>
-            <button type="submit" class="btn btn-primary btn-block">Masuk</button>
-          </form>
-
-          <form id="form-register" class="auth-form hidden">
-            <div class="field">
-              <label for="reg-user">Username</label>
-              <input id="reg-user" type="text" name="username" autocomplete="username" required minlength="3" placeholder="minimal 3 karakter" />
-            </div>
-            <div class="field">
-              <label for="reg-pass">Password</label>
-              <input id="reg-pass" type="password" name="password" autocomplete="new-password" required minlength="6" placeholder="minimal 6 karakter" />
-            </div>
-            <p id="register-error" class="form-error hidden"></p>
-            <button type="submit" class="btn btn-primary btn-block">Buat Akun</button>
-          </form>
+      <form id="authForm">
+        <div class="field">
+          <label for="username">Username</label>
+          <input id="username" name="username" autocomplete="username" required />
         </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required />
+        </div>
+        <button class="btn btn-primary btn-block" type="submit" id="submitBtn">Sign in</button>
+      </form>
+
+      <div class="auth-switch">
+        <span id="switchPrompt">Don't have an account?</span>
+        <a id="switchLink">Create one</a>
       </div>
     </div>
-
-    <div id="view-main" class="view hidden">
-      <header class="topbar" id="topbar">
-        <div class="topbar-inner">
-          <a href="/" class="brand-mark sm">Zora<span class="brand-accent">Bot</span></a>
-          <div class="topbar-actions">
-            <button type="button" id="btn-theme" class="theme-switch" aria-label="Ganti tema">
-              <span class="theme-track"><span class="theme-knob"></span></span>
-              <span id="theme-label">Dark</span>
-            </button>
-            <button type="button" id="btn-logout" class="icon-btn" aria-label="Keluar" title="Keluar">
-              <i class="fa-solid fa-right-from-bracket"></i>
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <main class="page">
-        <div class="page-intro">
-          <div>
-            <p class="eyebrow">Panel kontrol</p>
-            <h1 class="page-title">Dashboard</h1>
-            <p class="page-desc">Kelola bot WhatsApp dari satu tempat.</p>
-          </div>
-          <button type="button" id="btn-create-bot" class="btn btn-primary">
-            <i class="fa-solid fa-plus"></i>
-            <span>Buat Bot</span>
-          </button>
-        </div>
-
-        <div id="bots-list" class="card-stack"></div>
-
-        <div id="empty-state" class="empty-card hidden">
-          <div class="empty-icon"><i class="fa-solid fa-robot"></i></div>
-          <h2>Belum ada bot</h2>
-          <p>Buat bot pertama untuk mulai menghubungkan nomor WhatsApp.</p>
-          <button type="button" id="btn-create-bot-empty" class="btn btn-primary">Buat Bot</button>
-        </div>
-      </main>
-    </div>
-
-    <div id="modal-overlay" class="modal-overlay hidden">
-      <div class="modal" id="modal" role="dialog" aria-modal="true">
-        <div class="modal-header">
-          <h2 id="modal-title">Bot</h2>
-          <button type="button" id="modal-close" class="icon-btn" aria-label="Tutup">
-            <i class="fa-solid fa-xmark"></i>
-          </button>
-        </div>
-        <div class="modal-body" id="modal-body"></div>
-      </div>
-    </div>
-
   </div>
-  <script src="/js/app.js" type="module"></script>
+
+  <script type="module">
+    import { api } from '/js/api.js';
+
+    let mode = 'login';
+    const form = document.getElementById('authForm');
+    const errorBox = document.getElementById('authError');
+    const submitBtn = document.getElementById('submitBtn');
+
+    function setMode(next) {
+      mode = next;
+      const isLogin = mode === 'login';
+      document.getElementById('formTitle').textContent = isLogin ? 'Sign in' : 'Create account';
+      document.getElementById('formSub').textContent = isLogin ? 'Manage your WhatsApp bots' : 'Set up your ZoraBot account';
+      submitBtn.textContent = isLogin ? 'Sign in' : 'Create account';
+      document.getElementById('switchPrompt').textContent = isLogin ? "Don't have an account?" : 'Already have an account?';
+      document.getElementById('switchLink').textContent = isLogin ? 'Create one' : 'Sign in';
+      errorBox.classList.remove('show');
+    }
+
+    document.getElementById('switchLink').addEventListener('click', () => setMode(mode === 'login' ? 'register' : 'login'));
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorBox.classList.remove('show');
+      submitBtn.disabled = true;
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+      try {
+        if (mode === 'register') {
+          await api.register({ username, password });
+          await api.login({ username, password });
+        } else {
+          await api.login({ username, password });
+        }
+        window.location.href = '/dashboard.html';
+      } catch (err) {
+        errorBox.textContent = err.message;
+        errorBox.classList.add('show');
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+
+    // If already signed in, skip straight to the dashboard.
+    api.me().then(() => { window.location.href = '/dashboard.html'; }).catch(() => {});
+  </script>
 </body>
 </html>

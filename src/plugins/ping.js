@@ -1,10 +1,10 @@
 export default {
   command: 'ping',
-  aliases: ['p'],
-  category: 'main',
-  description: 'Cek kecepatan respon bot',
-  async run({ reply, metrics }) {
-    const latency = Date.now() - (metrics?.receivedAt || Date.now());
-    await reply(`Pong\nLatency: ${latency}ms`);
+  aliases: [],
+  category: 'General',
+  description: 'Check whether the bot is responding',
+  async run(ctx) {
+    const ms = Date.now() - ctx.timings.receivedAt;
+    await ctx.reply(`Pong. ${ms}ms`);
   }
 };

@@ -1,41 +1,15 @@
+import 'dotenv/config';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(__dirname, '../..');
+const root = process.cwd();
 
 export const config = {
-  port: Number(process.env.PORT) || 3000,
-  host: process.env.HOST || '0.0.0.0',
-  sessionSecret: process.env.SESSION_SECRET || 'zorabot-change-me-in-production-' + Date.now(),
-  dataDir: path.join(ROOT, 'data'),
-  sessionsDir: path.join(ROOT, 'sessions'),
-  logsDir: path.join(ROOT, 'logs'),
-  publicDir: path.join(ROOT, 'public'),
-  cookie: {
-    name: 'zora_sid',
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production'
-  },
-  rateLimit: {
-    windowMs: 15 * 60 * 1000,
-    max: 100
-  },
-  loginRateLimit: {
-    windowMs: 15 * 60 * 1000,
-    max: 20
-  },
-  defaultBot: {
-    name: 'ZoraBot',
-    prefix: '.',
-    menuTitle: 'ZoraBot Menu',
-    menuDescription: 'Command list',
-    footer: 'ZoraBot Base',
-    autoRead: false,
-    presence: false
-  }
+  port: parseInt(process.env.PORT || '3000', 10),
+  isProd: process.env.NODE_ENV === 'production',
+  sessionSecret: process.env.SESSION_SECRET || 'dev-secret-change-me',
+  sessionMaxAgeMs: (parseInt(process.env.SESSION_MAX_AGE_HOURS || '168', 10)) * 60 * 60 * 1000,
+  bcryptRounds: parseInt(process.env.BCRYPT_ROUNDS || '12', 10),
+  dbPath: path.resolve(root, process.env.DB_PATH || './data/zorabot.db'),
+  sessionsDir: path.resolve(root, process.env.SESSIONS_DIR || './sessions'),
+  bootstrapFirstUserAsAdmin: (process.env.BOOTSTRAP_FIRST_USER_AS_ADMIN || 'true') === 'true'
 };
-
-export default config;

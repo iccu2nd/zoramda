@@ -1,28 +1,21 @@
 import pino from 'pino';
-import path from 'node:path';
-import fs from 'node:fs';
-import config from '../config/index.js';
+import { config } from '../config/index.js';
 
-if (!fs.existsSync(config.logsDir)) {
-  fs.mkdirSync(config.logsDir, { recursive: true });
-}
-
-const logger = pino({
-  level: process.env.LOG_LEVEL || 'info',
-  transport: process.env.NODE_ENV === 'production' ? undefined : {
-    target: 'pino/file',
-    options: { destination: 1 }
-  },
-  base: { app: 'zorabot' },
-  timestamp: pino.stdTimeFunctions.isoTime,
-  redact: {
-    paths: ['password', 'token', 'authState', 'creds', 'keys', 'secret', 'session'],
-    censor: '[REDACTED]'
-  }
+/**
+ * Central logger. Every log line must avoid secrets: never pass raw
+ * auth-state objects, passwords, tokens, or full env to this logger.
+ */
+export const logger = pino({
+  level: config.isProd ? 'info' : 'debug',
+  transport: config.isProd
+    ? undefined
+    : { target: 'pino-pretty', options: { colorize: true, translateTime: 'HH:MM:ss', ignore: 'pid,hostname' } }
 });
 
-export function createBotLogger(botId) {
+/**
+ * Creates a child logger scoped to one bot, so every log line from that
+ * bot's lifecycle is traceable without leaking into other bots' logs.
+ */
+export function botLogger(botId) {
   return logger.child({ botId });
 }
-
-export default logger;
