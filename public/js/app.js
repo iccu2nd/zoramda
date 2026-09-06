@@ -130,7 +130,7 @@ function escapeHtml(str) {
 async function handleBotAction(action, id) {
   try {
     if (action === 'connect') {
-      openConnectModal(id);
+      window.location.href = `/connect?id=${encodeURIComponent(id)}`;
       return;
     } else if (action === 'disconnect') {
       await api(`/bots/${id}/disconnect`, { method: 'POST' });

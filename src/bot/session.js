@@ -12,6 +12,24 @@ import { acquireBotLock, renewBotLock, releaseBotLock } from './instanceLock.js'
 import { processMessage } from './messageEngine.js';
 import { wrapSocket } from './socketHelpers.js';
 
+const BAILEYS_VERSION_TIMEOUT_MS = 8000;
+// Versi stabil terakhir yang diketahui aman, dipakai kalau fetchLatestBaileysVersion()
+// hang/gagal (bisa terjadi di environment yang network-nya dibatasi seperti Railway).
+const FALLBACK_BAILEYS_VERSION = [2, 3000, 1023223821];
+
+async function getBaileysVersion(logger) {
+  try {
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('timeout')), BAILEYS_VERSION_TIMEOUT_MS)
+    );
+    const { version } = await Promise.race([fetchLatestBaileysVersion(), timeout]);
+    return version;
+  } catch (err) {
+    logger?.warn({ err: err.message }, 'fetchLatestBaileysVersion gagal/timeout, pakai versi fallback');
+    return FALLBACK_BAILEYS_VERSION;
+  }
+}
+
 /**
  * Isolated bot instance.
  * Pairing flow aligned with working ZoraBot reference:
@@ -149,7 +167,7 @@ export class BotSession {
 
       const { state, saveCreds } = await useMongoAuthState(this.id);
       this._saveCreds = saveCreds;
-      const { version } = await fetchLatestBaileysVersion();
+      const version = await getBaileysVersion(this.logger);
 
       // Canonical browser tuple — important for pairing code acceptance
       const sock = makeWASocket({
