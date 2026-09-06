@@ -26,6 +26,9 @@ export async function getDb() {
   return db;
 }
 
+let authIndexesReady = false;
+let loginIndexesReady = false;
+
 /**
  * Collection storing Baileys auth state (creds + signal keys) per bot/user session.
  * One document per (sessionId, dataId) pair, e.g. dataId "creds" or "app-state-sync-key-XYZ".
@@ -33,7 +36,10 @@ export async function getDb() {
 export async function getAuthCollection() {
   const database = await getDb();
   const col = database.collection('bot_auth_state');
-  await col.createIndex({ sessionId: 1, dataId: 1 }, { unique: true });
+  if (!authIndexesReady) {
+    await col.createIndex({ sessionId: 1, dataId: 1 }, { unique: true });
+    authIndexesReady = true;
+  }
   return col;
 }
 
@@ -44,8 +50,11 @@ export async function getAuthCollection() {
 export async function getLoginSessionsCollection() {
   const database = await getDb();
   const col = database.collection('login_sessions');
-  await col.createIndex({ id: 1 }, { unique: true });
-  await col.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+  if (!loginIndexesReady) {
+    await col.createIndex({ id: 1 }, { unique: true });
+    await col.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+    loginIndexesReady = true;
+  }
   return col;
 }
 
