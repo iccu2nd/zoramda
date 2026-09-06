@@ -22,7 +22,7 @@ html[data-theme="light"] {
   --radius-sm: 12px;
   --radius-xs: 10px;
   --font: 'Outfit', system-ui, -apple-system, sans-serif;
-  --font-head: 'Outfit', 'Helvetica Neue', Arial, sans-serif;
+  --font-head: 'Inter', 'Helvetica Neue', Arial, sans-serif;
   --topbar-h: 64px;
   --ease: 0.22s ease;
 }
@@ -562,7 +562,7 @@ html[data-theme="dark"] .toggle.on::after { background: #0a0a0a; }
 .plugin-item code {
   font-size: 0.82rem;
   font-weight: 700;
-  font-family: var(--font);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 .connect-methods { display: flex; flex-direction: column; gap: 0.5rem; }

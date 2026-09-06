@@ -1,34 +1,17 @@
 import makeWASocket, {
+  useMultiFileAuthState,
   DisconnectReason,
   fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore
 } from '@whiskeysockets/baileys';
+import path from 'node:path';
+import fs from 'node:fs';
 import QRCode from 'qrcode';
 import config from '../config/index.js';
 import { createBotLogger } from '../utils/logger.js';
 import { updateBot } from '../db/index.js';
-import { useMongoAuthState, clearMongoAuthState } from '../db/mongoAuthState.js';
-import { acquireBotLock, renewBotLock, releaseBotLock } from './instanceLock.js';
 import { processMessage } from './messageEngine.js';
 import { wrapSocket } from './socketHelpers.js';
-
-const BAILEYS_VERSION_TIMEOUT_MS = 8000;
-// Versi stabil terakhir yang diketahui aman, dipakai kalau fetchLatestBaileysVersion()
-// hang/gagal (bisa terjadi di environment yang network-nya dibatasi seperti Railway).
-const FALLBACK_BAILEYS_VERSION = [2, 3000, 1023223821];
-
-async function getBaileysVersion(logger) {
-  try {
-    const timeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('timeout')), BAILEYS_VERSION_TIMEOUT_MS)
-    );
-    const { version } = await Promise.race([fetchLatestBaileysVersion(), timeout]);
-    return version;
-  } catch (err) {
-    logger?.warn({ err: err.message }, 'fetchLatestBaileysVersion gagal/timeout, pakai versi fallback');
-    return FALLBACK_BAILEYS_VERSION;
-  }
-}
 
 /**
  * Isolated bot instance.
@@ -58,6 +41,7 @@ export class BotSession {
     this.reconnectTimer = null;
     this.isIntentionallyStopped = false;
     this.eventHandlersAttached = false;
+    this.authDir = path.join(config.sessionsDir, this.id);
 
     /** @type {'qr' | 'pairing'} */
     this.authMethod = 'qr';
@@ -68,8 +52,6 @@ export class BotSession {
     this._pairingRestarts = 0;
     this._qrRestarts = 0;
     this._saveCreds = null;
-    this._lockRenewTimer = null;
-    this._lockRetryTimer = null;
   }
 
   getUptime() {
@@ -87,19 +69,6 @@ export class BotSession {
    */
   async start(opts = {}) {
     if (this._starting) return;
-
-    const gotLock = await acquireBotLock(this.id);
-    if (!gotLock) {
-      this.logger.warn(
-        'Another running instance still owns this bot session (likely a Railway rolling deploy) — waiting for it to release'
-      );
-      this.status = 'connecting';
-      await this._persistStatus();
-      this._scheduleLockRetry(opts);
-      return;
-    }
-    this._ensureLockRenewal();
-
     this._starting = true;
     const gen = ++this._gen;
 
@@ -140,7 +109,7 @@ export class BotSession {
         !isRestart && (this.authMethod === 'pairing' || clearSessionFirst || method === 'qr');
 
       if (forceNewAuth && this.authMethod === 'pairing') {
-        await this._clearAuthDir();
+        this._clearAuthDir();
         if (!isRestart) {
           this.pairingCode = null;
           this._pairingRestarts = 0;
@@ -148,9 +117,13 @@ export class BotSession {
         }
         this.logger.info('Session cleared for new pairing');
       } else if (!isRestart && method === 'qr' && clearSessionFirst) {
-        await this._clearAuthDir();
+        this._clearAuthDir();
         this.pairingCode = null;
         this._qrRestarts = 0;
+      }
+
+      if (!fs.existsSync(this.authDir)) {
+        fs.mkdirSync(this.authDir, { recursive: true });
       }
 
       if (!isRestart) {
@@ -165,9 +138,9 @@ export class BotSession {
       }
       await this._persistStatus();
 
-      const { state, saveCreds } = await useMongoAuthState(this.id);
+      const { state, saveCreds } = await useMultiFileAuthState(this.authDir);
       this._saveCreds = saveCreds;
-      const version = await getBaileysVersion(this.logger);
+      const { version } = await fetchLatestBaileysVersion();
 
       // Canonical browser tuple — important for pairing code acceptance
       const sock = makeWASocket({
@@ -339,7 +312,7 @@ export class BotSession {
         // If we never completed open and still had pairing in progress,
         // a 401 can appear after a broken handshake — still clear to avoid poison state.
         this.logger.info('Logged out – clearing auth state');
-        await this._clearAuthDir();
+        this._clearAuthDir();
         this.status = 'disconnected';
         this.uptimeStart = null;
         this.qrDataUrl = null;
@@ -400,41 +373,6 @@ export class BotSession {
   }
 
   /**
-   * Keep this instance's ownership of the bot session fresh while it's
-   * running, so a Railway rolling deploy's new container has to wait for
-   * this lock to actually expire/release instead of connecting alongside us.
-   */
-  _ensureLockRenewal() {
-    if (this._lockRenewTimer) return;
-    this._lockRenewTimer = setInterval(() => {
-      renewBotLock(this.id).catch((err) => {
-        this.logger.warn({ err: err.message }, 'Bot lock renew failed');
-      });
-    }, 20_000);
-  }
-
-  _stopLockRenewal() {
-    if (this._lockRenewTimer) {
-      clearInterval(this._lockRenewTimer);
-      this._lockRenewTimer = null;
-    }
-  }
-
-  /**
-   * @param {object} opts same opts start() was originally called with
-   */
-  _scheduleLockRetry(opts) {
-    if (this._lockRetryTimer) clearTimeout(this._lockRetryTimer);
-    this._lockRetryTimer = setTimeout(() => {
-      this._lockRetryTimer = null;
-      if (this.isIntentionallyStopped) return;
-      this.start(opts).catch((err) => {
-        this.logger.error({ err: err.message }, 'Lock retry failed');
-      });
-    }, 8_000);
-  }
-
-  /**
    * @param {{ isRestart?: boolean, delayMs?: number }} [opts]
    */
   _scheduleReconnect(opts = {}) {
@@ -474,12 +412,6 @@ export class BotSession {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
-    if (this._lockRetryTimer) {
-      clearTimeout(this._lockRetryTimer);
-      this._lockRetryTimer = null;
-    }
-    this._stopLockRenewal();
-    await releaseBotLock(this.id);
     await this._cleanupSocket();
     this.status = 'disconnected';
     this.uptimeStart = null;
@@ -507,12 +439,13 @@ export class BotSession {
     this.eventHandlersAttached = false;
   }
 
-  async _clearAuthDir() {
+  _clearAuthDir() {
     try {
-      await clearMongoAuthState(this.id);
-    } catch (err) {
-      this.logger.warn({ err: err.message }, 'Failed to clear Mongo auth state');
-    }
+      fs.rmSync(this.authDir, { recursive: true, force: true });
+    } catch {}
+    try {
+      fs.mkdirSync(this.authDir, { recursive: true });
+    } catch {}
   }
 
   async _persistStatus(extra = {}) {

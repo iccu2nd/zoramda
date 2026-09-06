@@ -1,4 +1,3 @@
-import 'dotenv/config';
 import fs from 'node:fs';
 import config from './config/index.js';
 import { initDb } from './db/index.js';

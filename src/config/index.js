@@ -8,7 +8,6 @@ export const config = {
   port: Number(process.env.PORT) || 3000,
   host: process.env.HOST || '0.0.0.0',
   sessionSecret: process.env.SESSION_SECRET || 'zorabot-change-me-in-production-' + Date.now(),
-  mongoUri: process.env.MONGODB_URI || '',
   dataDir: path.join(ROOT, 'data'),
   sessionsDir: path.join(ROOT, 'sessions'),
   logsDir: path.join(ROOT, 'logs'),
