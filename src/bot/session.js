@@ -1,15 +1,13 @@
 import makeWASocket, {
-  useMultiFileAuthState,
   DisconnectReason,
   fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore
 } from '@whiskeysockets/baileys';
-import path from 'node:path';
-import fs from 'node:fs';
 import QRCode from 'qrcode';
 import config from '../config/index.js';
 import { createBotLogger } from '../utils/logger.js';
 import { updateBot } from '../db/index.js';
+import { useMongoAuthState, clearMongoAuthState } from '../db/mongoAuthState.js';
 import { processMessage } from './messageEngine.js';
 import { wrapSocket } from './socketHelpers.js';
 
@@ -41,7 +39,6 @@ export class BotSession {
     this.reconnectTimer = null;
     this.isIntentionallyStopped = false;
     this.eventHandlersAttached = false;
-    this.authDir = path.join(config.sessionsDir, this.id);
 
     /** @type {'qr' | 'pairing'} */
     this.authMethod = 'qr';
@@ -109,7 +106,7 @@ export class BotSession {
         !isRestart && (this.authMethod === 'pairing' || clearSessionFirst || method === 'qr');
 
       if (forceNewAuth && this.authMethod === 'pairing') {
-        this._clearAuthDir();
+        await this._clearAuthDir();
         if (!isRestart) {
           this.pairingCode = null;
           this._pairingRestarts = 0;
@@ -117,13 +114,9 @@ export class BotSession {
         }
         this.logger.info('Session cleared for new pairing');
       } else if (!isRestart && method === 'qr' && clearSessionFirst) {
-        this._clearAuthDir();
+        await this._clearAuthDir();
         this.pairingCode = null;
         this._qrRestarts = 0;
-      }
-
-      if (!fs.existsSync(this.authDir)) {
-        fs.mkdirSync(this.authDir, { recursive: true });
       }
 
       if (!isRestart) {
@@ -138,7 +131,7 @@ export class BotSession {
       }
       await this._persistStatus();
 
-      const { state, saveCreds } = await useMultiFileAuthState(this.authDir);
+      const { state, saveCreds } = await useMongoAuthState(this.id);
       this._saveCreds = saveCreds;
       const { version } = await fetchLatestBaileysVersion();
 
@@ -294,11 +287,10 @@ export class BotSession {
       const statusCode = extractStatusCode(lastDisconnect);
       const errMsg = lastDisconnect?.error?.message || 'Connection Closed';
       const wasRegistered = !!sock?.authState?.creds?.registered;
-      const hasMe = !!sock?.authState?.creds?.me?.id;
       const isLoggedOut = statusCode === DisconnectReason.loggedOut;
 
       this.logger.warn(
-        { statusCode, isLoggedOut, wasRegistered, hasMe, generation: this._gen, errMsg },
+        { statusCode, isLoggedOut, wasRegistered, errMsg },
         'Connection closed'
       );
 
@@ -313,7 +305,7 @@ export class BotSession {
         // If we never completed open and still had pairing in progress,
         // a 401 can appear after a broken handshake — still clear to avoid poison state.
         this.logger.info('Logged out – clearing auth state');
-        this._clearAuthDir();
+        await this._clearAuthDir();
         this.status = 'disconnected';
         this.uptimeStart = null;
         this.qrDataUrl = null;
@@ -440,13 +432,12 @@ export class BotSession {
     this.eventHandlersAttached = false;
   }
 
-  _clearAuthDir() {
+  async _clearAuthDir() {
     try {
-      fs.rmSync(this.authDir, { recursive: true, force: true });
-    } catch {}
-    try {
-      fs.mkdirSync(this.authDir, { recursive: true });
-    } catch {}
+      await clearMongoAuthState(this.id);
+    } catch (err) {
+      this.logger.warn({ err: err.message }, 'Failed to clear Mongo auth state');
+    }
   }
 
   async _persistStatus(extra = {}) {
