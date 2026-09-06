@@ -1,77 +1,47 @@
-import { Low } from 'lowdb';
-import { JSONFile } from 'lowdb/node';
-import path from 'node:path';
-import fs from 'node:fs';
 import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcryptjs';
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
-import { connectMongo, getLoginSessionsCollection } from './mongo.js';
-
-const defaultData = {
-  users: [],
-  bots: []
-};
-
-let db = null;
+import {
+  connectMongo,
+  getLoginSessionsCollection,
+  getUsersCollection,
+  getBotsCollection
+} from './mongo.js';
 
 export async function initDb() {
-  if (!fs.existsSync(config.dataDir)) {
-    fs.mkdirSync(config.dataDir, { recursive: true });
-  }
-  const file = path.join(config.dataDir, 'zorabot.json');
-  const adapter = new JSONFile(file);
-  db = new Low(adapter, defaultData);
-  await db.read();
-  if (!db.data) {
-    db.data = structuredClone(defaultData);
-    await db.write();
-  }
-  // ensure arrays
-  db.data.users ||= [];
-  db.data.bots ||= [];
-  await db.write();
-
   await connectMongo();
-
   logger.info('Database initialized');
-  return db;
-}
-
-function ensureDb() {
-  if (!db) throw new Error('Database not initialized');
-  return db;
 }
 
 // ---- Users ----
 export async function createUser({ username, password }) {
-  const d = ensureDb();
-  await d.read();
-  if (d.data.users.find(u => u.username.toLowerCase() === username.toLowerCase())) {
+  const col = await getUsersCollection();
+  const usernameLower = username.trim().toLowerCase();
+  const existing = await col.findOne({ usernameLower });
+  if (existing) {
     throw new Error('Username already exists');
   }
   const hash = await bcrypt.hash(password, 12);
   const user = {
     id: uuidv4(),
     username: username.trim(),
+    usernameLower,
     passwordHash: hash,
     createdAt: new Date().toISOString()
   };
-  d.data.users.push(user);
-  await d.write();
+  await col.insertOne(user);
   return { id: user.id, username: user.username, createdAt: user.createdAt };
 }
 
 export async function findUserByUsername(username) {
-  const d = ensureDb();
-  await d.read();
-  return d.data.users.find(u => u.username.toLowerCase() === username.toLowerCase()) || null;
+  const col = await getUsersCollection();
+  return col.findOne({ usernameLower: username.trim().toLowerCase() });
 }
 
 export async function findUserById(id) {
-  const d = ensureDb();
-  await d.read();
-  return d.data.users.find(u => u.id === id) || null;
+  const col = await getUsersCollection();
+  return col.findOne({ id });
 }
 
 export async function verifyPassword(user, password) {
@@ -109,8 +79,7 @@ export async function destroySession(sid) {
 
 // ---- Bots ----
 export async function createBot(userId, { name } = {}) {
-  const d = ensureDb();
-  await d.read();
+  const col = await getBotsCollection();
   const bot = {
     id: uuidv4(),
     userId,
@@ -127,53 +96,48 @@ export async function createBot(userId, { name } = {}) {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
-  d.data.bots.push(bot);
-  await d.write();
+  await col.insertOne(bot);
   return bot;
 }
 
 export async function getBotById(botId) {
-  const d = ensureDb();
-  await d.read();
-  return d.data.bots.find(b => b.id === botId) || null;
+  const col = await getBotsCollection();
+  return col.findOne({ id: botId });
 }
 
 export async function getBotsByUser(userId) {
-  const d = ensureDb();
-  await d.read();
-  return d.data.bots.filter(b => b.userId === userId);
+  const col = await getBotsCollection();
+  return col.find({ userId }).toArray();
 }
 
 export async function updateBot(botId, userId, patch) {
-  const d = ensureDb();
-  await d.read();
-  const bot = d.data.bots.find(b => b.id === botId && b.userId === userId);
-  if (!bot) return null;
+  const col = await getBotsCollection();
   const allowed = [
     'name', 'prefix', 'menuTitle', 'menuDescription', 'footer',
     'autoRead', 'presence', 'plugins', 'status', 'phoneNumber'
   ];
+  const set = { updatedAt: new Date().toISOString() };
   for (const key of allowed) {
-    if (patch[key] !== undefined) bot[key] = patch[key];
+    if (patch[key] !== undefined) set[key] = patch[key];
   }
-  bot.updatedAt = new Date().toISOString();
-  await d.write();
-  return bot;
+  const result = await col.findOneAndUpdate(
+    { id: botId, userId },
+    { $set: set },
+    { returnDocument: 'after' }
+  );
+  // mongodb driver v6 returns the document directly; older versions wrap it in { value }
+  return result?.value ?? result ?? null;
 }
 
 export async function deleteBot(botId, userId) {
-  const d = ensureDb();
-  await d.read();
-  const before = d.data.bots.length;
-  d.data.bots = d.data.bots.filter(b => !(b.id === botId && b.userId === userId));
-  await d.write();
-  return d.data.bots.length < before;
+  const col = await getBotsCollection();
+  const result = await col.deleteOne({ id: botId, userId });
+  return result.deletedCount > 0;
 }
 
 export async function getAllBots() {
-  const d = ensureDb();
-  await d.read();
-  return d.data.bots;
+  const col = await getBotsCollection();
+  return col.find({}).toArray();
 }
 
 export default { initDb };
