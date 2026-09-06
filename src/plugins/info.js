@@ -1,13 +1,23 @@
 export default {
   command: 'info',
-  aliases: ['about'],
-  category: 'General',
-  description: 'Show basic information about this bot',
-  async run(ctx) {
-    const uptimeMs = ctx.bot.getUptimeMs();
-    const minutes = Math.floor(uptimeMs / 60000);
-    await ctx.reply(
-      `${ctx.botRow.name}\nPrefix: ${ctx.botRow.prefix}\nUptime: ${minutes} minute(s)`
-    );
+  aliases: ['botinfo'],
+  category: 'main',
+  description: 'Informasi bot',
+  async run({ bot, reply }) {
+    const uptime = bot.getUptime();
+    const h = Math.floor(uptime / 3600);
+    const m = Math.floor((uptime % 3600) / 60);
+    const s = uptime % 60;
+    const upStr = `${h}h ${m}m ${s}s`;
+
+    const text = [
+      `*${bot.name}*`,
+      `Status: ${bot.status}`,
+      `Prefix: ${bot.prefix}`,
+      `Nomor: ${bot.phoneNumber || '-'}`,
+      `Uptime: ${upStr}`
+    ].join('\n');
+
+    await reply(text);
   }
 };

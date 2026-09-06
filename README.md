@@ -1,114 +1,132 @@
 # ZoraBot
 
-A minimal, stable, multi-bot WhatsApp gateway base. Full ESM, built on
-Baileys, with an isolated bot manager, a small modular plugin system, and a
-clean dashboard.
+Stable WhatsApp Gateway Base — multi-bot, isolated sessions, modular plugins.
 
-## Cannot be run inside this sandbox
+## Requirements
 
-I wrote and syntax-checked every file, but this sandbox has **no network
-access**, so I was not able to run `npm install` or actually boot the server
-or connect a real WhatsApp session here. You'll need to do the first real
-run yourself (see below) — please treat this as a solid first pass that
-needs your own smoke test, not a package I've already verified end-to-end.
+- Node.js >= 20
+- `ffmpeg` di PATH (untuk voice note & convert sticker)
 
-## Setup
+## Install
 
 ```bash
+cd zorabot
 npm install
-cp .env.example .env
-# edit .env — at minimum set SESSION_SECRET to a long random string
+```
+
+## Run
+
+```bash
 npm start
 ```
 
-Then open `http://localhost:3000`, create an account (the first account
-becomes admin), create a bot, and click **Connect** to get a QR code.
+Open `http://localhost:3000`
 
-## Architecture
+## Structure
 
 ```
 src/
-  config/        env config
-  db/            single SQLite connection (WAL mode) + schema + repositories
-  auth/          bcrypt password hashing, server-side sessions, ownership guard
-  bots/          BotManager (Map<botId, BotInstance>) — full isolation per bot
-  engine/        per-message context + concurrent, non-blocking message engine
-  plugins/       ping.js, info.js, menu.js — drop new files here to add commands
-  menu/          dynamic menu renderer driven by bot settings + enabled plugins
-  api/           Express routes/middleware
-public/          dashboard frontend (vanilla HTML/CSS/JS, no build step)
+  index.js
+  config/
+  db/
+  bot/
+    manager.js
+    session.js
+    messageEngine.js
+    pluginLoader.js
+    socketHelpers.js   # button, album, sticker, vn, …
+    media.js
+    groupCache.js
+  plugins/
+  server/
+  middleware/
+  utils/
+public/
+sessions/
+data/
 ```
 
-Key decisions, and why:
+## Base Commands
 
-- **SQLite with a single WAL-mode connection**, not a traditional
-  connection pool. SQLite is embedded/in-process, so "pooling" in the
-  Postgres/MySQL sense doesn't apply — the equivalent correct pattern is one
-  persistent connection with WAL journaling, which is what's here. No
-  connection is opened per message.
-- **No global socket, no global "currentChat" state.** `BotManager` holds
-  one `BotInstance` per bot; each instance owns its own Baileys socket, auth
-  folder, group-metadata cache, and reconnect timer. A crash or reconnect
-  loop in one bot cannot touch another.
-- **No message queue.** Each message from `messages.upsert` is dispatched as
-  its own independent async task (fire-and-forget with its own try/catch),
-  so a heavy command in one group can't delay a light command (`ping`,
-  `menu`) in another group or bot. Per-message timing is logged
-  (`queueWaitMs`, `pluginMs`, `sendMs`, `totalMs`) so regressions are
-  measurable, not just assumed away.
-- **Bounded reconnect backoff** (2s → 4s → 8s… capped at 60s), and the old
-  socket's listeners are torn down before a new one is created — no
-  duplicate sockets, no unbounded reconnect loop, no listener leaks.
-- **Plugin errors are isolated** in the message engine: caught, logged
-  server-side only (never a stack trace to the user), bot and other plugins
-  keep running.
-- **CSRF**: mitigated via `httpOnly` + `SameSite=Lax` session cookies and no
-  CORS headers (so a cross-site page can't complete an authenticated JSON
-  request), rather than a separate CSRF token system — appropriate for this
-  base's scope. Add token-based CSRF later if you add authenticated
-  cross-origin clients.
-- **Auto-read / auto-presence** settings are wired to real Baileys calls
-  (`readMessages`, `sendPresenceUpdate`), not decorative toggles — every
-  control in the dashboard does something real, per your "no fake features"
-  requirement.
+| Command | Description |
+|---------|-------------|
+| `.ping` | Latency check |
+| `.menu` | Dynamic menu from active plugins |
+| `.info` | Bot info |
+| `.button` | Demo interactive buttons |
 
-## Adding a plugin
+## Media helpers (plugin context)
 
-Drop a file in `src/plugins/`:
+Setiap plugin menerima:
+
+| Helper | Keterangan |
+|--------|------------|
+| `reply(text)` | Teks biasa |
+| `sendImage(media, caption?)` | Gambar |
+| `sendVideo(media, caption?, { gif })` | Video |
+| `sendAudio(media, { ptt })` | Audio |
+| `sendVN(media)` | Voice note (opus) |
+| `sendSticker(media, opts)` | Sticker + EXIF |
+| `sendAlbum(items)` | Album multi media |
+| `sendButton(content)` | Native flow buttons |
+| `sendButtonV2(content)` | Legacy buttons |
+| `sendCarousel(content)` | Carousel cards |
+
+### Button types
+
+`reply`, `url`, `copy`, `call`, `location`, `address`, `reminder`, `cancel_reminder`, `list`
 
 ```js
-export default {
-  command: 'hello',
-  aliases: [],
-  category: 'General',
-  description: 'Say hello',
-  async run(ctx) {
-    await ctx.reply('Hello!');
-  }
-};
+await sendButton({
+  text: 'Pilih',
+  footer: 'ZoraBot',
+  buttons: [
+    { type: 'reply', label: 'OK', id: '.ping' },
+    { type: 'url', label: 'Web', url: 'https://example.com' },
+    { type: 'copy', label: 'Salin', code: 'ABC123' },
+    {
+      type: 'list',
+      label: 'Menu',
+      sections: [{
+        title: 'Main',
+        rows: [
+          { title: 'Ping', id: '.ping' },
+          { title: 'Info', id: '.info' }
+        ]
+      }]
+    }
+  ]
+})
 ```
 
-Restart the server to load it (or extend `loadPlugins()` with a file
-watcher if you want hot-reload — intentionally left out of the base).
+### Album
 
-## Testing checklist (map to your list)
+```js
+await sendAlbum([
+  { image: { url: 'https://example.com/1.jpg' } },
+  { image: { url: 'https://example.com/2.jpg' } }
+])
+```
 
-Manual, since I couldn't run this here — go through these before calling it
-done:
+### Sticker / VN
 
-- [ ] Register + login, wrong password rejected, brute-force limit kicks in
-- [ ] Create bot, connect, scan QR, status flips to Connected
-- [ ] Disconnect, Reconnect
-- [ ] Restart the server — session persists, bot reconnects without a new QR
-- [ ] `ping`, `menu`, custom menu title/footer changes reflect immediately
-- [ ] Edit bot name/prefix from dashboard — takes effect without restart
-- [ ] Enable/disable a plugin — menu and command availability update
-- [ ] Send many messages across several chats/groups at once — no backlog,
-      no "silent then burst" pattern (watch the `totalMs`/`queueWaitMs` logs)
-- [ ] Multiple bots connected simultaneously — one disconnecting doesn't
-      affect the others
-- [ ] Leave a bot idle for a long period, then send a message — no dead
-      session, no forced re-auth
-- [ ] Force a plugin to throw — bot stays up, user gets a generic error,
-      no stack trace leaks
-- [ ] Try to access another user's bot by id — 404, not data
+```js
+await sendSticker(bufferOrUrl, { packname: 'Zora', author: 'Bot' })
+await sendVN(audioBufferOrUrl)
+```
+
+## Design Principles
+
+- One bot = one isolated socket + auth + handlers
+- No global message queue / lock
+- Plugin errors never crash other bots
+- Session persistence across reconnect & restart
+- Settings (name, prefix, menu, plugins) live in DB
+
+## Security
+
+- bcrypt password hashing
+- httpOnly session cookie
+- Ownership checks on every bot endpoint
+- No stack traces / secrets to client
+- Rate limit on auth endpoints
