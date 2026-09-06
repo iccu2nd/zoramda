@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import config from './config/index.js';
 import { initDb } from './db/index.js';
 import { loadPlugins } from './bot/pluginLoader.js';
@@ -6,7 +7,16 @@ import botManager from './bot/manager.js';
 import { createApp } from './server/app.js';
 import logger from './utils/logger.js';
 
+const require = createRequire(import.meta.url);
+
 async function main() {
+  try {
+    const baileysPkg = require('@whiskeysockets/baileys/package.json');
+    logger.info({ baileysVersion: baileysPkg.version }, 'Baileys package resolved');
+  } catch (err) {
+    logger.error({ err: err.message }, 'Could not resolve baileys package.json');
+  }
+
   // Ensure dirs
   for (const dir of [config.dataDir, config.sessionsDir, config.logsDir, config.publicDir]) {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
