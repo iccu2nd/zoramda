@@ -1,12 +1,12 @@
 import mongoose from 'mongoose'
 
 /**
- * Global bot settings – editable via API/web.
- * One document (key: "global") for simplicity; can extend per-session later.
+ * Per-user bot settings – editable via API/web, no admin key needed.
+ * One document per userId.
  */
 const botConfigSchema = new mongoose.Schema(
   {
-    key: { type: String, required: true, unique: true, default: 'global', index: true },
+    userId: { type: String, required: true, unique: true, index: true },
 
     // Identity
     botName: { type: String, default: 'ZoraBot' },
@@ -29,6 +29,9 @@ const botConfigSchema = new mongoose.Schema(
 
     // Limits
     maxSessionsPerUser: { type: Number, default: 5 },
+
+    // Per-plugin response overrides: { [command]: { [responseKey]: text } }
+    pluginResponses: { type: mongoose.Schema.Types.Mixed, default: {} },
 
     // Extra free-form settings (plugins can store custom keys here)
     extra: { type: mongoose.Schema.Types.Mixed, default: {} },

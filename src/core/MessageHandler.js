@@ -12,7 +12,7 @@
  */
 import { getContentType, extractMessageContent } from '@whiskeysockets/baileys'
 import logger from '../utils/logger.js'
-import { extractCommand, normalizeJid } from '../utils/helpers.js'
+import { extractCommand, normalizeJid, applyTemplate } from '../utils/helpers.js'
 import LatencyTracker from './LatencyTracker.js'
 import configService from './ConfigService.js'
 
@@ -27,19 +27,20 @@ export class MessageHandler {
   /**
    * Entry point from ConnectionManager.
    * Must return quickly – never await long-running work here.
+   * @param {string} userId owner of the session – scopes config & plugin responses
    */
-  async handle(sessionId, sock, upsert) {
+  async handle(sessionId, userId, sock, upsert) {
     if (!upsert || upsert.type !== 'notify') return
 
     const messages = upsert.messages || []
     for (const raw of messages) {
-      this._processOne(sessionId, sock, raw).catch((err) => {
+      this._processOne(sessionId, userId, sock, raw).catch((err) => {
         logger.error({ sessionId, err: err.message }, 'Unhandled message process error')
       })
     }
   }
 
-  async _processOne(sessionId, sock, raw) {
+  async _processOne(sessionId, userId, sock, raw) {
     if (!raw?.message || raw.key?.fromMe) return
     if (raw.key?.remoteJid === 'status@broadcast') return
 
@@ -48,8 +49,8 @@ export class MessageHandler {
     try {
       latency.mark('handler_started')
 
-      // Always read live config from cache (no DB hit)
-      const prefix = configService.getPrefix()
+      // Always read live per-user config from cache (no DB hit)
+      const prefix = configService.getPrefix(userId)
       const m = this._parseMessage(raw, sock, prefix)
       if (!m) return
 
@@ -58,14 +59,15 @@ export class MessageHandler {
       if (!m.command) return
 
       // Maintenance mode – only owners can use commands
-      const isOwner = configService.isOwner(m.sender)
-      if (configService.isMaintenance() && !isOwner) {
-        await m.reply(configService.get('maintenanceMessage') || 'Bot sedang maintenance.')
+      const isOwner = configService.isOwner(userId, m.sender)
+      if (configService.isMaintenance(userId) && !isOwner) {
+        const cfg = configService.getCached(userId)
+        await m.reply(cfg.maintenanceMessage || 'Bot sedang maintenance.')
         return
       }
 
       // Public mode off – only owners
-      if (!configService.isPublic() && !isOwner) {
+      if (!configService.isPublic(userId) && !isOwner) {
         return // silent ignore for non-owners
       }
 
@@ -76,7 +78,7 @@ export class MessageHandler {
 
       await Promise.all(
         handlers.map((plugin) =>
-          this._runPlugin(plugin, m, sock, sessionId, latency, isOwner).catch((err) => {
+          this._runPlugin(plugin, m, sock, sessionId, userId, latency, isOwner).catch((err) => {
             logger.error(
               { sessionId, command: m.command, file: plugin.file, err: err.message },
               'Plugin execution error'
@@ -143,8 +145,24 @@ export class MessageHandler {
     }
   }
 
-  async _runPlugin(plugin, m, sock, sessionId, latency, isOwner) {
-    const botCfg = configService.getAll()
+  async _runPlugin(plugin, m, sock, sessionId, userId, latency, isOwner) {
+    const botCfg = configService.getCached(userId)
+
+    // Merge the plugin's declared default responses with this user's overrides,
+    // then resolve {placeholder} tokens against config values.
+    const defaults = plugin.handler.responses || {}
+    const overrides = configService.getPluginResponses(userId, plugin.commands[0])
+    const vars = {
+      botName: botCfg.botName,
+      prefix: m.usedPrefix,
+      ownerName: botCfg.ownerName,
+    }
+    const responses = {}
+    for (const key of Object.keys(defaults)) {
+      const raw = overrides[key] !== undefined ? overrides[key] : defaults[key]
+      responses[key] = applyTemplate(raw, vars)
+    }
+
     const ctx = {
       conn: sock,
       text: m.body,
@@ -152,12 +170,19 @@ export class MessageHandler {
       usedPrefix: m.usedPrefix,
       command: m.command,
       sessionId,
+      userId,
       isOwner,
       plugins: this.pluginLoader,
-      // Live bot config for plugins
+      // Live per-user bot config for plugins
       botConfig: botCfg,
       botName: botCfg.botName,
-      config: configService,
+      responses,
+      config: {
+        get: (key) => (key ? botCfg[key] : { ...botCfg }),
+        getAll: () => ({ ...botCfg }),
+        update: (partial) => configService.update(userId, partial),
+        isOwner: (jid) => configService.isOwner(userId, jid),
+      },
     }
 
     latency.mark('plugin_exec')

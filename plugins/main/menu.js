@@ -1,4 +1,6 @@
-let handler = async (m, { usedPrefix, plugins, botConfig, botName }) => {
+import { applyTemplate } from '../../src/utils/helpers.js'
+
+let handler = async (m, { usedPrefix, plugins, botConfig, botName, responses }) => {
   const byTag = plugins.getMenuByTags()
   const title = botConfig?.menuTitle || `${botName || 'ZoraBot'} Menu`
   let text = `*${title}*\n\n`
@@ -12,13 +14,15 @@ let handler = async (m, { usedPrefix, plugins, botConfig, botName }) => {
     text += '\n'
   }
 
-  text += `_Prefix: ${usedPrefix}_\n`
-  text += `_${botName || 'ZoraBot'}_`
+  text += applyTemplate(responses.menuFooter, { prefix: usedPrefix, botName: botName || 'ZoraBot' })
   await m.reply(text)
 }
 
 handler.help = ['menu']
 handler.tags = ['main']
 handler.command = ['menu']
+handler.responses = {
+  menuFooter: '_Prefix: {prefix}_\n_{botName}_',
+}
 
 export default handler

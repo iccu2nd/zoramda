@@ -15,6 +15,7 @@ import { useMongoAuthState } from '../db/authState.js'
 import Session from '../db/models/Session.js'
 import logger from '../utils/logger.js'
 import config from '../config/index.js'
+import configService from './ConfigService.js'
 import { serializeError } from '../utils/helpers.js'
 
 const baileysLogger = pino({ level: 'silent' })
@@ -32,8 +33,9 @@ export const STATES = {
 }
 
 export class ConnectionManager {
-  constructor(sessionId, { messageHandler, onStatusChange } = {}) {
+  constructor(sessionId, { userId, messageHandler, onStatusChange } = {}) {
     this.sessionId = sessionId
+    this.userId = userId
     this.messageHandler = messageHandler
     this.onStatusChange = onStatusChange || (() => {})
 
@@ -88,6 +90,10 @@ export class ConnectionManager {
 
     try {
       await this.setStatus(STATES.CONNECTING)
+
+      // Warm this user's bot config in the background so it's cached before
+      // the first message arrives (message hot path never awaits the DB).
+      if (this.userId) configService.warm(this.userId).catch(() => {})
 
       const { state, saveCreds, clearAuth } = await useMongoAuthState(this.sessionId)
       this.saveCreds = saveCreds
@@ -236,7 +242,7 @@ export class ConnectionManager {
 
     const onMessagesUpsert = async (m) => {
       if (!this.messageHandler) return
-      this.messageHandler.handle(this.sessionId, sock, m).catch((err) => {
+      this.messageHandler.handle(this.sessionId, this.userId, sock, m).catch((err) => {
         logger.error({ sessionId: this.sessionId, err: err.message }, 'Message handler error')
       })
     }

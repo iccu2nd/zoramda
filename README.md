@@ -15,8 +15,8 @@ Production-ready multi-session WhatsApp Gateway / Bot Engine.
 
 ```bash
 cp .env.example .env
-# wajib: MONGODB_URI, MONGODB_DB_NAME, ADMIN_API_KEY, API_SECRET, JWT_SECRET
-# prefix / owner / nama bot → diubah via API atau .set (tidak perlu di .env)
+# wajib: MONGODB_URI, MONGODB_DB_NAME, JWT_SECRET
+# ADMIN_API_KEY opsional — hanya untuk operator/tooling, tidak dipakai user biasa
 
 npm install
 npm start
@@ -24,22 +24,33 @@ npm start
 
 Health check: `GET /health`
 
-## API
+## Auth
 
-All session endpoints require header:
+Setiap orang bisa daftar akun sendiri lewat dashboard (`/app`) atau API — **tidak perlu api key admin**.
+Login pakai username + password, dapat session token (JWT) yang dipakai dashboard secara otomatis.
 
 ```
-x-api-key: <your-api-key>
+POST /api/auth/register   { username, password, name? }  → { token, user }
+POST /api/auth/login      { username, password }          → { token, user }
+GET  /api/auth/me                                          → profil + apiKey milik sendiri
+POST /api/auth/apikey/rotate                                → generate apiKey baru
 ```
 
-Admin key is set via `ADMIN_API_KEY` in `.env`.
+Endpoint session/config/plugin lainnya menerima salah satu dari:
 
-### Create user (admin only)
+```
+Authorization: Bearer <token>   # dari login — dipakai dashboard
+x-api-key: <apiKey>             # akses programatik, apiKey didapat dari akun sendiri
+```
+
+Setiap akun punya session, config bot, dan override respons plugin masing-masing — sepenuhnya terpisah antar user.
+
+### Create user (admin only, opsional)
 
 ```
 POST /api/auth/users
-{ "name": "user1" }
-→ { userId, apiKey, role }
+{ "username": "user1", "password": "...", "name": "user1" }
+→ { userId, username, apiKey, role }
 ```
 
 ### Sessions
@@ -101,14 +112,14 @@ MIT
 
 ## Bot Config (Editable via API / WhatsApp)
 
-Settings disimpan di MongoDB dan bisa diubah tanpa restart.
+Settings disimpan di MongoDB **per akun** dan bisa diubah tanpa restart — config milikmu tidak memengaruhi user lain.
 
 ### API
 
 ```
-GET  /api/config          # lihat config (public fields / full jika admin)
-PUT  /api/config          # update (admin only)
-PATCH /api/config         # partial update (admin only)
+GET  /api/config          # lihat config milik akun yang login
+PUT  /api/config          # update config sendiri
+PATCH /api/config         # partial update config sendiri
 GET  /api/config/schema   # schema field untuk form frontend
 POST /api/config/refresh  # reload dari DB
 ```
@@ -117,7 +128,7 @@ Contoh update:
 
 ```bash
 curl -X PATCH http://localhost:3000/api/config \
-  -H "x-api-key: <ADMIN_API_KEY>" \
+  -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{
     "botName": "MyBot",
@@ -144,3 +155,15 @@ Field yang bisa diubah:
 - menuTitle, welcomeMessage, ownerOnlyMessage
 - maintenanceMode, maintenanceMessage
 - maxSessionsPerUser, extra
+
+## Plugin Responses (Editable via Dashboard)
+
+Plugin bisa mendeklarasikan teks balasan yang boleh diubah lewat `handler.responses = { key: 'default text' }`.
+Setiap akun bisa override teks itu untuk bot-nya sendiri, tanpa menyentuh kode plugin — lewat dashboard (menu hamburger → *plugins*) atau API:
+
+```
+GET   /api/plugins                       # daftar plugin + respons (default & override milik sendiri)
+PATCH /api/plugins/:command/responses    # update override, kirim value kosong untuk reset ke default
+```
+
+Placeholder seperti `{botName}`, `{prefix}`, `{ownerName}` di teks akan otomatis diganti saat bot membalas.

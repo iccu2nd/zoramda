@@ -9,6 +9,7 @@ import healthRoutes from './routes/health.js'
 import createSessionRoutes from './routes/sessions.js'
 import authRoutes from './routes/auth.js'
 import createConfigRoutes from './routes/config.js'
+import createPluginRoutes from './routes/plugins.js'
 
 /**
  * @param {import('../core/SessionManager.js').SessionManager} sessionManager
@@ -45,6 +46,7 @@ export function createServer(sessionManager) {
   app.use(healthRoutes)
   app.use('/api/auth', authRoutes)
   app.use('/api/config', createConfigRoutes())
+  app.use('/api/plugins', createPluginRoutes(sessionManager))
   app.use('/api/sessions', createSessionRoutes(sessionManager))
 
   // 404

@@ -1,33 +1,36 @@
 import { Router } from 'express'
-import { authenticate, requireAdmin } from '../middleware/auth.js'
+import { authenticate } from '../middleware/auth.js'
 import configService, { EDITABLE_FIELDS } from '../../core/ConfigService.js'
 import logger from '../../utils/logger.js'
 
 /**
- * Config API – view & edit bot settings from web/dashboard
+ * Config API – each user views & edits their own bot settings.
+ * No admin key required. Admins may pass ?userId=<id> to inspect another
+ * account's config for support purposes.
  */
 export default function createConfigRoutes() {
   const router = Router()
 
-  // Public / authenticated: read non-sensitive settings
+  function targetUserId(req) {
+    if (req.user.isAdmin && req.query.userId) return String(req.query.userId)
+    return req.user.userId
+  }
+
   router.get('/', authenticate, async (req, res) => {
     try {
-      if (req.user?.isAdmin) {
-        return res.json({ config: configService.getAll() })
-      }
-      // Regular user: public fields only
-      res.json({ config: configService.getPublic() })
+      const uid = targetUserId(req)
+      const cfg = await configService.getConfig(uid)
+      res.json({ config: cfg })
     } catch (err) {
       logger.error({ err: err.message }, 'Get config error')
       res.status(500).json({ error: 'Failed to get config' })
     }
   })
 
-  // Admin only: full update
-  router.put('/', authenticate, requireAdmin, async (req, res) => {
+  router.put('/', authenticate, async (req, res) => {
     try {
+      const uid = targetUserId(req)
       const body = req.body || {}
-      // Strip unknown keys
       const partial = {}
       for (const key of EDITABLE_FIELDS) {
         if (body[key] !== undefined) partial[key] = body[key]
@@ -35,7 +38,7 @@ export default function createConfigRoutes() {
       if (Object.keys(partial).length === 0) {
         return res.status(400).json({ error: 'No valid fields to update', allowed: EDITABLE_FIELDS })
       }
-      const updated = await configService.update(partial)
+      const updated = await configService.update(uid, partial)
       res.json({ config: updated })
     } catch (err) {
       logger.error({ err: err.message }, 'Update config error')
@@ -43,9 +46,9 @@ export default function createConfigRoutes() {
     }
   })
 
-  // Admin: partial patch (same as PUT for convenience)
-  router.patch('/', authenticate, requireAdmin, async (req, res) => {
+  router.patch('/', authenticate, async (req, res) => {
     try {
+      const uid = targetUserId(req)
       const body = req.body || {}
       const partial = {}
       for (const key of EDITABLE_FIELDS) {
@@ -54,7 +57,7 @@ export default function createConfigRoutes() {
       if (Object.keys(partial).length === 0) {
         return res.status(400).json({ error: 'No valid fields to update', allowed: EDITABLE_FIELDS })
       }
-      const updated = await configService.update(partial)
+      const updated = await configService.update(uid, partial)
       res.json({ config: updated })
     } catch (err) {
       logger.error({ err: err.message }, 'Patch config error')
@@ -62,18 +65,18 @@ export default function createConfigRoutes() {
     }
   })
 
-  // Admin: force reload from DB
-  router.post('/refresh', authenticate, requireAdmin, async (req, res) => {
+  router.post('/refresh', authenticate, async (req, res) => {
     try {
-      const config = await configService.refresh()
-      res.json({ config })
+      const uid = targetUserId(req)
+      const cfg = await configService.refresh(uid)
+      res.json({ config: cfg })
     } catch (err) {
       res.status(500).json({ error: 'Failed to refresh config' })
     }
   })
 
-  // List editable field schema (for frontend form builder)
-  router.get('/schema', authenticate, requireAdmin, (req, res) => {
+  // Field schema (for frontend form builder)
+  router.get('/schema', authenticate, (req, res) => {
     res.json({
       fields: [
         { key: 'botName', type: 'string', label: 'Nama Bot', maxLength: 64 },

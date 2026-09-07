@@ -42,6 +42,11 @@ export function extractCommand(text, prefix) {
   }
 }
 
+export function applyTemplate(str, vars = {}) {
+  if (typeof str !== 'string') return str
+  return str.replace(/\{(\w+)\}/g, (match, key) => (vars[key] !== undefined ? vars[key] : match))
+}
+
 export function serializeError(err) {
   if (!err) return null
   return {

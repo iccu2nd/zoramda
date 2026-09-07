@@ -6,7 +6,6 @@ import config from './config/index.js'
 import logger from './utils/logger.js'
 import { connectMongo, disconnectMongo } from './db/mongo.js'
 import SessionManager from './core/SessionManager.js'
-import configService from './core/ConfigService.js'
 import { createServer } from './api/server.js'
 
 const sessionManager = new SessionManager()
@@ -18,13 +17,12 @@ async function main() {
   // 1. Database first
   await connectMongo()
 
-  // 2. Load runtime bot config (editable via API)
-  await configService.init()
-
-  // 3. Core engine (plugins + session restore runs in background)
+  // 2. Core engine (plugins + session restore runs in background).
+  //    Bot config is per-user now and warms lazily per session — no
+  //    global config load needed at boot.
   await sessionManager.init()
 
-  // 4. HTTP API
+  // 3. HTTP API
   const app = createServer(sessionManager)
   server = app.listen(config.port, config.host, () => {
     logger.info({ host: config.host, port: config.port }, 'API server listening')

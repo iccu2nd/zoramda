@@ -1,6 +1,7 @@
 (function () {
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const PAGES = ['sessions', 'config', 'plugins', 'account'];
 
   let currentUser = null;
   let pollTimer = null;
@@ -48,12 +49,12 @@
 
   /* ——— auth ——— */
   async function tryAuth() {
-    if (!API.getKey()) return false;
+    if (!API.getToken()) return false;
     try {
       currentUser = await API.me();
       return true;
     } catch {
-      API.clearKey();
+      API.clearToken();
       return false;
     }
   }
@@ -71,29 +72,68 @@
     startPoll();
   }
 
-  $('#loginBtn').addEventListener('click', async () => {
-    const key = $('#apiKeyInput').value.trim();
-    if (!key) return toast('isi api key dulu');
-    API.setKey(key);
+  /* auth tabs */
+  $$('.auth-tab').forEach((tab) => {
+    tab.addEventListener('click', () => {
+      $$('.auth-tab').forEach((t) => t.classList.remove('active'));
+      tab.classList.add('active');
+      const which = tab.dataset.tab;
+      $('#loginForm').classList.toggle('hidden', which !== 'login');
+      $('#registerForm').classList.toggle('hidden', which !== 'register');
+    });
+  });
+
+  $('#loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const username = $('#loginUsername').value.trim();
+    const password = $('#loginPassword').value;
+    const errEl = $('#loginError');
+    errEl.textContent = '';
+    if (!username || !password) {
+      errEl.textContent = 'isi username dan password';
+      return;
+    }
     $('#loginBtn').disabled = true;
     try {
-      currentUser = await API.me();
+      const { token, user } = await API.login({ username, password });
+      API.setToken(token);
+      currentUser = user;
       toast('berhasil masuk');
       showApp();
-    } catch (e) {
-      API.clearKey();
-      toast(e.message || 'api key tidak valid');
+    } catch (e2) {
+      errEl.textContent = e2.message || 'gagal masuk';
     } finally {
       $('#loginBtn').disabled = false;
     }
   });
 
-  $('#apiKeyInput').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') $('#loginBtn').click();
+  $('#registerForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = $('#regName').value.trim();
+    const username = $('#regUsername').value.trim();
+    const password = $('#regPassword').value;
+    const errEl = $('#registerError');
+    errEl.textContent = '';
+    if (!username || !password) {
+      errEl.textContent = 'isi username dan password';
+      return;
+    }
+    $('#registerBtn').disabled = true;
+    try {
+      const { token, user } = await API.register({ username, password, name });
+      API.setToken(token);
+      currentUser = user;
+      toast('akun dibuat, selamat datang!');
+      showApp();
+    } catch (e2) {
+      errEl.textContent = e2.message || 'gagal daftar';
+    } finally {
+      $('#registerBtn').disabled = false;
+    }
   });
 
   $('#logoutBtn').addEventListener('click', () => {
-    API.clearKey();
+    API.clearToken();
     currentUser = null;
     showLogin();
     toast('keluar');
@@ -105,10 +145,11 @@
       $$('.side-link[data-page]').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       const page = btn.dataset.page;
-      $('#page-sessions').classList.toggle('hidden', page !== 'sessions');
-      $('#page-config').classList.toggle('hidden', page !== 'config');
+      PAGES.forEach((p) => $('#page-' + p).classList.toggle('hidden', p !== page));
       if (page === 'config') loadConfig();
       if (page === 'sessions') loadSessions();
+      if (page === 'plugins') loadPlugins();
+      if (page === 'account') loadAccount();
       closeSidebar();
     });
   });
@@ -376,39 +417,35 @@
     pollTimer = null;
   }
 
-  /* ——— config ——— */
-  let configCache = {};
-
+  /* ——— config (per-akun, selalu bisa diedit oleh pemiliknya) ——— */
   async function loadConfig() {
     const box = $('#configForm');
     box.innerHTML = '<p style="color:var(--muted);font-weight:500">memuat...</p>';
     try {
       const { config } = await API.config();
-      configCache = { ...config };
-      const isAdmin = currentUser?.isAdmin;
 
       box.innerHTML = `
-        <div class="field"><label>nama bot</label><input data-k="botName" value="${escapeAttr(config.botName || '')}" ${isAdmin ? '' : 'disabled'}></div>
+        <div class="field"><label>nama bot</label><input data-k="botName" value="${escapeAttr(config.botName || '')}"></div>
         <div class="field-row">
-          <div class="field"><label>prefix</label><input data-k="prefix" value="${escapeAttr(config.prefix || '.')}" ${isAdmin ? '' : 'disabled'}></div>
-          <div class="field"><label>nama owner</label><input data-k="ownerName" value="${escapeAttr(config.ownerName || '')}" ${isAdmin ? '' : 'disabled'}></div>
+          <div class="field"><label>prefix</label><input data-k="prefix" value="${escapeAttr(config.prefix || '.')}"></div>
+          <div class="field"><label>nama owner</label><input data-k="ownerName" value="${escapeAttr(config.ownerName || '')}"></div>
         </div>
-        <div class="field"><label>nomor owner (pisah koma)</label><input data-k="ownerNumbers" value="${escapeAttr((config.ownerNumbers || []).join(','))}" ${isAdmin ? '' : 'disabled'}></div>
-        <div class="field"><label>judul menu</label><input data-k="menuTitle" value="${escapeAttr(config.menuTitle || '')}" ${isAdmin ? '' : 'disabled'}></div>
-        <div class="field"><label>pesan maintenance</label><textarea data-k="maintenanceMessage" ${isAdmin ? '' : 'disabled'}>${escapeHtml(config.maintenanceMessage || '')}</textarea></div>
+        <div class="field"><label>nomor owner (pisah koma)</label><input data-k="ownerNumbers" value="${escapeAttr((config.ownerNumbers || []).join(','))}"></div>
+        <div class="field"><label>judul menu</label><input data-k="menuTitle" value="${escapeAttr(config.menuTitle || '')}"></div>
+        <div class="field"><label>pesan welcome</label><textarea data-k="welcomeMessage">${escapeHtml(config.welcomeMessage || '')}</textarea></div>
+        <div class="field"><label>pesan maintenance</label><textarea data-k="maintenanceMessage">${escapeHtml(config.maintenanceMessage || '')}</textarea></div>
         <div class="switch-row">
           <span>mode publik</span>
-          <div class="switch ${config.publicMode ? 'on' : ''}" data-k="publicMode" data-bool ${isAdmin ? '' : 'style="pointer-events:none;opacity:.5"'}></div>
+          <div class="switch ${config.publicMode ? 'on' : ''}" data-k="publicMode" data-bool></div>
         </div>
         <div class="switch-row">
           <span>maintenance</span>
-          <div class="switch ${config.maintenanceMode ? 'on' : ''}" data-k="maintenanceMode" data-bool ${isAdmin ? '' : 'style="pointer-events:none;opacity:.5"'}></div>
+          <div class="switch ${config.maintenanceMode ? 'on' : ''}" data-k="maintenanceMode" data-bool></div>
         </div>
         <div class="switch-row">
           <span>anti spam</span>
-          <div class="switch ${config.antiSpam ? 'on' : ''}" data-k="antiSpam" data-bool ${isAdmin ? '' : 'style="pointer-events:none;opacity:.5"'}></div>
+          <div class="switch ${config.antiSpam ? 'on' : ''}" data-k="antiSpam" data-bool></div>
         </div>
-        ${isAdmin ? '' : '<p style="margin-top:1rem;color:var(--muted);font-size:0.85rem;font-weight:500">hanya admin yang bisa mengubah config.</p>'}
       `;
 
       box.querySelectorAll('.switch[data-bool]').forEach((sw) => {
@@ -420,10 +457,6 @@
   }
 
   $('#saveConfigBtn').addEventListener('click', async () => {
-    if (!currentUser?.isAdmin) {
-      toast('hanya admin');
-      return;
-    }
     const body = {};
     $$('#configForm [data-k]').forEach((el) => {
       const k = el.dataset.k;
@@ -443,6 +476,150 @@
       toast(e.message || 'gagal simpan');
     }
   });
+
+  /* ——— plugins (edit teks balasan bot) ——— */
+  async function loadPlugins() {
+    const box = $('#pluginList');
+    box.innerHTML = '<p style="color:var(--muted);font-weight:500">memuat...</p>';
+    try {
+      const { plugins } = await API.plugins();
+      if (!plugins?.length) {
+        box.innerHTML = `<div class="empty">tidak ada respons plugin yang bisa diedit.</div>`;
+        return;
+      }
+      box.innerHTML = plugins
+        .map(
+          (p) => `
+        <div class="card plugin-card" data-command="${escapeAttr(p.command)}" style="padding:1.1rem;margin-bottom:1rem">
+          <div class="plugin-head">
+            <div>
+              <div class="plugin-name">.${escapeHtml(p.command)}</div>
+              <div class="plugin-tags">${(p.tags || []).map(escapeHtml).join(', ')}</div>
+            </div>
+          </div>
+          ${Object.entries(p.responses)
+            .map(
+              ([key, r]) => `
+            <div class="field">
+              <label>${escapeHtml(key)}${r.overridden ? ' <span class="chip-mini">custom</span>' : ''}</label>
+              <textarea data-resp-key="${escapeAttr(key)}">${escapeHtml(r.value)}</textarea>
+            </div>`
+            )
+            .join('')}
+          <div class="toolbar" style="margin-top:0.25rem">
+            <button class="btn btn-sm" data-act="savePlugin" type="button">simpan</button>
+            <button class="btn btn-sm btn-ghost" data-act="resetPlugin" type="button">reset ke default</button>
+          </div>
+        </div>`
+        )
+        .join('');
+
+      box.querySelectorAll('.plugin-card').forEach((card) => {
+        const command = card.dataset.command;
+        card.querySelector('[data-act="savePlugin"]').addEventListener('click', async () => {
+          const body = {};
+          card.querySelectorAll('[data-resp-key]').forEach((el) => {
+            body[el.dataset.respKey] = el.value;
+          });
+          try {
+            await API.updatePluginResponses(command, body);
+            toast('respons .' + command + ' disimpan');
+            loadPlugins();
+          } catch (e) {
+            toast(e.message || 'gagal simpan');
+          }
+        });
+        card.querySelector('[data-act="resetPlugin"]').addEventListener('click', async () => {
+          const body = {};
+          card.querySelectorAll('[data-resp-key]').forEach((el) => {
+            body[el.dataset.respKey] = ''; // empty string resets to default
+          });
+          try {
+            await API.updatePluginResponses(command, body);
+            toast('dikembalikan ke default');
+            loadPlugins();
+          } catch (e) {
+            toast(e.message || 'gagal reset');
+          }
+        });
+      });
+    } catch (e) {
+      box.innerHTML = `<p style="color:var(--red)">${escapeHtml(e.message)}</p>`;
+    }
+  }
+
+  /* ——— account ——— */
+  let apiKeyVisible = false;
+
+  async function loadAccount() {
+    const box = $('#accountBox');
+    box.innerHTML = '<p style="color:var(--muted);font-weight:500">memuat...</p>';
+    try {
+      const user = await API.me();
+      currentUser = user;
+      apiKeyVisible = false;
+      renderAccount(user);
+    } catch (e) {
+      box.innerHTML = `<p style="color:var(--red)">${escapeHtml(e.message)}</p>`;
+    }
+  }
+
+  function renderAccount(user) {
+    const box = $('#accountBox');
+    const masked = user.apiKey ? user.apiKey.slice(0, 6) + '••••••••••••••••••' : '-';
+    box.innerHTML = `
+      <div class="field"><label>username</label><input value="${escapeAttr(user.username || '')}" disabled></div>
+      <div class="field"><label>nama</label><input value="${escapeAttr(user.name || '-')}" disabled></div>
+      <div class="field"><label>role</label><input value="${escapeAttr(user.role || 'user')}" disabled></div>
+      <div class="field">
+        <label>api key <span class="hint">(untuk akses programatik — header <code>x-api-key</code>)</span></label>
+        <div class="apikey-row">
+          <input id="apiKeyField" value="${escapeAttr(apiKeyVisible ? user.apiKey : masked)}" disabled>
+          <button class="btn btn-sm btn-ghost" id="toggleApiKey" type="button">${apiKeyVisible ? 'sembunyikan' : 'lihat'}</button>
+          <button class="btn btn-sm btn-ghost" id="copyApiKey" type="button">salin</button>
+        </div>
+      </div>
+      <div class="toolbar" style="margin-top:0.5rem">
+        <button class="btn btn-sm" id="rotateApiKey" type="button">buat api key baru</button>
+      </div>
+    `;
+
+    $('#toggleApiKey').addEventListener('click', () => {
+      apiKeyVisible = !apiKeyVisible;
+      renderAccount(currentUser);
+    });
+    $('#copyApiKey').addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(currentUser.apiKey);
+        toast('api key disalin');
+      } catch {
+        toast('gagal menyalin');
+      }
+    });
+    $('#rotateApiKey').addEventListener('click', () => {
+      showModal({
+        title: 'buat api key baru?',
+        sub: 'api key lama langsung tidak berlaku.',
+        actions: [
+          { label: 'batal', ghost: true },
+          {
+            label: 'buat baru',
+            onClick: async () => {
+              try {
+                const { apiKey } = await API.rotateApiKey();
+                currentUser.apiKey = apiKey;
+                apiKeyVisible = true;
+                renderAccount(currentUser);
+                toast('api key baru dibuat');
+              } catch (e) {
+                toast(e.message || 'gagal');
+              }
+            },
+          },
+        ],
+      });
+    });
+  }
 
   function escapeHtml(s) {
     return String(s ?? '')

@@ -1,8 +1,9 @@
 /**
- * Runtime config service.
+ * Runtime config service — per-user.
  * - Defaults baked in
- * - Overrides from MongoDB (editable via API / .set command)
- * - In-memory cache – never hits DB on message hot path
+ * - Overrides from MongoDB (editable via API / .set command), one doc per userId
+ * - In-memory cache keyed by userId – never hits DB on the message hot path
+ *   once a user's session has been warmed (see warm()).
  */
 import BotConfig from '../db/models/BotConfig.js'
 import staticConfig from '../config/index.js'
@@ -23,19 +24,9 @@ const DEFAULTS = {
   maintenanceMode: false,
   maintenanceMessage: 'Bot sedang maintenance. Coba lagi nanti.',
   maxSessionsPerUser: staticConfig.session?.maxPerUser || 5,
+  pluginResponses: {},
   extra: {},
 }
-
-const PUBLIC_FIELDS = [
-  'botName',
-  'botNumber',
-  'prefix',
-  'publicMode',
-  'menuTitle',
-  'welcomeMessage',
-  'maintenanceMode',
-  'maintenanceMessage',
-]
 
 const EDITABLE_FIELDS = [
   'botName',
@@ -55,144 +46,183 @@ const EDITABLE_FIELDS = [
   'extra',
 ]
 
+function cleanPartial(partial) {
+  const clean = {}
+  for (const key of EDITABLE_FIELDS) {
+    if (partial[key] !== undefined) clean[key] = partial[key]
+  }
+
+  if (clean.ownerNumbers !== undefined) {
+    if (typeof clean.ownerNumbers === 'string') {
+      clean.ownerNumbers = clean.ownerNumbers
+        .split(/[,;\s]+/)
+        .map((n) => n.replace(/\D/g, ''))
+        .filter(Boolean)
+    } else if (Array.isArray(clean.ownerNumbers)) {
+      clean.ownerNumbers = clean.ownerNumbers
+        .map((n) => String(n).replace(/\D/g, ''))
+        .filter(Boolean)
+    } else {
+      delete clean.ownerNumbers
+    }
+  }
+
+  if (clean.prefix !== undefined) {
+    clean.prefix = String(clean.prefix).slice(0, 5) || '.'
+  }
+
+  if (clean.antiSpamCooldownMs !== undefined) {
+    clean.antiSpamCooldownMs = Math.max(0, parseInt(clean.antiSpamCooldownMs, 10) || 0)
+  }
+  if (clean.maxSessionsPerUser !== undefined) {
+    clean.maxSessionsPerUser = Math.max(1, parseInt(clean.maxSessionsPerUser, 10) || 5)
+  }
+
+  for (const b of ['publicMode', 'antiSpam', 'maintenanceMode']) {
+    if (clean[b] !== undefined) clean[b] = Boolean(clean[b])
+  }
+
+  return clean
+}
+
+function toCache(doc) {
+  const next = { ...DEFAULTS }
+  for (const key of EDITABLE_FIELDS) {
+    if (doc[key] !== undefined && doc[key] !== null) {
+      next[key] = doc[key]
+    }
+  }
+  if (!Array.isArray(next.ownerNumbers)) next.ownerNumbers = []
+  next.pluginResponses = doc.pluginResponses && typeof doc.pluginResponses === 'object' ? doc.pluginResponses : {}
+  return next
+}
+
 class ConfigService {
   constructor() {
-    this._cache = { ...DEFAULTS }
-    this._loaded = false
-    this._loading = null
+    /** @type {Map<string, object>} userId -> config */
+    this._cache = new Map()
+    /** @type {Map<string, Promise>} userId -> in-flight load */
+    this._loading = new Map()
   }
 
-  async init() {
-    if (this._loading) return this._loading
-    this._loading = this._loadFromDb()
+  /**
+   * Ensure a user's config is loaded into cache. Safe to call repeatedly.
+   */
+  async warm(userId) {
+    return this.getConfig(userId)
+  }
+
+  /**
+   * Load (or lazily seed) a user's config from DB and cache it.
+   */
+  async getConfig(userId) {
+    if (!userId) return { ...DEFAULTS }
+    if (this._cache.has(userId)) return this._cache.get(userId)
+    if (this._loading.has(userId)) return this._loading.get(userId)
+
+    const promise = this._loadFromDb(userId)
+    this._loading.set(userId, promise)
     try {
-      await this._loading
+      return await promise
     } finally {
-      this._loading = null
+      this._loading.delete(userId)
     }
-    return this._cache
   }
 
-  async _loadFromDb() {
+  async _loadFromDb(userId) {
     try {
-      let doc = await BotConfig.findOne({ key: 'global' }).lean()
+      let doc = await BotConfig.findOne({ userId }).lean()
       if (!doc) {
-        doc = await BotConfig.create({
-          key: 'global',
-          ...DEFAULTS,
-        })
+        doc = await BotConfig.create({ userId, ...DEFAULTS })
         doc = doc.toObject ? doc.toObject() : doc
-        logger.info('BotConfig seeded from defaults')
       }
-      this._merge(doc)
-      this._loaded = true
-      logger.info({ botName: this._cache.botName, prefix: this._cache.prefix }, 'BotConfig loaded')
+      const cfg = toCache(doc)
+      this._cache.set(userId, cfg)
+      return cfg
     } catch (err) {
-      logger.error({ err: err.message }, 'Failed to load BotConfig – using defaults')
-      this._cache = { ...DEFAULTS }
-      this._loaded = true
+      logger.error({ userId, err: err.message }, 'Failed to load BotConfig – using defaults')
+      const cfg = { ...DEFAULTS }
+      this._cache.set(userId, cfg)
+      return cfg
     }
   }
 
-  _merge(doc) {
-    const next = { ...DEFAULTS }
-    for (const key of EDITABLE_FIELDS) {
-      if (doc[key] !== undefined && doc[key] !== null) {
-        next[key] = doc[key]
-      }
-    }
-    if (!Array.isArray(next.ownerNumbers)) next.ownerNumbers = []
-    this._cache = next
+  /**
+   * Synchronous read from cache only (hot path). Returns defaults if not
+   * warmed yet, and kicks off a background warm so the next read is fresh.
+   */
+  getCached(userId) {
+    if (userId && this._cache.has(userId)) return this._cache.get(userId)
+    if (userId) this.warm(userId).catch(() => {})
+    return { ...DEFAULTS }
   }
 
-  get(key) {
-    if (key) return this._cache[key]
-    return { ...this._cache }
-  }
-
-  getAll() {
-    return { ...this._cache }
-  }
-
-  getPublic() {
-    const out = {}
-    for (const k of PUBLIC_FIELDS) out[k] = this._cache[k]
-    return out
-  }
-
-  async update(partial) {
-    const clean = {}
-    for (const key of EDITABLE_FIELDS) {
-      if (partial[key] !== undefined) {
-        clean[key] = partial[key]
-      }
-    }
-
-    if (clean.ownerNumbers !== undefined) {
-      if (typeof clean.ownerNumbers === 'string') {
-        clean.ownerNumbers = clean.ownerNumbers
-          .split(/[,;\s]+/)
-          .map((n) => n.replace(/\D/g, ''))
-          .filter(Boolean)
-      } else if (Array.isArray(clean.ownerNumbers)) {
-        clean.ownerNumbers = clean.ownerNumbers
-          .map((n) => String(n).replace(/\D/g, ''))
-          .filter(Boolean)
-      } else {
-        delete clean.ownerNumbers
-      }
-    }
-
-    if (clean.prefix !== undefined) {
-      clean.prefix = String(clean.prefix).slice(0, 5) || '.'
-    }
-
-    if (clean.antiSpamCooldownMs !== undefined) {
-      clean.antiSpamCooldownMs = Math.max(0, parseInt(clean.antiSpamCooldownMs, 10) || 0)
-    }
-    if (clean.maxSessionsPerUser !== undefined) {
-      clean.maxSessionsPerUser = Math.max(1, parseInt(clean.maxSessionsPerUser, 10) || 5)
-    }
-
-    for (const b of ['publicMode', 'antiSpam', 'maintenanceMode']) {
-      if (clean[b] !== undefined) clean[b] = Boolean(clean[b])
-    }
-
+  async update(userId, partial) {
+    const clean = cleanPartial(partial)
     const doc = await BotConfig.findOneAndUpdate(
-      { key: 'global' },
+      { userId },
       { $set: clean },
       { upsert: true, new: true }
     ).lean()
-
-    this._merge(doc)
-    logger.info({ keys: Object.keys(clean) }, 'BotConfig updated')
-    return this.getAll()
+    const cfg = toCache(doc)
+    this._cache.set(userId, cfg)
+    logger.info({ userId, keys: Object.keys(clean) }, 'BotConfig updated')
+    return cfg
   }
 
-  async refresh() {
-    await this._loadFromDb()
-    return this.getAll()
+  async refresh(userId) {
+    return this._loadFromDb(userId)
   }
 
-  isOwner(jid) {
+  /* ——— plugin response overrides ——— */
+
+  getPluginResponses(userId, command) {
+    const cfg = this.getCached(userId)
+    return (cfg.pluginResponses && cfg.pluginResponses[command]) || {}
+  }
+
+  async updatePluginResponses(userId, command, partial) {
+    const doc = await BotConfig.findOne({ userId })
+    const current = (doc && doc.pluginResponses) || {}
+    const next = { ...current, [command]: { ...(current[command] || {}), ...partial } }
+
+    const updated = await BotConfig.findOneAndUpdate(
+      { userId },
+      { $set: { pluginResponses: next } },
+      { upsert: true, new: true }
+    ).lean()
+
+    const cfg = toCache(updated)
+    this._cache.set(userId, cfg)
+    return cfg.pluginResponses
+  }
+
+  /* ——— convenience helpers used on the message hot path ——— */
+
+  isOwner(userId, jid) {
     if (!jid) return false
+    const cfg = this.getCached(userId)
     const num = String(jid).split('@')[0].replace(/\D/g, '')
-    return (this._cache.ownerNumbers || []).some((o) => String(o).replace(/\D/g, '') === num)
+    return (cfg.ownerNumbers || []).some((o) => String(o).replace(/\D/g, '') === num)
   }
 
-  getPrefix() {
-    return this._cache.prefix || '.'
+  getPrefix(userId) {
+    return this.getCached(userId).prefix || '.'
   }
 
-  isMaintenance() {
-    return !!this._cache.maintenanceMode
+  isMaintenance(userId) {
+    return !!this.getCached(userId).maintenanceMode
   }
 
-  isPublic() {
-    return this._cache.publicMode !== false
+  isPublic(userId) {
+    return this.getCached(userId).publicMode !== false
+  }
+
+  invalidate(userId) {
+    this._cache.delete(userId)
   }
 }
 
 const configService = new ConfigService()
 export default configService
-export { PUBLIC_FIELDS, EDITABLE_FIELDS }
+export { EDITABLE_FIELDS, DEFAULTS }

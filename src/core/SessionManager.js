@@ -46,7 +46,7 @@ export class SessionManager {
     for (let i = 0; i < active.length; i++) {
       const s = active[i]
       setTimeout(() => {
-        this._startConnection(s.sessionId).catch((err) => {
+        this._startConnection(s.sessionId, { userId: s.userId }).catch((err) => {
           logger.error({ sessionId: s.sessionId, err: err.message }, 'Restore start failed')
         })
       }, i * 150)
@@ -59,7 +59,8 @@ export class SessionManager {
   async createSession(userId, { name = '', pairingPhone } = {}) {
     // Limit check
     const count = await Session.countDocuments({ userId, isActive: true })
-    const maxSessions = configService.get('maxSessionsPerUser') || config.session.maxPerUser
+    const userCfg = await configService.getConfig(userId)
+    const maxSessions = userCfg.maxSessionsPerUser || config.session.maxPerUser
     if (count >= maxSessions) {
       const err = new Error(`Max sessions (${maxSessions}) reached`)
       err.code = 'MAX_SESSIONS'
@@ -75,7 +76,7 @@ export class SessionManager {
       isActive: true,
     })
 
-    await this._startConnection(sessionId, { pairingPhone })
+    await this._startConnection(sessionId, { userId, pairingPhone })
     return this.getSessionInfo(sessionId)
   }
 
@@ -86,6 +87,7 @@ export class SessionManager {
     }
 
     const cm = new ConnectionManager(sessionId, {
+      userId: opts.userId,
       messageHandler: this.messageHandler,
       onStatusChange: (id, status) => {
         logger.debug({ sessionId: id, status }, 'Session status change')
@@ -115,7 +117,7 @@ export class SessionManager {
       this.sessions.delete(sessionId)
     }
 
-    cm = await this._startConnection(sessionId, { pairingPhone })
+    cm = await this._startConnection(sessionId, { userId: session.userId, pairingPhone })
     return cm.getStatus()
   }
 
