@@ -21,6 +21,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --chown=zorabot:nodejs package.json ./
 COPY --chown=zorabot:nodejs src ./src
 COPY --chown=zorabot:nodejs plugins ./plugins
+COPY --chown=zorabot:nodejs public ./public
 
 USER zorabot
 EXPOSE 3000

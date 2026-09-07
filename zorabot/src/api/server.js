@@ -1,4 +1,6 @@
 import express from 'express'
+import { fileURLToPath } from 'url'
+import { dirname, join } from 'path'
 import cors from 'cors'
 import helmet from 'helmet'
 import config from '../config/index.js'
@@ -13,10 +15,18 @@ import createConfigRoutes from './routes/config.js'
  */
 export function createServer(sessionManager) {
   const app = express()
+  const __dirname = dirname(fileURLToPath(import.meta.url))
+  const publicDir = join(__dirname, '../../public')
 
   app.use(helmet({ contentSecurityPolicy: false }))
   app.use(cors({ origin: true, credentials: true }))
   app.use(express.json({ limit: '1mb' }))
+
+  // Static UI
+  app.use(express.static(publicDir, { index: false, maxAge: config.isProd ? '1h' : 0 }))
+  app.get('/', (req, res) => res.sendFile(join(publicDir, 'index.html')))
+  app.get('/app', (req, res) => res.sendFile(join(publicDir, 'app.html')))
+  app.get(/^\/app(\/.*)?$/, (req, res) => res.sendFile(join(publicDir, 'app.html')))
 
   // Request logging (lightweight)
   app.use((req, res, next) => {
