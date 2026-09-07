@@ -627,9 +627,9 @@
                 const on = activePerms.has(perm);
                 const isDefault = defaultPerms.has(perm);
                 return `
-              <div class="switch-row" style="padding:0.35rem 0">
-                <span style="font-size:0.9rem">${escapeHtml(permLabels[perm] || perm)}${isDefault ? ' <span class="chip-mini">default</span>' : ''}</span>
-                <div class="switch ${on ? 'on' : ''}" data-perm="${escapeAttr(perm)}"></div>
+              <div class="switch-row perm-toggle-row" style="padding:0.45rem 0;display:flex;align-items:center;justify-content:space-between;gap:0.75rem">
+                <span style="font-size:0.9rem;font-weight:600">${escapeHtml(permLabels[perm] || perm)}${isDefault ? ' <span class="chip-mini">default</span>' : ''}</span>
+                <div class="switch ${on ? 'on' : ''}" data-perm="${escapeAttr(perm)}" role="switch" aria-checked="${on ? 'true' : 'false'}" title="Toggle ${escapeAttr(permLabels[perm] || perm)}"></div>
               </div>`;
               })
               .join('');
@@ -643,8 +643,9 @@
             </div>
             <div class="switch ${p.enabled ? 'on' : ''}" data-act="toggle" title="Plugin ON/OFF"></div>
           </div>
-          <div style="margin-top:0.75rem">
-            <label style="font-size:0.8rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.04em">Permissions (AND)</label>
+          <div class="perm-box" style="margin-top:0.85rem;padding:0.75rem 0.9rem;border:1px solid var(--border);border-radius:10px;background:var(--bg-soft, transparent)">
+            <label style="display:block;font-size:0.78rem;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.35rem">Permissions — bisa pilih lebih dari satu (AND)</label>
+            <p style="font-size:0.8rem;color:var(--muted);margin:0 0 0.5rem 0">Contoh: Admin Group + Bot Admin = user harus admin <b>dan</b> bot harus admin</p>
             ${permToggles}
           </div>
           ${
