@@ -465,7 +465,7 @@
     const box = $('#configForm');
     box.innerHTML = '<p style="color:var(--muted);font-weight:500">memuat session...</p>';
     try {
-      const selHtml = `<div class="field"><label>pilih session</label><select id="configSessionSelect"></select></div>`;
+      const selHtml = `<div class="field session-pick"><label>Session</label><select id="configSessionSelect"></select></div>`;
       box.innerHTML = selHtml + '<div id="configFields"></div>';
       const select = $('#configSessionSelect');
       const sessions = await fillSessionSelect(select, selectedConfigSession);
@@ -570,7 +570,7 @@
     const box = $('#pluginList');
     box.innerHTML = '<p style="color:var(--muted);font-weight:500">memuat session...</p>';
     try {
-      box.innerHTML = `<div class="field"><label>pilih session</label><select id="pluginSessionSelect"></select></div><div id="pluginCards"></div>`;
+      box.innerHTML = `<div class="field session-pick"><label>Session</label><select id="pluginSessionSelect"></select></div><div id="pluginCards"></div>`;
       const select = $('#pluginSessionSelect');
       const sessions = await fillSessionSelect(select, selectedPluginSession);
       if (!sessions.length) {
@@ -614,68 +614,93 @@
         owner: 'Owner Only',
       };
 
-      box.innerHTML =
-        `<p class="sub" style="margin-bottom:0.75rem">Toggle ON/OFF & permission (bisa lebih dari satu — semua yang aktif harus terpenuhi). Default dari kode plugin sudah aktif otomatis.</p>` +
-        plugins
-          .map((p) => {
-            const primary = (p.commands && p.commands[0]) || '';
-            const tags = (p.tags || []).map(escapeHtml).join(', ');
-            const activePerms = new Set(p.permissions || p.defaultPermissions || ['everyone']);
-            const defaultPerms = new Set(p.defaultPermissions || ['everyone']);
-            const permToggles = allPerms
-              .map((perm) => {
-                const on = activePerms.has(perm);
-                const isDefault = defaultPerms.has(perm);
-                return `
-              <div class="switch-row perm-toggle-row" style="padding:0.45rem 0;display:flex;align-items:center;justify-content:space-between;gap:0.75rem">
-                <span style="font-size:0.9rem;font-weight:600">${escapeHtml(permLabels[perm] || perm)}${isDefault ? ' <span class="chip-mini">default</span>' : ''}</span>
-                <div class="switch ${on ? 'on' : ''}" data-perm="${escapeAttr(perm)}" role="switch" aria-checked="${on ? 'true' : 'false'}" title="Toggle ${escapeAttr(permLabels[perm] || perm)}"></div>
-              </div>`;
-              })
-              .join('');
+      // Group by top-level folder (admin, main, owner, …)
+      const groups = {};
+      for (const p of plugins) {
+        const parts = String(p.file || '').split('/');
+        const folder = parts.length > 1 ? parts[0] : 'other';
+        if (!groups[folder]) groups[folder] = [];
+        groups[folder].push(p);
+      }
+      const folderOrder = ['main', 'tools', 'group', 'admin', 'downloader', 'owner', 'other'];
+      const sortedFolders = Object.keys(groups).sort((a, b) => {
+        const ia = folderOrder.indexOf(a);
+        const ib = folderOrder.indexOf(b);
+        return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib) || a.localeCompare(b);
+      });
 
-            return `
-        <div class="card plugin-card" data-file="${escapeAttr(p.file)}" data-command="${escapeAttr(primary)}" style="padding:1.1rem;margin-bottom:1rem">
-          <div class="plugin-head" style="display:flex;justify-content:space-between;align-items:center;gap:0.75rem;flex-wrap:wrap">
-            <div>
-              <div class="plugin-name">${escapeHtml(p.file)}</div>
-              <div class="plugin-tags">.${escapeHtml((p.commands || []).join(' .'))} · ${tags}</div>
-            </div>
-            <div class="switch ${p.enabled ? 'on' : ''}" data-act="toggle" title="Plugin ON/OFF"></div>
-          </div>
-          <div class="perm-box" style="margin-top:0.85rem;padding:0.75rem 0.9rem;border:1px solid var(--border);border-radius:10px;background:var(--bg-soft, transparent)">
-            <label style="display:block;font-size:0.78rem;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.35rem">Permissions — bisa pilih lebih dari satu (AND)</label>
-            <p style="font-size:0.8rem;color:var(--muted);margin:0 0 0.5rem 0">Contoh: Admin Group + Bot Admin = user harus admin <b>dan</b> bot harus admin</p>
-            ${permToggles}
-          </div>
-          ${
+      let html = '';
+      for (const folder of sortedFolders) {
+        const list = groups[folder].slice().sort((a, b) => String(a.file).localeCompare(String(b.file)));
+        html += `<div class="plugin-folder">
+          <div class="plugin-folder-head">
+            <span class="plugin-folder-name">${escapeHtml(folder)}</span>
+            <span class="plugin-folder-count">${list.length} plugin</span>
+          </div>`;
+
+        for (const p of list) {
+          const primary = (p.commands && p.commands[0]) || '';
+          const baseName = String(p.file || '').split('/').pop() || p.file;
+          const cmds = (p.commands || []).map((c) => '.' + c).join('  ');
+          const activePerms = new Set(p.permissions || p.defaultPermissions || ['everyone']);
+          const defaultPerms = p.defaultPermissions || ['everyone'];
+          const defaultPermsAttr = escapeAttr(JSON.stringify(defaultPerms));
+
+          const permToggles = allPerms
+            .map((perm) => {
+              const on = activePerms.has(perm);
+              return `<div class="switch-row perm-toggle-row">
+                <span>${escapeHtml(permLabels[perm] || perm)}</span>
+                <div class="switch ${on ? 'on' : ''}" data-perm="${escapeAttr(perm)}" role="switch" aria-checked="${on ? 'true' : 'false'}"></div>
+              </div>`;
+            })
+            .join('');
+
+          const responsesHtml =
             p.responses && Object.keys(p.responses).length
-              ? Object.entries(p.responses)
-                  .map(
-                    ([key, r]) => `
-            <div class="field">
-              <label>${escapeHtml(key)}${r.overridden ? ' <span class="chip-mini">custom</span>' : ''}</label>
-              <textarea data-resp-key="${escapeAttr(key)}">${escapeHtml(r.value)}</textarea>
-            </div>`
-                  )
-                  .join('')
-              : ''
-          }
-          <div class="toolbar" style="margin-top:0.5rem">
-            <button class="btn btn-sm" data-act="saveState" type="button">simpan</button>
-            ${
-              p.responses && Object.keys(p.responses).length
-                ? `<button class="btn btn-sm btn-ghost" data-act="resetResp" type="button">reset teks</button>`
-                : ''
-            }
-          </div>
-        </div>`;
-          })
-          .join('');
+              ? `<div class="plugin-responses">
+                  ${Object.entries(p.responses)
+                    .map(
+                      ([key, r]) => `<div class="field">
+                    <label>${escapeHtml(key)}${r.overridden ? ' · diubah' : ''}</label>
+                    <textarea data-resp-key="${escapeAttr(key)}" rows="2">${escapeHtml(r.value)}</textarea>
+                  </div>`
+                    )
+                    .join('')}
+                </div>`
+              : '';
+
+          html += `<div class="card plugin-card" data-file="${escapeAttr(p.file)}" data-command="${escapeAttr(primary)}" data-defaults='${defaultPermsAttr}'>
+            <div class="plugin-head">
+              <div class="plugin-head-text">
+                <div class="plugin-name">${escapeHtml(baseName)}</div>
+                <div class="plugin-tags">${escapeHtml(cmds)}</div>
+              </div>
+              <div class="switch ${p.enabled ? 'on' : ''}" data-act="toggle" title="ON/OFF"></div>
+            </div>
+            <div class="perm-box">
+              <div class="perm-box-title">Permissions</div>
+              ${permToggles}
+            </div>
+            ${responsesHtml}
+            <div class="toolbar plugin-actions">
+              <button class="btn btn-sm" data-act="saveState" type="button">simpan</button>
+              <button class="btn btn-sm btn-ghost" data-act="resetDefault" type="button">reset default</button>
+            </div>
+          </div>`;
+        }
+        html += `</div>`;
+      }
+
+      box.innerHTML = html;
 
       box.querySelectorAll('.plugin-card').forEach((card) => {
         const file = card.dataset.file;
         const command = card.dataset.command;
+        let defaults = ['everyone'];
+        try {
+          defaults = JSON.parse(card.dataset.defaults || '["everyone"]');
+        } catch (_) {}
 
         card.querySelectorAll('.switch').forEach((sw) => {
           sw.addEventListener('click', () => sw.classList.toggle('on'));
@@ -686,7 +711,6 @@
           const permissions = [...card.querySelectorAll('.switch[data-perm].on')].map(
             (el) => el.dataset.perm
           );
-          // If nothing selected, default to everyone
           if (!permissions.length) permissions.push('everyone');
           try {
             await API.updateSessionPlugins(sessionId, {
@@ -701,21 +725,27 @@
             if (hasResp && command) {
               await API.updatePluginResponses(sessionId, command, respBody);
             }
-            toast('plugin ' + file + ' disimpan');
+            toast('disimpan · ' + file);
           } catch (e) {
             toast(e.message || 'gagal simpan');
           }
         });
 
-        card.querySelector('[data-act="resetResp"]')?.addEventListener('click', async () => {
-          if (!command) return;
-          const body = {};
-          card.querySelectorAll('[data-resp-key]').forEach((el) => {
-            body[el.dataset.respKey] = '';
-          });
+        card.querySelector('[data-act="resetDefault"]')?.addEventListener('click', async () => {
           try {
-            await API.updatePluginResponses(sessionId, command, body);
-            toast('teks dikembalikan ke default');
+            // Restore plugin defaults: enabled + default permissions
+            await API.updateSessionPlugins(sessionId, {
+              [file]: { enabled: true, permissions: defaults },
+            });
+            // Reset response text overrides if any
+            if (command && card.querySelectorAll('[data-resp-key]').length) {
+              const body = {};
+              card.querySelectorAll('[data-resp-key]').forEach((el) => {
+                body[el.dataset.respKey] = '';
+              });
+              await API.updatePluginResponses(sessionId, command, body);
+            }
+            toast('reset default · ' + file);
             renderPluginCards(sessionId);
           } catch (e) {
             toast(e.message || 'gagal reset');
