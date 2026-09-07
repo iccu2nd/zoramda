@@ -50,6 +50,8 @@ export class ConnectionManager {
     this.phoneNumber = null
     this.pendingPairingPhone = null
     this._pairingRequested = false
+    this._pairingAttempts = 0
+    this.pairingError = null
     this._boundHandlers = []
   }
 
@@ -80,6 +82,8 @@ export class ConnectionManager {
 
     if (pairingPhone) {
       this.pendingPairingPhone = String(pairingPhone).replace(/\D/g, '')
+      this._pairingAttempts = 0
+      this.pairingError = null
     }
 
     try {
@@ -122,38 +126,56 @@ export class ConnectionManager {
 
   /**
    * Baileys butuh koneksi WS sebentar sebelum requestPairingCode.
-   * Kalau terlalu cepat → "Connection Closed".
+   * Kalau terlalu cepat → "Connection Closed". Kalau gagal, coba lagi
+   * beberapa kali (dengan jeda) sebelum benar-benar fallback ke QR —
+   * request pairing code memang sering gagal di percobaan pertama.
    */
-  _schedulePairingCode(sock, phone) {
+  _schedulePairingCode(sock, phone, delay = 3000) {
     if (this.pairingTimer) {
       clearTimeout(this.pairingTimer)
       this.pairingTimer = null
     }
 
+    const MAX_ATTEMPTS = 4
+
     this.pairingTimer = setTimeout(async () => {
       this.pairingTimer = null
       if (this.isStopping || !this.sock || this.sock !== sock) return
-      if (this._pairingRequested) return
       if (sock.authState?.creds?.registered) return
+      if (this.pairingCode) return // already got one
 
-      this._pairingRequested = true
+      this._pairingAttempts += 1
       try {
         const code = await sock.requestPairingCode(phone)
         if (!code || this.isStopping) return
+        this._pairingRequested = true
         this.pairingCode = code
+        this.pairingError = null
         this.qr = null
         await this.setStatus(STATES.PAIRING)
-        logger.info({ sessionId: this.sessionId }, 'Pairing code generated')
-      } catch (err) {
-        // Jangan ERROR total — biarkan QR flow tetap jalan
-        logger.warn(
-          { sessionId: this.sessionId, err: err.message },
-          'Pairing code failed — fallback to QR'
+        logger.info(
+          { sessionId: this.sessionId, attempt: this._pairingAttempts },
+          'Pairing code generated'
         )
-        this._pairingRequested = false
-        this.pendingPairingPhone = null
+      } catch (err) {
+        logger.warn(
+          { sessionId: this.sessionId, attempt: this._pairingAttempts, err: err.message },
+          'Pairing code request failed'
+        )
+
+        if (this.isStopping || !this.sock || this.sock !== sock) return
+
+        if (this._pairingAttempts < MAX_ATTEMPTS) {
+          // retry with a growing delay — socket might just need more time
+          this._schedulePairingCode(sock, phone, 2500)
+        } else {
+          // benar-benar menyerah — fallback ke QR, tapi simpan alasannya
+          this.pairingError = err.message
+          this.pendingPairingPhone = null
+          await this.setStatus(this.status, { error: `Pairing code gagal: ${err.message}` })
+        }
       }
-    }, 3000)
+    }, delay)
   }
 
   _attachEvents(sock) {
@@ -321,6 +343,7 @@ export class ConnectionManager {
       status: this.status,
       qr: this.qr,
       pairingCode: this.pairingCode,
+      pairingError: this.pairingError,
       phoneNumber: this.phoneNumber,
       reconnectAttempts: this.reconnectAttempts,
     }

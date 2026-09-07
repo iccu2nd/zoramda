@@ -39,6 +39,7 @@
 
   function hideModal() {
     $('#overlay').classList.remove('show');
+    stopActivePairingPoll();
   }
 
   $('#overlay').addEventListener('click', (e) => {
@@ -128,6 +129,90 @@
     return 'status-pill status-' + (s || 'STOPPED');
   }
 
+  /* ——— pairing code polling ———
+     Backend butuh beberapa detik (dan kadang beberapa kali percobaan)
+     untuk dapat kode pairing dari whatsapp. Jadi kita polling endpoint
+     /pairing sampai kodenya siap, bukan cek sekali lalu nyerah. */
+  let activePairingPoll = null;
+
+  function stopActivePairingPoll() {
+    if (activePairingPoll) {
+      activePairingPoll.cancelled = true;
+      activePairingPoll = null;
+    }
+  }
+
+  function pollPairingCode(id, { timeoutMs = 30000, intervalMs = 1200 } = {}) {
+    const token = { cancelled: false };
+    activePairingPoll = token;
+    const start = Date.now();
+
+    return new Promise((resolve) => {
+      (async function tick() {
+        if (token.cancelled) return resolve({ cancelled: true });
+        try {
+          const p = await API.pairing(id);
+          if (token.cancelled) return resolve({ cancelled: true });
+          if (p.pairingCode) return resolve({ ok: true, code: p.pairingCode });
+          if (p.pairingError) return resolve({ ok: false, error: p.pairingError });
+        } catch (e) {
+          if (e.status === 401) return resolve({ ok: false, error: 'sesi login habis' });
+          // error jaringan sesaat — lanjut coba lagi sampai timeout
+        }
+        if (Date.now() - start >= timeoutMs) {
+          return resolve({ ok: false, error: 'timeout menunggu kode pairing' });
+        }
+        setTimeout(tick, intervalMs);
+      })();
+    });
+  }
+
+  async function showPairingFlow(id) {
+    stopActivePairingPoll();
+
+    showModal({
+      title: 'pairing code',
+      sub: 'menghubungkan ke whatsapp...',
+      body: `<div style="text-align:center;padding:1.25rem 0">
+        <div class="pairing-spinner"></div>
+        <p style="color:var(--muted);font-weight:500;font-size:0.85rem">
+          meminta kode pairing, tunggu sebentar (maks. 30 detik)
+        </p>
+      </div>`,
+      actions: [
+        { label: 'batal', ghost: true, onClick: () => stopActivePairingPoll() },
+      ],
+    });
+
+    const result = await pollPairingCode(id);
+    if (result.cancelled) return;
+
+    if (result.ok) {
+      showModal({
+        title: 'pairing code',
+        sub: 'masukkan di whatsapp → perangkat tertaut → tautkan dengan nomor telepon',
+        body: `<div class="pairing-code">${escapeHtml(result.code)}</div>
+          <p style="text-align:center;color:var(--muted);font-size:0.8rem;font-weight:500">
+            kode hanya berlaku sebentar, segera masukkan di whatsapp
+          </p>`,
+        actions: [{ label: 'tutup', ghost: true }],
+      });
+    } else {
+      showModal({
+        title: 'pairing code gagal',
+        sub: '',
+        body: `<p style="color:var(--red);font-weight:500">
+            ${escapeHtml(result.error || 'gagal mendapat kode pairing')}
+          </p>
+          <p style="color:var(--muted);font-size:0.85rem;font-weight:500">
+            coba klik "connect" lagi, atau gunakan opsi scan qr sebagai alternatif.
+          </p>`,
+        actions: [{ label: 'tutup', ghost: true }],
+      });
+    }
+    loadSessions();
+  }
+
   async function loadSessions() {
     const list = $('#sessionList');
     try {
@@ -202,23 +287,16 @@
               onClick: async () => {
                 const phone = $('#pairPhone')?.value?.trim();
                 await API.connect(id, phone ? { pairingPhone: phone } : {});
-                toast('menghubungkan...');
-                setTimeout(loadSessions, 800);
-                // show pairing if any
-                setTimeout(async () => {
-                  try {
-                    const p = await API.pairing(id);
-                    if (p.pairingCode) {
-                      showModal({
-                        title: 'pairing code',
-                        sub: 'masukkan di whatsapp → perangkat tertaut → tautkan dengan nomor telepon',
-                        body: `<div class="pairing-code">${escapeHtml(p.pairingCode)}</div>`,
-                        actions: [{ label: 'tutup', ghost: true }],
-                      });
-                    }
-                  } catch {}
-                }, 1500);
+                loadSessions();
+                if (phone) {
+                  // jangan tutup modal — showPairingFlow akan ganti isinya
+                  await showPairingFlow(id);
+                } else {
+                  hideModal();
+                  toast('menghubungkan...');
+                }
               },
+              keep: true,
             },
           ],
         });
@@ -267,10 +345,16 @@
           onClick: async () => {
             const name = $('#newName')?.value?.trim();
             const pairingPhone = $('#newPhone')?.value?.trim();
-            await API.createSession({ name, pairingPhone: pairingPhone || undefined });
-            toast('session dibuat');
+            const info = await API.createSession({ name, pairingPhone: pairingPhone || undefined });
             loadSessions();
+            if (pairingPhone && info?.sessionId) {
+              await showPairingFlow(info.sessionId);
+            } else {
+              hideModal();
+              toast('session dibuat');
+            }
           },
+          keep: true,
         },
       ],
     });

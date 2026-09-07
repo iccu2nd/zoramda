@@ -188,9 +188,9 @@ export class SessionManager {
 
   async getPairingCode(sessionId) {
     const cm = this.sessions.get(sessionId)
-    if (cm) return { pairingCode: cm.pairingCode, status: cm.status }
+    if (cm) return { pairingCode: cm.pairingCode, status: cm.status, pairingError: cm.pairingError }
     const s = await Session.findOne({ sessionId }).lean()
-    return s ? { pairingCode: s.pairingCode, status: s.status } : null
+    return s ? { pairingCode: s.pairingCode, status: s.status, pairingError: s.lastError } : null
   }
 
   /**
