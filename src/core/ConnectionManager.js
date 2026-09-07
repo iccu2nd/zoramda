@@ -32,12 +32,6 @@ export const STATES = {
 }
 
 export class ConnectionManager {
-  /**
-   * @param {string} sessionId
-   * @param {object} opts
-   * @param {import('./MessageHandler.js').MessageHandler} opts.messageHandler
-   * @param {Function} opts.onStatusChange
-   */
   constructor(sessionId, { messageHandler, onStatusChange } = {}) {
     this.sessionId = sessionId
     this.messageHandler = messageHandler
@@ -51,8 +45,11 @@ export class ConnectionManager {
     this.pairingCode = null
     this.reconnectAttempts = 0
     this.reconnectTimer = null
+    this.pairingTimer = null
     this.isStopping = false
     this.phoneNumber = null
+    this.pendingPairingPhone = null
+    this._pairingRequested = false
     this._boundHandlers = []
   }
 
@@ -79,6 +76,11 @@ export class ConnectionManager {
   async start({ pairingPhone } = {}) {
     if (this.isStopping) return
     this.isStopping = false
+    this._pairingRequested = false
+
+    if (pairingPhone) {
+      this.pendingPairingPhone = String(pairingPhone).replace(/\D/g, '')
+    }
 
     try {
       await this.setStatus(STATES.CONNECTING)
@@ -101,23 +103,15 @@ export class ConnectionManager {
         syncFullHistory: false,
         markOnlineOnConnect: false,
         generateHighQualityLinkPreview: false,
-        getMessage: async () => undefined, // minimal – no full store needed for gateway
+        getMessage: async () => undefined,
       })
 
       this.sock = sock
       this._attachEvents(sock)
 
-      // Pairing code flow
-      if (pairingPhone && !state.creds.registered) {
-        try {
-          const code = await sock.requestPairingCode(pairingPhone.replace(/\D/g, ''))
-          this.pairingCode = code
-          await this.setStatus(STATES.PAIRING)
-          logger.info({ sessionId: this.sessionId }, 'Pairing code generated')
-        } catch (err) {
-          logger.error({ sessionId: this.sessionId, err: err.message }, 'Pairing code failed')
-          await this.setStatus(STATES.ERROR, { error: err.message })
-        }
+      // Pairing: tunggu websocket siap dulu (jangan langsung request)
+      if (this.pendingPairingPhone && !state.creds.registered) {
+        this._schedulePairingCode(sock, this.pendingPairingPhone)
       }
     } catch (err) {
       logger.error({ sessionId: this.sessionId, err: err.message }, 'Connection start failed')
@@ -126,18 +120,54 @@ export class ConnectionManager {
     }
   }
 
+  /**
+   * Baileys butuh koneksi WS sebentar sebelum requestPairingCode.
+   * Kalau terlalu cepat → "Connection Closed".
+   */
+  _schedulePairingCode(sock, phone) {
+    if (this.pairingTimer) {
+      clearTimeout(this.pairingTimer)
+      this.pairingTimer = null
+    }
+
+    this.pairingTimer = setTimeout(async () => {
+      this.pairingTimer = null
+      if (this.isStopping || !this.sock || this.sock !== sock) return
+      if (this._pairingRequested) return
+      if (sock.authState?.creds?.registered) return
+
+      this._pairingRequested = true
+      try {
+        const code = await sock.requestPairingCode(phone)
+        if (!code || this.isStopping) return
+        this.pairingCode = code
+        this.qr = null
+        await this.setStatus(STATES.PAIRING)
+        logger.info({ sessionId: this.sessionId }, 'Pairing code generated')
+      } catch (err) {
+        // Jangan ERROR total — biarkan QR flow tetap jalan
+        logger.warn(
+          { sessionId: this.sessionId, err: err.message },
+          'Pairing code failed — fallback to QR'
+        )
+        this._pairingRequested = false
+        this.pendingPairingPhone = null
+      }
+    }, 3000)
+  }
+
   _attachEvents(sock) {
-    // Remove any previous listeners if re-created
     this._cleanupListeners()
 
     const onConnectionUpdate = async (update) => {
       const { connection, lastDisconnect, qr } = update
 
-      if (qr) {
+      // QR hanya jika belum pakai pairing code
+      if (qr && !this.pairingCode) {
         try {
           this.qr = await QRCode.toDataURL(qr)
         } catch {
-          this.qr = qr // fallback raw
+          this.qr = qr
         }
         await this.setStatus(STATES.QR)
       }
@@ -146,6 +176,7 @@ export class ConnectionManager {
         this.reconnectAttempts = 0
         this.qr = null
         this.pairingCode = null
+        this.pendingPairingPhone = null
         this.phoneNumber = sock.user?.id?.split(':')[0] || null
         await this.setStatus(STATES.CONNECTED, {
           fields: { phoneNumber: this.phoneNumber },
@@ -154,9 +185,10 @@ export class ConnectionManager {
       }
 
       if (connection === 'close') {
-        const statusCode = lastDisconnect?.error instanceof Boom
-          ? lastDisconnect.error.output?.statusCode
-          : lastDisconnect?.error?.output?.statusCode
+        const statusCode =
+          lastDisconnect?.error instanceof Boom
+            ? lastDisconnect.error.output?.statusCode
+            : lastDisconnect?.error?.output?.statusCode
 
         const loggedOut = statusCode === DisconnectReason.loggedOut
 
@@ -169,7 +201,6 @@ export class ConnectionManager {
           return
         }
 
-        // Reconnect with backoff
         await this.setStatus(STATES.RECONNECTING, {
           error: serializeError(lastDisconnect?.error)?.message,
         })
@@ -183,12 +214,9 @@ export class ConnectionManager {
 
     const onMessagesUpsert = async (m) => {
       if (!this.messageHandler) return
-      // Fire-and-forget – never block Baileys event loop
-      this.messageHandler
-        .handle(this.sessionId, sock, m)
-        .catch((err) => {
-          logger.error({ sessionId: this.sessionId, err: err.message }, 'Message handler error')
-        })
+      this.messageHandler.handle(this.sessionId, sock, m).catch((err) => {
+        logger.error({ sessionId: this.sessionId, err: err.message }, 'Message handler error')
+      })
     }
 
     sock.ev.on('connection.update', onConnectionUpdate)
@@ -235,15 +263,21 @@ export class ConnectionManager {
     this.reconnectTimer = setTimeout(async () => {
       this.reconnectTimer = null
       if (this.isStopping) return
-      // Clean old socket
       this._cleanupListeners()
+      if (this.pairingTimer) {
+        clearTimeout(this.pairingTimer)
+        this.pairingTimer = null
+      }
       if (this.sock) {
         try {
           this.sock.end(undefined)
         } catch {}
         this.sock = null
       }
-      await this.start()
+      // reconnect tanpa pairing ulang kecuali masih pending & belum registered
+      await this.start(
+        this.pendingPairingPhone ? { pairingPhone: this.pendingPairingPhone } : {}
+      )
     }, delay)
   }
 
@@ -252,6 +286,10 @@ export class ConnectionManager {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer)
       this.reconnectTimer = null
+    }
+    if (this.pairingTimer) {
+      clearTimeout(this.pairingTimer)
+      this.pairingTimer = null
     }
 
     this._cleanupListeners()

@@ -2,7 +2,7 @@ import mongoose from 'mongoose'
 
 const sessionSchema = new mongoose.Schema(
   {
-    sessionId: { type: String, required: true, unique: true, index: true },
+    sessionId: { type: String, required: true, unique: true },
     userId: { type: String, required: true, index: true },
     name: { type: String, default: '' },
     phoneNumber: { type: String, default: null },
@@ -20,7 +20,6 @@ const sessionSchema = new mongoose.Schema(
         'STOPPED',
       ],
       default: 'CREATING',
-      index: true,
     },
     lastError: { type: String, default: null },
     qr: { type: String, default: null },
@@ -34,8 +33,8 @@ const sessionSchema = new mongoose.Schema(
   }
 )
 
+// compound only — avoid duplicate single-field indexes
 sessionSchema.index({ userId: 1, isActive: 1 })
-sessionSchema.index({ status: 1 })
 
 const Session = mongoose.models.Session || mongoose.model('Session', sessionSchema)
 export default Session
