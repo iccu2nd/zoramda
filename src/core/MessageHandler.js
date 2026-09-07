@@ -66,6 +66,12 @@ export class MessageHandler {
         return
       }
 
+      // Banned users are silently ignored — no reply, so a banned user
+      // can't tell whether the bot is even seeing their messages.
+      if (!isOwner && configService.isBanned(userId, m.sender)) {
+        return
+      }
+
       // Public mode off – only owners
       if (!configService.isPublic(userId) && !isOwner) {
         return // silent ignore for non-owners
@@ -96,12 +102,21 @@ export class MessageHandler {
     const type = getContentType(content) || getContentType(raw.message)
 
     let text = ''
+    let contextInfo = null
     if (type === 'conversation') text = content.conversation || ''
-    else if (type === 'extendedTextMessage') text = content.extendedTextMessage?.text || ''
-    else if (type === 'imageMessage') text = content.imageMessage?.caption || ''
-    else if (type === 'videoMessage') text = content.videoMessage?.caption || ''
-    else if (type === 'documentMessage') text = content.documentMessage?.caption || ''
-    else if (type === 'buttonsResponseMessage')
+    else if (type === 'extendedTextMessage') {
+      text = content.extendedTextMessage?.text || ''
+      contextInfo = content.extendedTextMessage?.contextInfo || null
+    } else if (type === 'imageMessage') {
+      text = content.imageMessage?.caption || ''
+      contextInfo = content.imageMessage?.contextInfo || null
+    } else if (type === 'videoMessage') {
+      text = content.videoMessage?.caption || ''
+      contextInfo = content.videoMessage?.contextInfo || null
+    } else if (type === 'documentMessage') {
+      text = content.documentMessage?.caption || ''
+      contextInfo = content.documentMessage?.contextInfo || null
+    } else if (type === 'buttonsResponseMessage')
       text = content.buttonsResponseMessage?.selectedDisplayText || ''
     else if (type === 'listResponseMessage')
       text = content.listResponseMessage?.title || ''
@@ -115,6 +130,24 @@ export class MessageHandler {
     const jid = raw.key.remoteJid
     const sender = raw.key.participant || raw.key.remoteJid
     const isGroup = jid?.endsWith('@g.us')
+
+    // Quoted (replied-to) message, if any — used by admin commands like
+    // .ban / .kick / .promote / .delete to target "whoever I replied to"
+    // without needing a raw phone number.
+    const quotedParticipant = contextInfo?.participant || null
+    const quotedMessage = contextInfo?.quotedMessage || null
+    const quoted = quotedMessage
+      ? {
+          sender: normalizeJid(quotedParticipant),
+          message: quotedMessage,
+          key: {
+            remoteJid: jid,
+            id: contextInfo?.stanzaId,
+            fromMe: normalizeJid(quotedParticipant) === normalizeJid(sock.user?.id),
+            participant: quotedParticipant,
+          },
+        }
+      : null
 
     if (!sock.reply) {
       sock.reply = async (chatId, content, quoted) => {
@@ -136,6 +169,8 @@ export class MessageHandler {
       body: parsed?.text || '',
       usedPrefix: prefix,
       type,
+      mentionedJid: contextInfo?.mentionedJid || [],
+      quoted,
       pushName: raw.pushName || '',
       timestamp: raw.messageTimestamp,
       reply: async (content, quoted = raw) => {
@@ -182,6 +217,10 @@ export class MessageHandler {
         getAll: () => ({ ...botCfg }),
         update: (partial) => configService.update(userId, partial),
         isOwner: (jid) => configService.isOwner(userId, jid),
+        ban: (jid) => configService.banUser(userId, jid),
+        unban: (jid) => configService.unbanUser(userId, jid),
+        isBanned: (jid) => configService.isBanned(userId, jid),
+        getBannedUsers: () => configService.getBannedUsers(userId),
       },
     }
 

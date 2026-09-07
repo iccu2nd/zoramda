@@ -30,6 +30,10 @@ const botConfigSchema = new mongoose.Schema(
     // Limits
     maxSessionsPerUser: { type: Number, default: 5 },
 
+    // Users (by normalized JID, e.g. 6281234567890@s.whatsapp.net) blocked
+    // from using any bot command for this session's owner.
+    bannedUsers: { type: [String], default: [] },
+
     // Per-plugin response overrides: { [command]: { [responseKey]: text } }
     pluginResponses: { type: mongoose.Schema.Types.Mixed, default: {} },
 

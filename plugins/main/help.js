@@ -12,7 +12,8 @@ handler.responses = {
     '  {prefix}ping   – latency test\n' +
     '  {prefix}menu   – list all commands\n' +
     '  {prefix}info   – bot information\n' +
-    '  {prefix}set    – ubah config (owner)\n\n' +
+    '  {prefix}set    – ubah config (owner)\n' +
+    '  {prefix}adminmenu – menu admin/moderasi\n\n' +
     'Kirim perintah dengan prefix `{prefix}`\n\n' +
     'Contoh: {prefix}menu',
 }

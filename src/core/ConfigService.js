@@ -24,6 +24,7 @@ const DEFAULTS = {
   maintenanceMode: false,
   maintenanceMessage: 'Bot sedang maintenance. Coba lagi nanti.',
   maxSessionsPerUser: staticConfig.session?.maxPerUser || 5,
+  bannedUsers: [],
   pluginResponses: {},
   extra: {},
 }
@@ -99,6 +100,7 @@ function toCache(doc) {
     }
   }
   if (!Array.isArray(next.ownerNumbers)) next.ownerNumbers = []
+  next.bannedUsers = Array.isArray(doc.bannedUsers) ? doc.bannedUsers : []
   next.pluginResponses = doc.pluginResponses && typeof doc.pluginResponses === 'object' ? doc.pluginResponses : {}
   return next
 }
@@ -265,6 +267,47 @@ class ConfigService {
     const cfg = toCache(updated)
     this._cache.set(userId, cfg)
     return cfg.pluginResponses
+  }
+
+  /* ——— banned users (blocks all bot commands for that jid) ——— */
+
+  /**
+   * $addToSet / $pull instead of read-merge-write — same lesson as
+   * updatePluginResponses above: never load an array, mutate it in JS, and
+   * write the whole thing back, since concurrent calls silently drop each
+   * other's changes. These are atomic on Mongo's side, so two `.ban` calls
+   * for different numbers at the same time can't stomp on one another.
+   */
+  async banUser(userId, jid) {
+    const updated = await BotConfig.findOneAndUpdate(
+      { userId },
+      { $addToSet: { bannedUsers: jid }, $setOnInsert: { userId } },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    ).lean()
+    const cfg = toCache(updated)
+    this._cache.set(userId, cfg)
+    return cfg.bannedUsers
+  }
+
+  async unbanUser(userId, jid) {
+    const updated = await BotConfig.findOneAndUpdate(
+      { userId },
+      { $pull: { bannedUsers: jid } },
+      { new: true }
+    ).lean()
+    const cfg = toCache(updated)
+    this._cache.set(userId, cfg)
+    return cfg.bannedUsers
+  }
+
+  getBannedUsers(userId) {
+    return this.getCached(userId).bannedUsers || []
+  }
+
+  isBanned(userId, jid) {
+    if (!jid) return false
+    const num = String(jid).split('@')[0].replace(/\D/g, '')
+    return this.getBannedUsers(userId).some((b) => String(b).split('@')[0].replace(/\D/g, '') === num)
   }
 
   /* ——— convenience helpers used on the message hot path ——— */
