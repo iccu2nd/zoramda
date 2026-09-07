@@ -614,7 +614,6 @@
         owner: 'Owner Only',
       };
 
-      // Group by top-level folder (admin, main, owner, …)
       const groups = {};
       for (const p of plugins) {
         const parts = String(p.file || '').split('/');
@@ -629,14 +628,24 @@
         return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib) || a.localeCompare(b);
       });
 
+      // restore open folders from memory
+      if (!window._openPluginFolders) window._openPluginFolders = {};
+
       let html = '';
       for (const folder of sortedFolders) {
         const list = groups[folder].slice().sort((a, b) => String(a.file).localeCompare(String(b.file)));
-        html += `<div class="plugin-folder">
-          <div class="plugin-folder-head">
-            <span class="plugin-folder-name">${escapeHtml(folder)}</span>
-            <span class="plugin-folder-count">${list.length} plugin</span>
-          </div>`;
+        const isOpen = !!window._openPluginFolders[folder];
+        const enabledCount = list.filter((p) => p.enabled !== false).length;
+
+        html += `<div class="plugin-folder ${isOpen ? 'open' : ''}" data-folder="${escapeAttr(folder)}">
+          <button type="button" class="plugin-folder-toggle" data-act="fold">
+            <span class="plugin-folder-left">
+              <svg class="folder-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg>
+              <span class="plugin-folder-name">${escapeHtml(folder)}</span>
+            </span>
+            <span class="plugin-folder-count">${enabledCount}/${list.length}</span>
+          </button>
+          <div class="plugin-folder-body">`;
 
         for (const p of list) {
           const primary = (p.commands && p.commands[0]) || '';
@@ -649,9 +658,9 @@
           const permToggles = allPerms
             .map((perm) => {
               const on = activePerms.has(perm);
-              return `<div class="switch-row perm-toggle-row">
+              return `<div class="switch-row">
                 <span>${escapeHtml(permLabels[perm] || perm)}</span>
-                <div class="switch ${on ? 'on' : ''}" data-perm="${escapeAttr(perm)}" role="switch" aria-checked="${on ? 'true' : 'false'}"></div>
+                <div class="switch ${on ? 'on' : ''}" data-perm="${escapeAttr(perm)}" role="switch"></div>
               </div>`;
             })
             .join('');
@@ -678,8 +687,8 @@
               </div>
               <div class="switch ${p.enabled ? 'on' : ''}" data-act="toggle" title="ON/OFF"></div>
             </div>
-            <div class="perm-box">
-              <div class="perm-box-title">Permissions</div>
+            <div class="perm-list">
+              <div class="perm-list-title">Permissions</div>
               ${permToggles}
             </div>
             ${responsesHtml}
@@ -689,10 +698,21 @@
             </div>
           </div>`;
         }
-        html += `</div>`;
+
+        html += `</div></div>`;
       }
 
       box.innerHTML = html;
+
+      // folder accordion
+      box.querySelectorAll('.plugin-folder-toggle').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const folderEl = btn.closest('.plugin-folder');
+          const name = folderEl.dataset.folder;
+          folderEl.classList.toggle('open');
+          window._openPluginFolders[name] = folderEl.classList.contains('open');
+        });
+      });
 
       box.querySelectorAll('.plugin-card').forEach((card) => {
         const file = card.dataset.file;
@@ -703,7 +723,10 @@
         } catch (_) {}
 
         card.querySelectorAll('.switch').forEach((sw) => {
-          sw.addEventListener('click', () => sw.classList.toggle('on'));
+          sw.addEventListener('click', (e) => {
+            e.stopPropagation();
+            sw.classList.toggle('on');
+          });
         });
 
         card.querySelector('[data-act="saveState"]')?.addEventListener('click', async () => {
@@ -733,11 +756,9 @@
 
         card.querySelector('[data-act="resetDefault"]')?.addEventListener('click', async () => {
           try {
-            // Restore plugin defaults: enabled + default permissions
             await API.updateSessionPlugins(sessionId, {
               [file]: { enabled: true, permissions: defaults },
             });
-            // Reset response text overrides if any
             if (command && card.querySelectorAll('[data-resp-key]').length) {
               const body = {};
               card.querySelectorAll('[data-resp-key]').forEach((el) => {

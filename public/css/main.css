@@ -710,86 +710,129 @@ img { max-width: 100%; display: block; }
 
 /* ——— plugins page ——— */
 .plugin-folder {
-  margin-bottom: 1.5rem;
+  margin-bottom: 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  overflow: hidden;
 }
-.plugin-folder-head {
+.plugin-folder-toggle {
+  width: 100%;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  margin-bottom: 0.65rem;
-  padding: 0 0.15rem;
+  padding: 0.85rem 1rem;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text);
+  text-align: left;
+}
+.plugin-folder-toggle:hover {
+  background: color-mix(in srgb, var(--chip) 55%, transparent);
+}
+.plugin-folder-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.folder-chevron {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--muted);
+  transition: transform 0.2s var(--ease);
+}
+.plugin-folder.open .folder-chevron {
+  transform: rotate(90deg);
 }
 .plugin-folder-name {
-  font-weight: 800;
-  font-size: 0.8rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: -0.01em;
+  text-transform: none;
 }
 .plugin-folder-count {
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   font-weight: 600;
   color: var(--muted);
-  opacity: 0.85;
+}
+.plugin-folder-body {
+  display: none;
+  padding: 0 0.75rem 0.75rem;
+  border-top: 1px solid var(--border);
+}
+.plugin-folder.open .plugin-folder-body {
+  display: block;
 }
 .plugin-card {
-  padding: 1rem 1.1rem;
-  margin-bottom: 0.65rem;
+  padding: 1rem 0.15rem 1rem;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  border-bottom: 1px solid var(--border-soft);
+}
+.plugin-card:last-child {
+  border-bottom: none;
+  padding-bottom: 0.35rem;
 }
 .plugin-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 0.75rem;
-  margin-bottom: 0.65rem;
+  margin-bottom: 0.35rem;
 }
 .plugin-head-text { min-width: 0; }
 .plugin-name {
   font-weight: 700;
-  font-size: 0.98rem;
+  font-size: 0.95rem;
   line-height: 1.3;
 }
 .plugin-tags {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   color: var(--muted);
   font-weight: 500;
-  margin-top: 0.15rem;
+  margin-top: 0.12rem;
   word-break: break-word;
 }
-.perm-box {
-  margin-top: 0.35rem;
-  padding: 0.55rem 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--chip) 70%, transparent);
+/* clean permission rows — like settings toggles, no gray box */
+.perm-list {
+  margin-top: 0.25rem;
 }
-.perm-box-title {
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 0.25rem;
+.perm-list-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0.35rem 0 0.15rem;
 }
-.perm-toggle-row {
-  padding: 0.4rem 0;
+.perm-list .switch-row {
+  padding: 0.85rem 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
   border-bottom: 1px solid var(--border-soft);
 }
-.perm-toggle-row:last-child { border-bottom: none; }
-.perm-toggle-row span {
-  font-size: 0.9rem;
-  font-weight: 600;
+.perm-list .switch-row:last-child {
+  border-bottom: none;
+}
+.perm-list .switch-row span {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--text);
 }
 .plugin-actions {
-  margin-top: 0.7rem;
+  margin-top: 0.55rem;
   gap: 0.45rem;
 }
 .plugin-responses {
-  margin-top: 0.65rem;
+  margin-top: 0.5rem;
 }
-.plugin-responses .field { margin-bottom: 0.5rem; }
+.plugin-responses .field { margin-bottom: 0.45rem; }
+
