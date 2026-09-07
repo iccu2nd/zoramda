@@ -1,41 +1,36 @@
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import 'dotenv/config'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(__dirname, '../..');
-
-export const config = {
-  port: Number(process.env.PORT) || 3000,
+/**
+ * Static / infrastructure config from environment only.
+ * Bot behavior settings (prefix, owner, name, etc.) live in ConfigService + MongoDB.
+ */
+const config = {
+  env: process.env.NODE_ENV || 'development',
+  isProd: process.env.NODE_ENV === 'production',
+  port: parseInt(process.env.PORT || '3000', 10),
   host: process.env.HOST || '0.0.0.0',
-  sessionSecret: process.env.SESSION_SECRET || 'zorabot-change-me-in-production-' + Date.now(),
-  dataDir: path.join(ROOT, 'data'),
-  sessionsDir: path.join(ROOT, 'sessions'),
-  logsDir: path.join(ROOT, 'logs'),
-  publicDir: path.join(ROOT, 'public'),
-  cookie: {
-    name: 'zora_sid',
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production'
-  },
-  rateLimit: {
-    windowMs: 15 * 60 * 1000,
-    max: 100
-  },
-  loginRateLimit: {
-    windowMs: 15 * 60 * 1000,
-    max: 20
-  },
-  defaultBot: {
-    name: 'ZoraBot',
-    prefix: '.',
-    menuTitle: 'ZoraBot Menu',
-    menuDescription: 'Command list',
-    footer: 'ZoraBot Base',
-    autoRead: false,
-    presence: false
-  }
-};
 
-export default config;
+  mongo: {
+    uri: process.env.MONGODB_URI || 'mongodb://localhost:27017/zorabot',
+    dbName: process.env.MONGODB_DB_NAME || 'zorabot',
+  },
+
+  security: {
+    apiSecret: process.env.API_SECRET || 'dev-secret-change-me',
+    jwtSecret: process.env.JWT_SECRET || 'dev-jwt-change-me',
+    adminApiKey: process.env.ADMIN_API_KEY || 'dev-admin-key',
+  },
+
+  logLevel: process.env.LOG_LEVEL || 'info',
+  latencyThreshold: parseInt(process.env.LATENCY_LOG_THRESHOLD_MS || '500', 10),
+
+  // Session infrastructure limits (not bot UX)
+  session: {
+    maxPerUser: parseInt(process.env.MAX_SESSIONS_PER_USER || '5', 10),
+    reconnectMaxRetries: parseInt(process.env.SESSION_RECONNECT_MAX_RETRIES || '10', 10),
+    reconnectBaseDelay: parseInt(process.env.SESSION_RECONNECT_BASE_DELAY_MS || '2000', 10),
+    reconnectMaxDelay: parseInt(process.env.SESSION_RECONNECT_MAX_DELAY_MS || '60000', 10),
+  },
+}
+
+export default config

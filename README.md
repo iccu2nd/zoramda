@@ -1,132 +1,146 @@
 # ZoraBot
 
-Stable WhatsApp Gateway Base — multi-bot, isolated sessions, modular plugins.
+Production-ready multi-session WhatsApp Gateway / Bot Engine.
 
-## Requirements
+- **Node.js LTS** + ESM
+- **Baileys** (stable)
+- **MongoDB** for session auth + metadata
+- Plugin system with hot-reload
+- Multi-session isolated
+- Low-latency message pipeline
+- REST API for session management
+- Portable: Railway / VPS / Docker / any Node host
 
-- Node.js >= 20
-- `ffmpeg` di PATH (untuk voice note & convert sticker)
-
-## Install
+## Quick Start
 
 ```bash
-cd zorabot
+cp .env.example .env
+# wajib: MONGODB_URI, MONGODB_DB_NAME, ADMIN_API_KEY, API_SECRET, JWT_SECRET
+# prefix / owner / nama bot → diubah via API atau .set (tidak perlu di .env)
+
 npm install
-```
-
-## Run
-
-```bash
 npm start
 ```
 
-Open `http://localhost:3000`
+Health check: `GET /health`
 
-## Structure
+## API
+
+All session endpoints require header:
 
 ```
-src/
-  index.js
-  config/
-  db/
-  bot/
-    manager.js
-    session.js
-    messageEngine.js
-    pluginLoader.js
-    socketHelpers.js   # button, album, sticker, vn, …
-    media.js
-    groupCache.js
-  plugins/
-  server/
-  middleware/
-  utils/
-public/
-sessions/
-data/
+x-api-key: <your-api-key>
 ```
 
-## Base Commands
+Admin key is set via `ADMIN_API_KEY` in `.env`.
 
-| Command | Description |
-|---------|-------------|
-| `.ping` | Latency check |
-| `.menu` | Dynamic menu from active plugins |
-| `.info` | Bot info |
-| `.button` | Demo interactive buttons |
+### Create user (admin only)
 
-## Media helpers (plugin context)
+```
+POST /api/auth/users
+{ "name": "user1" }
+→ { userId, apiKey, role }
+```
 
-Setiap plugin menerima:
+### Sessions
 
-| Helper | Keterangan |
-|--------|------------|
-| `reply(text)` | Teks biasa |
-| `sendImage(media, caption?)` | Gambar |
-| `sendVideo(media, caption?, { gif })` | Video |
-| `sendAudio(media, { ptt })` | Audio |
-| `sendVN(media)` | Voice note (opus) |
-| `sendSticker(media, opts)` | Sticker + EXIF |
-| `sendAlbum(items)` | Album multi media |
-| `sendButton(content)` | Native flow buttons |
-| `sendButtonV2(content)` | Legacy buttons |
-| `sendCarousel(content)` | Carousel cards |
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | /api/sessions | List own sessions |
+| POST | /api/sessions | Create session |
+| GET | /api/sessions/:id | Status / detail |
+| GET | /api/sessions/:id/qr | QR data URL |
+| GET | /api/sessions/:id/pairing | Pairing code |
+| POST | /api/sessions/:id/connect | Start / reconnect |
+| POST | /api/sessions/:id/disconnect | Disconnect |
+| DELETE | /api/sessions/:id | Delete + logout |
 
-### Button types
+Body for create / connect (optional):
 
-`reply`, `url`, `copy`, `call`, `location`, `address`, `reminder`, `cancel_reminder`, `list`
+```json
+{ "name": "My Bot", "pairingPhone": "628xxxxxxxxxx" }
+```
+
+## Plugins
+
+Put files under `plugins/<category>/*.js`:
 
 ```js
-await sendButton({
-  text: 'Pilih',
-  footer: 'ZoraBot',
-  buttons: [
-    { type: 'reply', label: 'OK', id: '.ping' },
-    { type: 'url', label: 'Web', url: 'https://example.com' },
-    { type: 'copy', label: 'Salin', code: 'ABC123' },
-    {
-      type: 'list',
-      label: 'Menu',
-      sections: [{
-        title: 'Main',
-        rows: [
-          { title: 'Ping', id: '.ping' },
-          { title: 'Info', id: '.info' }
-        ]
-      }]
-    }
-  ]
-})
+let handler = async (m, { conn, text, usedPrefix, command }) => {
+  await conn.reply(m.chat, 'Pong!', m)
+}
+
+handler.help = ['ping']
+handler.tags = ['main']
+handler.command = ['ping']
+
+export default handler
 ```
 
-### Album
+Hot-reload is automatic when files change.
 
-```js
-await sendAlbum([
-  { image: { url: 'https://example.com/1.jpg' } },
-  { image: { url: 'https://example.com/2.jpg' } }
-])
+## Docker
+
+```bash
+docker build -t zorabot .
+docker run -p 3000:3000 --env-file .env zorabot
 ```
 
-### Sticker / VN
+## Architecture Notes
 
-```js
-await sendSticker(bufferOrUrl, { packname: 'Zora', author: 'Bot' })
-await sendVN(audioBufferOrUrl)
+- No global message queue – each session processes independently
+- Background init (group sync, heavy tasks) never blocks first `.menu`
+- Auth state stored in MongoDB (ephemeral filesystem safe)
+- Reconnect uses exponential backoff per session only
+- One plugin error does not crash the process or other plugins
+
+## License
+
+MIT
+
+
+## Bot Config (Editable via API / WhatsApp)
+
+Settings disimpan di MongoDB dan bisa diubah tanpa restart.
+
+### API
+
+```
+GET  /api/config          # lihat config (public fields / full jika admin)
+PUT  /api/config          # update (admin only)
+PATCH /api/config         # partial update (admin only)
+GET  /api/config/schema   # schema field untuk form frontend
+POST /api/config/refresh  # reload dari DB
 ```
 
-## Design Principles
+Contoh update:
 
-- One bot = one isolated socket + auth + handlers
-- No global message queue / lock
-- Plugin errors never crash other bots
-- Session persistence across reconnect & restart
-- Settings (name, prefix, menu, plugins) live in DB
+```bash
+curl -X PATCH http://localhost:3000/api/config \
+  -H "x-api-key: <ADMIN_API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "botName": "MyBot",
+    "prefix": "!",
+    "ownerNumbers": ["6281234567890"],
+    "publicMode": true,
+    "menuTitle": "Menu Bot Saya"
+  }'
+```
 
-## Security
+### Dari WhatsApp (owner)
 
-- bcrypt password hashing
-- httpOnly session cookie
-- Ownership checks on every bot endpoint
-- No stack traces / secrets to client
-- Rate limit on auth endpoints
+```
+.set botName MyBot
+.set prefix !
+.set publicMode false
+.set ownerNumbers 628xxx,628yyy
+.set
+```
+
+Field yang bisa diubah:
+- botName, botNumber, ownerName, ownerNumbers
+- prefix, publicMode, antiSpam, antiSpamCooldownMs
+- menuTitle, welcomeMessage, ownerOnlyMessage
+- maintenanceMode, maintenanceMessage
+- maxSessionsPerUser, extra

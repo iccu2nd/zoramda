@@ -1,0 +1,20 @@
+import mongoose from 'mongoose'
+
+const userSchema = new mongoose.Schema(
+  {
+    userId: { type: String, required: true, unique: true, index: true },
+    apiKey: { type: String, required: true, unique: true, index: true },
+    role: { type: String, enum: ['user', 'admin'], default: 'user' },
+    name: { type: String, default: '' },
+    isActive: { type: Boolean, default: true },
+    maxSessions: { type: Number, default: 5 },
+    metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
+  },
+  {
+    timestamps: true,
+    collection: 'users',
+  }
+)
+
+const User = mongoose.models.User || mongoose.model('User', userSchema)
+export default User

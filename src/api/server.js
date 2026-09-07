@@ -1,0 +1,56 @@
+import express from 'express'
+import cors from 'cors'
+import helmet from 'helmet'
+import config from '../config/index.js'
+import logger from '../utils/logger.js'
+import healthRoutes from './routes/health.js'
+import createSessionRoutes from './routes/sessions.js'
+import authRoutes from './routes/auth.js'
+import createConfigRoutes from './routes/config.js'
+
+/**
+ * @param {import('../core/SessionManager.js').SessionManager} sessionManager
+ */
+export function createServer(sessionManager) {
+  const app = express()
+
+  app.use(helmet({ contentSecurityPolicy: false }))
+  app.use(cors({ origin: true, credentials: true }))
+  app.use(express.json({ limit: '1mb' }))
+
+  // Request logging (lightweight)
+  app.use((req, res, next) => {
+    const start = Date.now()
+    res.on('finish', () => {
+      if (req.path !== '/health' && req.path !== '/ready') {
+        logger.debug(
+          { method: req.method, path: req.path, status: res.statusCode, ms: Date.now() - start },
+          'HTTP'
+        )
+      }
+    })
+    next()
+  })
+
+  app.use(healthRoutes)
+  app.use('/api/auth', authRoutes)
+  app.use('/api/config', createConfigRoutes())
+  app.use('/api/sessions', createSessionRoutes(sessionManager))
+
+  // 404
+  app.use((req, res) => {
+    res.status(404).json({ error: 'Not found' })
+  })
+
+  // Error handler – never leak stack in production
+  app.use((err, req, res, next) => {
+    logger.error({ err: err.message, path: req.path }, 'Unhandled API error')
+    res.status(500).json({
+      error: config.isProd ? 'Internal server error' : err.message,
+    })
+  })
+
+  return app
+}
+
+export default createServer

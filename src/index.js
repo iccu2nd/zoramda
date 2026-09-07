@@ -1,49 +1,65 @@
-import fs from 'node:fs';
-import config from './config/index.js';
-import { initDb } from './db/index.js';
-import { loadPlugins } from './bot/pluginLoader.js';
-import botManager from './bot/manager.js';
-import { createApp } from './server/app.js';
-import logger from './utils/logger.js';
+/**
+ * ZoraBot – Production-ready multi-session WhatsApp Gateway
+ * Entry point
+ */
+import config from './config/index.js'
+import logger from './utils/logger.js'
+import { connectMongo, disconnectMongo } from './db/mongo.js'
+import SessionManager from './core/SessionManager.js'
+import configService from './core/ConfigService.js'
+import { createServer } from './api/server.js'
+
+const sessionManager = new SessionManager()
+let server = null
 
 async function main() {
-  // Ensure dirs
-  for (const dir of [config.dataDir, config.sessionsDir, config.logsDir, config.publicDir]) {
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  logger.info({ env: config.env, port: config.port }, 'Starting ZoraBot')
+
+  // 1. Database first
+  await connectMongo()
+
+  // 2. Load runtime bot config (editable via API)
+  await configService.init()
+
+  // 3. Core engine (plugins + session restore runs in background)
+  await sessionManager.init()
+
+  // 4. HTTP API
+  const app = createServer(sessionManager)
+  server = app.listen(config.port, config.host, () => {
+    logger.info({ host: config.host, port: config.port }, 'API server listening')
+  })
+
+  // Graceful shutdown
+  const shutdown = async (signal) => {
+    logger.info({ signal }, 'Shutting down...')
+    try {
+      if (server) {
+        await new Promise((resolve) => server.close(resolve))
+      }
+      await sessionManager.shutdown()
+      await disconnectMongo()
+      logger.info('Shutdown complete')
+      process.exit(0)
+    } catch (err) {
+      logger.error({ err: err.message }, 'Shutdown error')
+      process.exit(1)
+    }
   }
 
-  await initDb();
-  await loadPlugins();
-  await botManager.bootstrap();
-
-  const app = createApp();
-  const server = app.listen(config.port, config.host, () => {
-    logger.info({ port: config.port, host: config.host }, 'ZoraBot server started');
-  });
-
-  const shutdown = async (signal) => {
-    logger.info({ signal }, 'Shutting down...');
-    server.close();
-    for (const [id, session] of botManager.bots) {
-      try {
-        await session.stop();
-      } catch {}
-    }
-    process.exit(0);
-  };
-
-  process.on('SIGINT', () => shutdown('SIGINT'));
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'))
+  process.on('SIGINT', () => shutdown('SIGINT'))
 
   process.on('uncaughtException', (err) => {
-    logger.error({ err: err.message }, 'Uncaught exception');
-  });
+    logger.fatal({ err: err.message, stack: err.stack }, 'Uncaught exception')
+  })
+
   process.on('unhandledRejection', (reason) => {
-    logger.error({ reason: String(reason) }, 'Unhandled rejection');
-  });
+    logger.error({ reason: String(reason) }, 'Unhandled rejection')
+  })
 }
 
 main().catch((err) => {
-  console.error('Fatal:', err);
-  process.exit(1);
-});
+  logger.fatal({ err: err.message }, 'Failed to start')
+  process.exit(1)
+})
