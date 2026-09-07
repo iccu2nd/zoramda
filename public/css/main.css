@@ -380,9 +380,15 @@ img { max-width: 100%; display: block; }
 .side-foot { margin-top: auto; padding-top: 1rem; border-top: 1px solid var(--border-soft); }
 
 .main {
-  padding: 1.5rem 1.5rem 3rem;
+  padding: 0 0 3rem;
+  max-width: none;
+  min-width: 0;
+}
+.main-inner {
+  padding: 1.25rem 1.5rem 0;
   max-width: 960px;
 }
+
 .page-title {
   font-size: 1.5rem;
   font-weight: 700;
@@ -691,20 +697,13 @@ img { max-width: 100%; display: block; }
     transition: opacity 0.25s;
   }
   .side-backdrop.show { opacity: 1; pointer-events: auto; }
-  .main { padding: 1rem 1rem 2.5rem; }
+  .main { padding: 0 0 2.5rem; }
   .nav-links { display: none; }
   .field-row { grid-template-columns: 1fr; }
   .session-card { grid-template-columns: 1fr; }
   .session-actions { justify-content: flex-start; }
-  .mobile-bar {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    margin-bottom: 1rem;
-  }
 }
 @media (min-width: 769px) {
-  .mobile-bar { display: none; }
   .side-backdrop { display: none; }
 }
 
@@ -1169,4 +1168,50 @@ img { max-width: 100%; display: block; }
   align-items: center;
   justify-content: center;
   padding: 0.65rem 0.5rem;
+}
+
+/* dashboard sticky topbar */
+.dash-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1.25rem;
+  margin-bottom: 0.5rem;
+  background: color-mix(in srgb, var(--nav) 88%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border-soft);
+}
+.dash-topbar .brand {
+  font-size: 1.2rem;
+}
+.dash-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.dash-topbar .icon-btn {
+  width: 40px;
+  height: 40px;
+}
+.main > section,
+.main > .toolbar {
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+}
+.main > section {
+  max-width: 960px;
+}
+@media (max-width: 768px) {
+  .main > section {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+  .dash-topbar {
+    padding: 0.85rem 1rem;
+  }
 }
