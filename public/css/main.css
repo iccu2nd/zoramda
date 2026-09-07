@@ -223,7 +223,7 @@ img { max-width: 100%; display: block; }
   transition: transform 0.25s var(--ease), box-shadow 0.25s;
 }
 .tile:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
-.tile svg { width: 28px; height: 28px; margin: 0 auto 0.65rem; color: var(--text); }
+.tile svg { display: block; width: 28px; height: 28px; margin: 0 auto 0.65rem; color: var(--text); }
 .tile span { font-weight: 700; font-size: 0.9rem; }
 
 .cards {
@@ -566,7 +566,7 @@ img { max-width: 100%; display: block; }
   color: var(--muted);
   font-weight: 500;
 }
-.empty svg { width: 48px; height: 48px; margin: 0 auto 0.75rem; opacity: 0.5; }
+.empty svg { display: block; width: 48px; height: 48px; margin: 0 auto 0.75rem; opacity: 0.5; }
 
 .login-card {
   max-width: 400px;
