@@ -19,9 +19,15 @@ export async function useMongoAuthState(sessionId) {
   let writeQueue = Promise.resolve()
 
   if (doc && doc.creds) {
-    // Restore with BufferJSON.reviver
+    // Restore with BufferJSON.reviver — MUST also revive `keys`, not just
+    // `creds`. Signal key material (Buffers) is stored in Mongo as
+    // {type:'Buffer', data:[...]} via BufferJSON.replacer; loading it back
+    // without the reviver leaves plain objects instead of real Buffers,
+    // which corrupts every crypto op downstream and shows up as
+    // "Bad MAC Error" / "MessageCounterError: Key used already or never
+    // filled" the next time this session decrypts a message.
     creds = JSON.parse(JSON.stringify(doc.creds), BufferJSON.reviver)
-    keys = doc.keys || {}
+    keys = doc.keys ? JSON.parse(JSON.stringify(doc.keys), BufferJSON.reviver) : {}
   } else {
     creds = initAuthCreds()
     // Persist immediately

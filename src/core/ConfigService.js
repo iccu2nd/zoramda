@@ -131,15 +131,34 @@ class ConfigService {
 
   async _loadFromDb(userId) {
     try {
-      let doc = await BotConfig.findOne({ userId }).lean()
-      if (!doc) {
-        doc = await BotConfig.create({ userId, ...DEFAULTS })
-        doc = doc.toObject ? doc.toObject() : doc
-      }
+      // Atomic find-or-create: findOneAndUpdate+upsert instead of a separate
+      // findOne then create. The old two-step version let two concurrent
+      // calls for the same new userId both pass the findOne check and then
+      // both try to insert, so the second one hit the unique index on
+      // `userId` with E11000 duplicate key.
+      let doc = await BotConfig.findOneAndUpdate(
+        { userId },
+        { $setOnInsert: { userId, ...DEFAULTS } },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      ).lean()
       const cfg = toCache(doc)
       this._cache.set(userId, cfg)
       return cfg
     } catch (err) {
+      // Duplicate key can still happen in a true race (two upserts landing
+      // at once) — that just means the doc now exists, so re-read it.
+      if (err.code === 11000) {
+        try {
+          const doc = await BotConfig.findOne({ userId }).lean()
+          if (doc) {
+            const cfg = toCache(doc)
+            this._cache.set(userId, cfg)
+            return cfg
+          }
+        } catch (_) {
+          // fall through to defaults below
+        }
+      }
       logger.error({ userId, err: err.message }, 'Failed to load BotConfig – using defaults')
       const cfg = { ...DEFAULTS }
       this._cache.set(userId, cfg)
@@ -182,15 +201,37 @@ class ConfigService {
   }
 
   async updatePluginResponses(userId, command, partial) {
-    const doc = await BotConfig.findOne({ userId })
-    const current = (doc && doc.pluginResponses) || {}
-    const next = { ...current, [command]: { ...(current[command] || {}), ...partial } }
+    // Build a dot-notation $set so the update is atomic on Mongo's side —
+    // no more findOne-then-merge-then-write. The old read-merge-write
+    // pattern raced with itself under upsert:true (two calls for the same
+    // not-yet-existing userId could both try to insert), which surfaced as
+    // "Plan executor error during findAndModify :: caused by :: E11000
+    // duplicate key". It also silently dropped concurrent updates to
+    // different commands (lost update).
+    const set = {}
+    for (const key of Object.keys(partial)) {
+      set[`pluginResponses.${command}.${key}`] = partial[key]
+    }
 
-    const updated = await BotConfig.findOneAndUpdate(
-      { userId },
-      { $set: { pluginResponses: next } },
-      { upsert: true, new: true }
-    ).lean()
+    let updated
+    try {
+      updated = await BotConfig.findOneAndUpdate(
+        { userId },
+        { $set: set, $setOnInsert: { userId } },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      ).lean()
+    } catch (err) {
+      if (err.code === 11000) {
+        // Lost the upsert race — the doc exists now, retry as a plain update.
+        updated = await BotConfig.findOneAndUpdate(
+          { userId },
+          { $set: set },
+          { new: true }
+        ).lean()
+      } else {
+        throw err
+      }
+    }
 
     const cfg = toCache(updated)
     this._cache.set(userId, cfg)
