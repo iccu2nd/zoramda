@@ -138,13 +138,27 @@ class ConfigService {
   }
 
   async _loadFromDb(userId) {
+    // Step 1: plain read. This is the common case (the doc already exists
+    // from a previous run) and it can NEVER hit a duplicate-key/insert
+    // error, since it doesn't write anything. Doing this first means an
+    // existing user's config load never touches the upsert path below —
+    // which is what kept failing for one recurring userId even with the
+    // dup-key retry in place, so the safest fix is to just not call it
+    // when we don't need to.
     try {
-      // Atomic find-or-create: findOneAndUpdate+upsert instead of a separate
-      // findOne then create. The old two-step version let two concurrent
-      // calls for the same new userId both pass the findOne check and then
-      // both try to insert, so the second one hit the unique index on
-      // `userId` with E11000 duplicate key.
-      let doc = await BotConfig.findOneAndUpdate(
+      const existing = await BotConfig.findOne({ userId }).lean()
+      if (existing) {
+        const cfg = toCache(existing)
+        this._cache.set(userId, cfg)
+        return cfg
+      }
+    } catch (err) {
+      logger.error({ userId, err: err.message }, 'BotConfig findOne failed, will try create')
+    }
+
+    // Step 2: genuinely new user (or the read above failed) — create it.
+    try {
+      const doc = await BotConfig.findOneAndUpdate(
         { userId },
         { $setOnInsert: { userId, ...DEFAULTS } },
         { upsert: true, new: true, setDefaultsOnInsert: true }
