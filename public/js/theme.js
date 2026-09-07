@@ -1,32 +1,44 @@
 (function () {
   const KEY = 'zb_theme';
 
-  // sun = "lagi terang, klik buat gelap" · moon = "lagi gelap, klik buat terang"
-  const SUN =
-    '<svg data-theme-icon viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
-  const MOON =
-    '<svg data-theme-icon viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
-
   function currentTheme() {
     return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
   }
 
   function updateToggleButtons() {
     const isDark = currentTheme() === 'dark';
+
+    // Dual Light / Dark switches (landing + anywhere using data-theme-set)
+    document.querySelectorAll('[data-theme-set]').forEach((btn) => {
+      const mode = btn.getAttribute('data-theme-set');
+      const sw = btn.querySelector('.switch');
+      const active = mode === (isDark ? 'dark' : 'light');
+      btn.classList.toggle('is-active', active);
+      if (sw) {
+        sw.classList.toggle('on', active);
+        sw.setAttribute('aria-checked', String(active));
+      }
+    });
+
+    // Legacy single toggle buttons (sidebar)
     document.querySelectorAll('[data-theme-toggle]').forEach((btn) => {
-      const icon = btn.querySelector('[data-theme-icon]');
-      if (icon) icon.outerHTML = isDark ? MOON : SUN;
       const label = btn.querySelector('[data-theme-label]');
-      if (label) label.textContent = isDark ? 'mode terang' : 'mode gelap';
+      if (label) label.textContent = isDark ? 'Light' : 'Dark';
       btn.setAttribute('aria-pressed', String(isDark));
+      // If it has an inner switch, reflect state
+      const sw = btn.querySelector('.switch');
+      if (sw) sw.classList.toggle('on', isDark);
     });
   }
 
   function apply(t) {
-    document.documentElement.setAttribute('data-theme', t);
-    try { localStorage.setItem(KEY, t); } catch (e) {}
+    const theme = t === 'dark' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', theme);
+    try {
+      localStorage.setItem(KEY, theme);
+    } catch (e) {}
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.content = t === 'dark' ? '#0f1115' : '#eef0f4';
+    if (meta) meta.content = theme === 'dark' ? '#0f1115' : '#eef0f4';
     updateToggleButtons();
   }
 
@@ -36,6 +48,13 @@
 
   document.addEventListener('DOMContentLoaded', function () {
     updateToggleButtons();
+
+    document.querySelectorAll('[data-theme-set]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        apply(btn.getAttribute('data-theme-set'));
+      });
+    });
+
     document.querySelectorAll('[data-theme-toggle]').forEach((btn) => {
       btn.addEventListener('click', toggle);
     });

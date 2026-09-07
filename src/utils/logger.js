@@ -3,7 +3,7 @@ import config from '../config/index.js'
 
 const opts = {
   level: config.logLevel,
-  base: { app: 'zorabot' },
+  base: { app: 'botenv' },
   redact: {
     paths: [
       'auth',

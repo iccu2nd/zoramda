@@ -11,8 +11,8 @@ const config = {
   host: process.env.HOST || '0.0.0.0',
 
   mongo: {
-    uri: process.env.MONGODB_URI || 'mongodb://localhost:27017/zorabot',
-    dbName: process.env.MONGODB_DB_NAME || 'zorabot',
+    uri: process.env.MONGODB_URI || 'mongodb://localhost:27017/botenv',
+    dbName: process.env.MONGODB_DB_NAME || 'botenv',
   },
 
   security: {

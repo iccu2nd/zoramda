@@ -2,7 +2,7 @@ import { applyTemplate } from '../../src/utils/helpers.js'
 
 let handler = async (m, { usedPrefix, plugins, botConfig, botName, responses }) => {
   const byTag = plugins.getMenuByTags()
-  const title = botConfig?.menuTitle || `${botName || 'ZoraBot'} Menu`
+  const title = botConfig?.menuTitle || `${botName || 'Botenv'} Menu`
   let text = `*${title}*\n\n`
 
   for (const [tag, helps] of Object.entries(byTag)) {
@@ -14,7 +14,7 @@ let handler = async (m, { usedPrefix, plugins, botConfig, botName, responses }) 
     text += '\n'
   }
 
-  text += applyTemplate(responses.menuFooter, { prefix: usedPrefix, botName: botName || 'ZoraBot' })
+  text += applyTemplate(responses.menuFooter, { prefix: usedPrefix, botName: botName || 'Botenv' })
   await m.reply(text)
 }
 

@@ -18,7 +18,7 @@ const sessionConfigSchema = new mongoose.Schema(
     sessionId: { type: String, required: true, unique: true, index: true },
     userId: { type: String, required: true, index: true },
 
-    botName: { type: String, default: 'ZoraBot' },
+    botName: { type: String, default: 'Botenv' },
     botNumber: { type: String, default: null },
     ownerNumbers: { type: [String], default: [] },
     ownerName: { type: String, default: 'Owner' },
@@ -31,7 +31,7 @@ const sessionConfigSchema = new mongoose.Schema(
     sendTyping: { type: Boolean, default: false },
     sendRecording: { type: Boolean, default: false },
 
-    menuTitle: { type: String, default: 'ZoraBot Menu' },
+    menuTitle: { type: String, default: 'Botenv Menu' },
     welcomeMessage: {
       type: String,
       default: 'Halo! Ketik {prefix}menu untuk melihat perintah.',

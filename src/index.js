@@ -1,5 +1,5 @@
 /**
- * ZoraBot – Production-ready multi-session WhatsApp Gateway
+ * Botenv – Production-ready multi-session WhatsApp Gateway
  * Entry point
  */
 import config from './config/index.js'
@@ -12,7 +12,7 @@ const sessionManager = new SessionManager()
 let server = null
 
 async function main() {
-  logger.info({ env: config.env, port: config.port }, 'Starting ZoraBot')
+  logger.info({ env: config.env, port: config.port }, 'Starting Botenv')
 
   // 1. Database first
   await connectMongo()

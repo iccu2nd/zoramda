@@ -9,7 +9,7 @@ const botConfigSchema = new mongoose.Schema(
     userId: { type: String, required: true, unique: true, index: true },
 
     // Identity
-    botName: { type: String, default: 'ZoraBot' },
+    botName: { type: String, default: 'Botenv' },
     botNumber: { type: String, default: null }, // optional display
     ownerNumbers: { type: [String], default: [] },
     ownerName: { type: String, default: 'Owner' },
@@ -21,7 +21,7 @@ const botConfigSchema = new mongoose.Schema(
     antiSpamCooldownMs: { type: Number, default: 2000 },
 
     // Messages
-    menuTitle: { type: String, default: 'ZoraBot Menu' },
+    menuTitle: { type: String, default: 'Botenv Menu' },
     welcomeMessage: { type: String, default: 'Halo! Ketik {prefix}menu untuk melihat perintah.' },
     ownerOnlyMessage: { type: String, default: 'Perintah ini hanya untuk owner.' },
     maintenanceMode: { type: Boolean, default: false },

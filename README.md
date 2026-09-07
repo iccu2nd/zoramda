@@ -1,4 +1,4 @@
-# ZoraBot
+# Botenv
 
 Production-ready multi-session WhatsApp Gateway / Bot Engine.
 
@@ -93,8 +93,8 @@ Hot-reload is automatic when files change.
 ## Docker
 
 ```bash
-docker build -t zorabot .
-docker run -p 3000:3000 --env-file .env zorabot
+docker build -t botenv .
+docker run -p 3000:3000 --env-file .env botenv
 ```
 
 ## Architecture Notes

@@ -10,7 +10,7 @@ import staticConfig from '../config/index.js'
 import logger from '../utils/logger.js'
 
 const DEFAULTS = {
-  botName: 'ZoraBot',
+  botName: 'Botenv',
   botNumber: null,
   ownerNumbers: [],
   ownerName: 'Owner',
@@ -21,7 +21,7 @@ const DEFAULTS = {
   readMessages: false,
   sendTyping: false,
   sendRecording: false,
-  menuTitle: 'ZoraBot Menu',
+  menuTitle: 'Botenv Menu',
   welcomeMessage: 'Halo! Ketik {prefix}menu untuk melihat perintah.',
   ownerOnlyMessage: 'Perintah ini hanya untuk owner.',
   maintenanceMode: false,

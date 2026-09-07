@@ -1,5 +1,5 @@
 {
-  "name": "zorabot",
+  "name": "botenv",
   "version": "1.0.0",
   "description": "Production-ready multi-session WhatsApp Gateway / Bot Engine with plugin system",
   "type": "module",
@@ -20,7 +20,7 @@
     "multi-session",
     "plugin"
   ],
-  "author": "ZoraBot",
+  "author": "Botenv",
   "license": "MIT",
   "dependencies": {
     "@hapi/boom": "^10.0.1",

@@ -170,16 +170,16 @@
     return 'status-pill status-' + (s || 'STOPPED');
   }
 
-  /** Show Config / Plugins only when at least one session is CONNECTED */
+  /** Show Config / Plugins once user has at least one session (connect not required) */
   function updateConnectedNav(sessions) {
-    const hasConnected = (sessions || []).some((s) => s.status === 'CONNECTED');
+    const hasSession = (sessions || []).length > 0;
     const navConfig = document.getElementById('navConfig');
     const navPlugins = document.getElementById('navPlugins');
-    if (navConfig) navConfig.style.display = hasConnected ? '' : 'none';
-    if (navPlugins) navPlugins.style.display = hasConnected ? '' : 'none';
+    if (navConfig) navConfig.style.display = hasSession ? '' : 'none';
+    if (navPlugins) navPlugins.style.display = hasSession ? '' : 'none';
 
-    // If user is on config/plugins but no longer connected, bounce to sessions
-    if (!hasConnected) {
+    // If user is on config/plugins but no sessions left, bounce to sessions
+    if (!hasSession) {
       const onConfig = !$('#page-config').classList.contains('hidden');
       const onPlugins = !$('#page-plugins').classList.contains('hidden');
       if (onConfig || onPlugins) {
@@ -443,13 +443,13 @@
   let selectedConfigSession = null;
   let selectedPluginSession = null;
 
-  async function fillSessionSelect(selectEl, selectedId, connectedOnly = true) {
+  async function fillSessionSelect(selectEl, selectedId, connectedOnly = false) {
     const { sessions } = await API.sessions();
     const list = connectedOnly
       ? (sessions || []).filter((s) => s.status === 'CONNECTED')
       : (sessions || []);
     if (!list.length) {
-      selectEl.innerHTML = '<option value="">— tidak ada session connected —</option>';
+      selectEl.innerHTML = '<option value="">— tidak ada session —</option>';
       return [];
     }
     selectEl.innerHTML = list

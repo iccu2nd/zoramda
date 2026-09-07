@@ -30,7 +30,7 @@ let handler = async (m, { text, args, isOwner, config, usedPrefix }) => {
   const key = args[0]
   const value = args.slice(1).join(' ')
   if (!value && value !== 'false' && value !== '0') {
-    return m.reply(`Nilai kosong.\nContoh: ${usedPrefix}set botName ZoraBot`)
+    return m.reply(`Nilai kosong.\nContoh: ${usedPrefix}set botName Botenv`)
   }
 
   // Parse boolean / number

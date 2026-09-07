@@ -1,4 +1,4 @@
-# ZoraBot – Railway / Docker compatible
+# Botenv – Railway / Docker compatible
 FROM node:20-alpine AS base
 WORKDIR /app
 
@@ -14,16 +14,16 @@ ENV PORT=3000
 ENV HOST=0.0.0.0
 
 RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 zorabot && \
+    adduser --system --uid 1001 botenv && \
     apk add --no-cache wget
 
 COPY --from=deps /app/node_modules ./node_modules
-COPY --chown=zorabot:nodejs package.json ./
-COPY --chown=zorabot:nodejs src ./src
-COPY --chown=zorabot:nodejs plugins ./plugins
-COPY --chown=zorabot:nodejs public ./public
+COPY --chown=botenv:nodejs package.json ./
+COPY --chown=botenv:nodejs src ./src
+COPY --chown=botenv:nodejs plugins ./plugins
+COPY --chown=botenv:nodejs public ./public
 
-USER zorabot
+USER botenv
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=25s --retries=3 \
