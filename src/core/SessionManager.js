@@ -196,6 +196,35 @@ export class SessionManager {
   }
 
   /**
+   * Admin-only: list sessions for every user on the platform.
+   */
+  async listAllSessions({ includeInactive = false } = {}) {
+    const filter = {}
+    if (!includeInactive) filter.isActive = true
+    const docs = await Session.find(filter).sort({ createdAt: -1 }).lean()
+    return docs.map((s) => {
+      const live = this.sessions.get(s.sessionId)
+      return {
+        sessionId: s.sessionId,
+        userId: s.userId,
+        name: s.name,
+        status: live ? live.status : s.status,
+        phoneNumber: live?.phoneNumber || s.phoneNumber,
+        createdAt: s.createdAt,
+        updatedAt: s.updatedAt,
+      }
+    })
+  }
+
+  /**
+   * Admin-only: get the live ConnectionManager (and its WA socket) for a
+   * session, regardless of who owns it.
+   */
+  getConnection(sessionId) {
+    return this.sessions.get(sessionId) || null
+  }
+
+  /**
    * Ownership check helper for API
    */
   async assertOwnership(sessionId, userId, isAdmin = false) {

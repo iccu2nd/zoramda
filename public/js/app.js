@@ -1,7 +1,7 @@
 (function () {
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-  const PAGES = ['sessions', 'config', 'plugins', 'account'];
+  const PAGES = ['sessions', 'config', 'plugins', 'account', 'admin'];
 
   let currentUser = null;
   let pollTimer = null;
@@ -68,6 +68,7 @@
   function showApp() {
     $('#loginView').classList.add('hidden');
     $('#appView').classList.remove('hidden');
+    $('#adminNavBtn').classList.toggle('hidden', !currentUser?.isAdmin);
     loadSessions();
     startPoll();
   }
@@ -150,6 +151,7 @@
       if (page === 'sessions') loadSessions();
       if (page === 'plugins') loadPlugins();
       if (page === 'account') loadAccount();
+      if (page === 'admin') loadAdminOverview();
       closeSidebar();
     });
   });
@@ -619,6 +621,470 @@
         ],
       });
     });
+  }
+
+  /* ——— admin (superadmin — semua user & semua bot) ——— */
+  const ADMIN_TABS = ['overview', 'users', 'bots', 'broadcast'];
+  let adminBroadcastSessions = [];
+  let adminSelectedSessionId = null;
+
+  $$('#adminTabs [data-atab]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      $$('#adminTabs [data-atab]').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      const tab = btn.dataset.atab;
+      ADMIN_TABS.forEach((t) => $('#admin' + capitalize(t) + 'Box')?.classList.toggle('hidden', t !== tab));
+      if (tab === 'overview') loadAdminOverview();
+      if (tab === 'users') loadAdminUsers();
+      if (tab === 'bots') loadAdminBots();
+      if (tab === 'broadcast') loadAdminBroadcast();
+    });
+  });
+
+  function capitalize(s) {
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+
+  async function loadAdminOverview() {
+    const box = $('#adminOverviewBox');
+    box.innerHTML = '<p style="color:var(--muted);font-weight:500">memuat...</p>';
+    try {
+      const data = await API.adminOverview();
+      const statusRows = Object.entries(data.sessions.byStatus || {})
+        .map(([k, v]) => `<div class="switch-row"><span>${escapeHtml(k.toLowerCase())}</span><span>${v}</span></div>`)
+        .join('');
+      box.innerHTML = `
+        <div class="card" style="padding:1.25rem;margin-bottom:1rem">
+          <h3>users</h3>
+          <p>${data.users.total} total &middot; ${data.users.active} aktif</p>
+        </div>
+        <div class="card" style="padding:1.25rem;margin-bottom:1rem">
+          <h3>bots / sessions</h3>
+          <p>${data.sessions.total} total</p>
+          ${statusRows}
+        </div>
+        <div class="card" style="padding:1.25rem">
+          <h3>server</h3>
+          <p>uptime ${Math.floor(data.server.uptimeSeconds / 60)} menit &middot; memory ${data.server.memoryMb} MB</p>
+        </div>
+      `;
+    } catch (e) {
+      box.innerHTML = `<p style="color:var(--red)">${escapeHtml(e.message)}</p>`;
+    }
+  }
+
+  async function loadAdminUsers() {
+    const box = $('#adminUsersBox');
+    box.innerHTML = '<p style="color:var(--muted);font-weight:500">memuat...</p>';
+    try {
+      const { users } = await API.adminUsers();
+      if (!users?.length) {
+        box.innerHTML = '<div class="empty">belum ada user.</div>';
+        return;
+      }
+      box.innerHTML = `<div class="session-grid">${users
+        .map(
+          (u) => `
+        <div class="session-card" data-id="${u.userId}">
+          <div>
+            <div class="session-name">${escapeHtml(u.username)} ${u.isAdmin ? '<span class="chip-mini">admin</span>' : ''}</div>
+            <div class="session-meta">
+              <span class="status-pill ${u.isActive ? 'status-CONNECTED' : 'status-STOPPED'}">${u.isActive ? 'aktif' : 'nonaktif'}</span>
+              &middot; ${u.sessionCount} bot ${u.name ? '&middot; ' + escapeHtml(u.name) : ''}
+            </div>
+          </div>
+          <div class="session-actions">
+            <button class="btn btn-sm btn-ghost" data-act="edit" type="button">edit</button>
+            <button class="btn btn-sm btn-ghost" data-act="password" type="button">reset password</button>
+            <button class="btn btn-sm btn-ghost" data-act="deactivate" type="button">nonaktifkan</button>
+          </div>
+        </div>`
+        )
+        .join('')}</div>`;
+
+      box.querySelectorAll('[data-act]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const userId = btn.closest('.session-card').dataset.id;
+          const user = users.find((u) => u.userId === userId);
+          handleAdminUserAct(btn.dataset.act, user);
+        });
+      });
+    } catch (e) {
+      box.innerHTML = `<p style="color:var(--red)">${escapeHtml(e.message)}</p>`;
+    }
+  }
+
+  async function handleAdminUserAct(act, user) {
+    if (act === 'edit') {
+      showModal({
+        title: 'edit ' + user.username,
+        sub: 'ubah role & batas session',
+        body: `
+          <div class="field"><label>nama</label><input id="editName" value="${escapeAttr(user.name || '')}"></div>
+          <div class="field"><label>max session</label><input id="editMax" type="number" min="1" value="${escapeAttr(user.maxSessions || 5)}"></div>
+          <div class="switch-row">
+            <span>role admin</span>
+            <div class="switch ${user.isAdmin ? 'on' : ''}" id="editRole" data-bool></div>
+          </div>
+        `,
+        actions: [
+          { label: 'batal', ghost: true },
+          {
+            label: 'simpan',
+            onClick: async () => {
+              const isAdmin = $('#editRole').classList.contains('on');
+              try {
+                await API.adminUpdateUser(user.userId, {
+                  name: $('#editName').value.trim(),
+                  maxSessions: $('#editMax').value,
+                  role: isAdmin ? 'admin' : 'user',
+                });
+                toast('user diperbarui');
+                loadAdminUsers();
+              } catch (e) {
+                toast(e.message || 'gagal simpan');
+              }
+            },
+          },
+        ],
+      });
+      $('#editRole')?.addEventListener('click', (e) => e.currentTarget.classList.toggle('on'));
+      return;
+    }
+    if (act === 'password') {
+      showModal({
+        title: 'reset password ' + user.username,
+        sub: 'minimal 6 karakter',
+        body: `<div class="field"><label>password baru</label><input id="newPass" type="password"></div>`,
+        actions: [
+          { label: 'batal', ghost: true },
+          {
+            label: 'reset',
+            onClick: async () => {
+              const pw = $('#newPass')?.value || '';
+              try {
+                await API.adminResetPassword(user.userId, pw);
+                toast('password direset');
+              } catch (e) {
+                toast(e.message || 'gagal reset');
+              }
+            },
+          },
+        ],
+      });
+      return;
+    }
+    if (act === 'deactivate') {
+      showModal({
+        title: 'nonaktifkan ' + user.username + '?',
+        sub: 'semua bot milik user ini akan dihentikan.',
+        actions: [
+          { label: 'batal', ghost: true },
+          {
+            label: 'nonaktifkan',
+            onClick: async () => {
+              try {
+                await API.adminDeactivateUser(user.userId);
+                toast('user dinonaktifkan');
+                loadAdminUsers();
+              } catch (e) {
+                toast(e.message || 'gagal');
+              }
+            },
+          },
+        ],
+      });
+    }
+  }
+
+  async function loadAdminBots() {
+    const box = $('#adminBotsBox');
+    box.innerHTML = '<p style="color:var(--muted);font-weight:500">memuat...</p>';
+    try {
+      const { sessions } = await API.adminSessions();
+      if (!sessions?.length) {
+        box.innerHTML = '<div class="empty">belum ada bot di platform.</div>';
+        return;
+      }
+      box.innerHTML = `<div class="session-grid">${sessions
+        .map(
+          (s) => `
+        <div class="session-card" data-id="${s.sessionId}">
+          <div>
+            <div class="session-name">${escapeHtml(s.name || 'session')}</div>
+            <div class="session-meta">
+              <span class="${statusClass(s.status)}">${(s.status || '').toLowerCase()}</span>
+              &middot; owner: ${escapeHtml(s.ownerUsername)}
+              ${s.phoneNumber ? ' &middot; ' + escapeHtml(s.phoneNumber) : ''}
+            </div>
+          </div>
+          <div class="session-actions">
+            <button class="btn btn-sm btn-ghost" data-act="connect" type="button">connect</button>
+            <button class="btn btn-sm btn-ghost" data-act="disconnect" type="button">stop</button>
+            <button class="btn btn-sm btn-ghost" data-act="delete" type="button">hapus</button>
+          </div>
+        </div>`
+        )
+        .join('')}</div>`;
+
+      box.querySelectorAll('[data-act]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const id = btn.closest('.session-card').dataset.id;
+          handleAdminBotAct(btn.dataset.act, id);
+        });
+      });
+    } catch (e) {
+      box.innerHTML = `<p style="color:var(--red)">${escapeHtml(e.message)}</p>`;
+    }
+  }
+
+  async function handleAdminBotAct(act, id) {
+    try {
+      if (act === 'connect') {
+        await API.adminConnectSession(id, {});
+        toast('menghubungkan...');
+        loadAdminBots();
+        return;
+      }
+      if (act === 'disconnect') {
+        await API.adminDisconnectSession(id, { logout: false });
+        toast('bot dihentikan');
+        loadAdminBots();
+        return;
+      }
+      if (act === 'delete') {
+        showModal({
+          title: 'hapus bot ini?',
+          sub: 'session akan logout dari whatsapp dan dihapus.',
+          actions: [
+            { label: 'batal', ghost: true },
+            {
+              label: 'hapus',
+              onClick: async () => {
+                await API.adminDeleteSession(id);
+                toast('bot dihapus');
+                loadAdminBots();
+              },
+            },
+          ],
+        });
+      }
+    } catch (e) {
+      toast(e.message || 'gagal');
+    }
+  }
+
+  async function loadAdminBroadcast() {
+    const box = $('#adminBroadcastBox');
+    box.innerHTML = '<p style="color:var(--muted);font-weight:500">memuat...</p>';
+    try {
+      const { sessions } = await API.adminSessions();
+      adminBroadcastSessions = (sessions || []).filter((s) => s.status === 'CONNECTED');
+      if (!adminBroadcastSessions.length) {
+        box.innerHTML = '<div class="empty">tidak ada bot yang sedang terhubung.</div>';
+        return;
+      }
+      if (!adminSelectedSessionId || !adminBroadcastSessions.find((s) => s.sessionId === adminSelectedSessionId)) {
+        adminSelectedSessionId = adminBroadcastSessions[0].sessionId;
+      }
+      renderAdminBroadcast();
+    } catch (e) {
+      box.innerHTML = `<p style="color:var(--red)">${escapeHtml(e.message)}</p>`;
+    }
+  }
+
+  function renderAdminBroadcast() {
+    const box = $('#adminBroadcastBox');
+    box.innerHTML = `
+      <div class="card" style="padding:1.25rem;margin-bottom:1rem">
+        <div class="field">
+          <label>pilih bot (terhubung)</label>
+          <select id="broadcastSessionSelect">
+            ${adminBroadcastSessions
+              .map(
+                (s) =>
+                  `<option value="${s.sessionId}" ${s.sessionId === adminSelectedSessionId ? 'selected' : ''}>${escapeHtml(
+                    s.name || s.sessionId
+                  )} (${escapeHtml(s.ownerUsername)})</option>`
+              )
+              .join('')}
+          </select>
+        </div>
+        <div class="field"><label>pesan broadcast</label><textarea id="broadcastMessage" placeholder="dikirim ke semua grup bot ini"></textarea></div>
+        <div class="toolbar">
+          <button class="btn btn-sm" id="sendBroadcastBtn" type="button">kirim ke semua grup</button>
+        </div>
+      </div>
+      <div class="toolbar" style="margin-bottom:0.5rem">
+        <button class="btn btn-sm btn-ghost" id="loadGroupsBtn" type="button">muat daftar grup</button>
+      </div>
+      <div id="adminGroupList"></div>
+    `;
+
+    $('#broadcastSessionSelect').addEventListener('change', (e) => {
+      adminSelectedSessionId = e.target.value;
+      $('#adminGroupList').innerHTML = '';
+    });
+
+    $('#sendBroadcastBtn').addEventListener('click', async () => {
+      const message = $('#broadcastMessage').value.trim();
+      if (!message) return toast('isi pesan dulu');
+      try {
+        const r = await API.adminBroadcast(adminSelectedSessionId, message);
+        toast(`broadcast dikirim ke ${r.groupCount} grup`);
+      } catch (e) {
+        toast(e.message || 'gagal broadcast');
+      }
+    });
+
+    $('#loadGroupsBtn').addEventListener('click', loadAdminGroups);
+  }
+
+  async function loadAdminGroups() {
+    const list = $('#adminGroupList');
+    list.innerHTML = '<p style="color:var(--muted);font-weight:500">memuat grup...</p>';
+    try {
+      const { groups } = await API.adminGroups(adminSelectedSessionId);
+      if (!groups?.length) {
+        list.innerHTML = '<div class="empty">bot ini belum join grup manapun.</div>';
+        return;
+      }
+      list.innerHTML = `<div class="session-grid">${groups
+        .map(
+          (g) => `
+        <div class="session-card" data-gid="${escapeAttr(g.id)}">
+          <div>
+            <div class="session-name">${escapeHtml(g.subject || g.id)}</div>
+            <div class="session-meta">${g.participants} member</div>
+          </div>
+          <div class="session-actions">
+            <button class="btn btn-sm btn-ghost" data-gact="tag" type="button">tag</button>
+            <button class="btn btn-sm btn-ghost" data-gact="member" type="button">member</button>
+            <button class="btn btn-sm btn-ghost" data-gact="settings" type="button">setting</button>
+          </div>
+        </div>`
+        )
+        .join('')}</div>`;
+
+      list.querySelectorAll('[data-gact]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const gid = btn.closest('.session-card').dataset.gid;
+          handleAdminGroupAct(btn.dataset.gact, gid);
+        });
+      });
+    } catch (e) {
+      list.innerHTML = `<p style="color:var(--red)">${escapeHtml(e.message)}</p>`;
+    }
+  }
+
+  function handleAdminGroupAct(act, groupId) {
+    const sid = adminSelectedSessionId;
+    if (act === 'tag') {
+      showModal({
+        title: 'tag member grup',
+        sub: 'kirim mention ke semua member',
+        body: `
+          <div class="field"><label>pesan (opsional)</label><textarea id="tagMessage"></textarea></div>
+          <div class="switch-row"><span>sembunyikan daftar nomor (hidetag)</span><div class="switch" id="tagHide" data-bool></div></div>
+        `,
+        actions: [
+          { label: 'batal', ghost: true },
+          {
+            label: 'kirim',
+            onClick: async () => {
+              try {
+                await API.adminGroupTag(sid, groupId, {
+                  message: $('#tagMessage').value.trim(),
+                  hide: $('#tagHide').classList.contains('on'),
+                });
+                toast('tag terkirim');
+              } catch (e) {
+                toast(e.message || 'gagal');
+              }
+            },
+          },
+        ],
+      });
+      $('#tagHide')?.addEventListener('click', (e) => e.currentTarget.classList.toggle('on'));
+      return;
+    }
+    if (act === 'member') {
+      showModal({
+        title: 'kelola member',
+        sub: 'kick / promote / demote berdasarkan nomor',
+        body: `
+          <div class="field"><label>nomor</label><input id="memberNumber" placeholder="628xxxxxxxxxx"></div>
+          <div class="field">
+            <label>aksi</label>
+            <select id="memberAction">
+              <option value="kick">kick</option>
+              <option value="promote">jadikan admin</option>
+              <option value="demote">turunkan dari admin</option>
+            </select>
+          </div>
+        `,
+        actions: [
+          { label: 'batal', ghost: true },
+          {
+            label: 'jalankan',
+            onClick: async () => {
+              try {
+                await API.adminGroupMembers(sid, groupId, {
+                  action: $('#memberAction').value,
+                  number: $('#memberNumber').value.trim(),
+                });
+                toast('berhasil');
+              } catch (e) {
+                toast(e.message || 'gagal');
+              }
+            },
+          },
+        ],
+      });
+      return;
+    }
+    if (act === 'settings') {
+      showModal({
+        title: 'setting grup',
+        sub: 'buka/tutup grup, ganti nama/deskripsi',
+        body: `
+          <div class="toolbar" style="margin-bottom:0.75rem">
+            <button class="btn btn-sm btn-ghost" data-gs="open" type="button">buka grup</button>
+            <button class="btn btn-sm btn-ghost" data-gs="close" type="button">tutup grup</button>
+          </div>
+          <div class="field"><label>nama baru</label><input id="groupName"></div>
+          <div class="field"><label>deskripsi baru</label><textarea id="groupDesc"></textarea></div>
+        `,
+        actions: [
+          { label: 'tutup', ghost: true },
+          {
+            label: 'simpan nama & deskripsi',
+            keep: true,
+            onClick: async () => {
+              try {
+                const name = $('#groupName').value.trim();
+                const desc = $('#groupDesc').value.trim();
+                if (name) await API.adminGroupSettings(sid, groupId, { action: 'name', value: name });
+                if (desc) await API.adminGroupSettings(sid, groupId, { action: 'desc', value: desc });
+                toast('disimpan');
+              } catch (e) {
+                toast(e.message || 'gagal');
+              }
+            },
+          },
+        ],
+      });
+      $$('#modalBody [data-gs]').forEach((btn) =>
+        btn.addEventListener('click', async () => {
+          try {
+            await API.adminGroupSettings(sid, groupId, { action: btn.dataset.gs });
+            toast(btn.dataset.gs === 'open' ? 'grup dibuka' : 'grup ditutup');
+          } catch (e) {
+            toast(e.message || 'gagal');
+          }
+        })
+      );
+    }
   }
 
   function escapeHtml(s) {
