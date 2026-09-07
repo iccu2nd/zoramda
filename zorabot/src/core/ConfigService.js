@@ -100,6 +100,19 @@ function cleanPartial(partial) {
   return clean
 }
 
+function normalizePermList(val, fallback = ['everyone']) {
+  let list = []
+  if (Array.isArray(val)) list = val
+  else if (typeof val === 'string' && val) list = [val]
+  else if (val && typeof val === 'object' && Array.isArray(val.permissions)) list = val.permissions
+  else if (val && typeof val === 'object' && typeof val.permission === 'string') list = [val.permission]
+
+  const cleaned = [...new Set(
+    list.map((p) => String(p).toLowerCase()).filter((p) => PERMISSIONS.includes(p))
+  )]
+  return cleaned.length ? cleaned : [...fallback]
+}
+
 function normalizePlugins(raw) {
   const out = {}
   if (!raw) return out
@@ -113,7 +126,7 @@ function normalizePlugins(raw) {
     if (!val || typeof val !== 'object') continue
     out[key] = {
       enabled: val.enabled !== false,
-      permission: PERMISSIONS.includes(val.permission) ? val.permission : 'everyone',
+      permissions: normalizePermList(val.permissions ?? val.permission, ['everyone']),
     }
   }
   return out
@@ -270,18 +283,22 @@ class ConfigService {
     return cfg.pluginResponses
   }
 
-  getPluginState(sessionId, pluginFile, defaultPermission = 'everyone') {
+  getPluginState(sessionId, pluginFile, defaultPermissions = ['everyone']) {
+    const defaults = normalizePermList(defaultPermissions, ['everyone'])
     const cfg = this.getCached(sessionId)
     const state = cfg.plugins && cfg.plugins[pluginFile]
     if (!state) {
       return {
         enabled: true,
-        permission: PERMISSIONS.includes(defaultPermission) ? defaultPermission : 'everyone',
+        permissions: defaults,
       }
     }
     return {
       enabled: state.enabled !== false,
-      permission: PERMISSIONS.includes(state.permission) ? state.permission : 'everyone',
+      // If session has never customized permissions, fall back to plugin defaults
+      permissions: Array.isArray(state.permissions) && state.permissions.length
+        ? normalizePermList(state.permissions, defaults)
+        : defaults,
     }
   }
 
@@ -294,9 +311,9 @@ class ConfigService {
       if (val.enabled !== undefined) {
         set[`plugins.${file}.enabled`] = Boolean(val.enabled)
       }
-      if (val.permission !== undefined) {
-        const perm = String(val.permission).toLowerCase()
-        set[`plugins.${file}.permission`] = PERMISSIONS.includes(perm) ? perm : 'everyone'
+      if (val.permissions !== undefined || val.permission !== undefined) {
+        const list = normalizePermList(val.permissions ?? val.permission, ['everyone'])
+        set[`plugins.${file}.permissions`] = list
       }
     }
 

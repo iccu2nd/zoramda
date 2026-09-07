@@ -61,6 +61,6 @@ let handler = async (m, { conn, args, isOwner, usedPrefix }) => {
 handler.help = ['group open', 'group close', 'group name <teks>', 'group desc <teks>']
 handler.tags = ['admin']
 handler.command = ['group']
-handler.permission = 'admin'
+handler.permission = ['admin', 'botadmin']
 
 export default handler

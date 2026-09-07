@@ -196,10 +196,9 @@ export class MessageHandler {
   }
 
   /**
-   * Check permission for this session's plugin state.
-   * Returns true if allowed.
+   * Check a single permission flag.
    */
-  async _checkPermission(permission, m, sock, isOwner) {
+  async _checkOnePermission(permission, m, sock, isOwner, groupMetaCache) {
     switch (permission) {
       case PERM_EVERYONE:
         return true
@@ -213,7 +212,7 @@ export class MessageHandler {
         if (!m.isGroup) return false
         if (isOwner) return true
         try {
-          const meta = await sock.groupMetadata(m.chat)
+          const meta = groupMetaCache.meta || (groupMetaCache.meta = await sock.groupMetadata(m.chat))
           const participant = meta.participants?.find(
             (p) => normalizeJid(p.id) === m.sender
           )
@@ -225,7 +224,7 @@ export class MessageHandler {
       case PERM_BOTADMIN: {
         if (!m.isGroup) return false
         try {
-          const meta = await sock.groupMetadata(m.chat)
+          const meta = groupMetaCache.meta || (groupMetaCache.meta = await sock.groupMetadata(m.chat))
           const botId = normalizeJid(sock.user?.id)
           const botPart = meta.participants?.find((p) => normalizeJid(p.id) === botId)
           return !!(botPart?.admin === 'admin' || botPart?.admin === 'superadmin')
@@ -238,21 +237,41 @@ export class MessageHandler {
     }
   }
 
-  async _runPlugin(plugin, m, sock, sessionId, userId, latency, isOwner) {
-    // Default permission from plugin metadata, overridden by per-session state
-    const defaultPerm =
-      (plugin.handler.permission && String(plugin.handler.permission).toLowerCase()) ||
-      'everyone'
+  /**
+   * AND-combine all permissions in the list.
+   * Example: ['admin', 'botadmin'] → user must be admin AND bot must be admin.
+   * 'everyone' alone always passes; if mixed with others, others still apply.
+   */
+  async _checkPermissions(permissions, m, sock, isOwner) {
+    const list = Array.isArray(permissions) ? permissions : [permissions || 'everyone']
+    // If only everyone (or empty), allow
+    const effective = list.filter((p) => p && p !== PERM_EVERYONE)
+    if (effective.length === 0) return true
 
-    const state = configService.getPluginState(sessionId, plugin.file, defaultPerm)
+    const cache = {}
+    for (const perm of effective) {
+      const ok = await this._checkOnePermission(perm, m, sock, isOwner, cache)
+      if (!ok) return false
+    }
+    return true
+  }
+
+  async _runPlugin(plugin, m, sock, sessionId, userId, latency, isOwner) {
+    // Default permissions from plugin metadata (string or array), overridden per-session
+    const rawDefault = plugin.handler.permission ?? plugin.permission ?? 'everyone'
+    const defaultPerms = Array.isArray(rawDefault)
+      ? rawDefault.map((p) => String(p).toLowerCase())
+      : [String(rawDefault).toLowerCase()]
+
+    const state = configService.getPluginState(sessionId, plugin.file, defaultPerms)
 
     // Toggle OFF → skip entirely (no reply, no error)
     if (!state.enabled) return
 
-    // Permission gate
-    const allowed = await this._checkPermission(state.permission, m, sock, isOwner)
+    // Permission gate — ALL selected permissions must pass (AND)
+    const allowed = await this._checkPermissions(state.permissions, m, sock, isOwner)
     if (!allowed) {
-      if (state.permission === PERM_OWNER) {
+      if (state.permissions.includes(PERM_OWNER) && state.permissions.length === 1) {
         const cfg = configService.getCached(sessionId)
         await m.reply(cfg.ownerOnlyMessage || 'Perintah ini hanya untuk owner.')
       }

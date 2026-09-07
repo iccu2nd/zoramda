@@ -102,12 +102,22 @@ export class PluginLoader {
       return null
     }
 
+    // Normalize permission to array (supports string or string[])
+    let permissions = ['everyone']
+    if (handler.permission != null) {
+      const raw = handler.permission
+      permissions = (Array.isArray(raw) ? raw : [raw])
+        .map((x) => String(x).toLowerCase())
+        .filter(Boolean)
+      if (!permissions.length) permissions = ['everyone']
+    }
+
     return {
       handler,
       commands,
       help: handler.help || commands,
       tags: handler.tags || ['other'],
-      permission: handler.permission ? String(handler.permission).toLowerCase() : 'everyone',
+      permissions,
       file: relative(PLUGINS_ROOT, filePath),
     }
   }

@@ -170,6 +170,27 @@
     return 'status-pill status-' + (s || 'STOPPED');
   }
 
+  /** Show Config / Plugins only when at least one session is CONNECTED */
+  function updateConnectedNav(sessions) {
+    const hasConnected = (sessions || []).some((s) => s.status === 'CONNECTED');
+    const navConfig = document.getElementById('navConfig');
+    const navPlugins = document.getElementById('navPlugins');
+    if (navConfig) navConfig.style.display = hasConnected ? '' : 'none';
+    if (navPlugins) navPlugins.style.display = hasConnected ? '' : 'none';
+
+    // If user is on config/plugins but no longer connected, bounce to sessions
+    if (!hasConnected) {
+      const onConfig = !$('#page-config').classList.contains('hidden');
+      const onPlugins = !$('#page-plugins').classList.contains('hidden');
+      if (onConfig || onPlugins) {
+        $$('.side-link[data-page]').forEach((b) => b.classList.remove('active'));
+        const sessionsBtn = document.querySelector('.side-link[data-page="sessions"]');
+        if (sessionsBtn) sessionsBtn.classList.add('active');
+        PAGES.forEach((p) => $('#page-' + p).classList.toggle('hidden', p !== 'sessions'));
+      }
+    }
+  }
+
   /* ——— pairing code polling ———
      Backend butuh beberapa detik (dan kadang beberapa kali percobaan)
      untuk dapat kode pairing dari whatsapp. Jadi kita polling endpoint
@@ -258,6 +279,7 @@
     const list = $('#sessionList');
     try {
       const { sessions } = await API.sessions();
+      updateConnectedNav(sessions);
       if (!sessions?.length) {
         list.innerHTML = `<div class="empty">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="2" width="14" height="20" rx="2.5"/><path d="M12 18h.01"/></svg>
@@ -421,19 +443,22 @@
   let selectedConfigSession = null;
   let selectedPluginSession = null;
 
-  async function fillSessionSelect(selectEl, selectedId) {
+  async function fillSessionSelect(selectEl, selectedId, connectedOnly = true) {
     const { sessions } = await API.sessions();
-    if (!sessions?.length) {
-      selectEl.innerHTML = '<option value="">— tidak ada session —</option>';
+    const list = connectedOnly
+      ? (sessions || []).filter((s) => s.status === 'CONNECTED')
+      : (sessions || []);
+    if (!list.length) {
+      selectEl.innerHTML = '<option value="">— tidak ada session connected —</option>';
       return [];
     }
-    selectEl.innerHTML = sessions
+    selectEl.innerHTML = list
       .map(
         (s) =>
           `<option value="${escapeAttr(s.sessionId)}" ${s.sessionId === selectedId ? 'selected' : ''}>${escapeHtml(s.name || s.sessionId.slice(0, 8))} (${escapeHtml(s.status || '-')})</option>`
       )
       .join('');
-    return sessions;
+    return list;
   }
 
   async function loadConfig() {
@@ -579,16 +604,36 @@
         box.innerHTML = `<div class="empty">tidak ada plugin ter-load.</div>`;
         return;
       }
-      const permOpts = (permissions || ['everyone', 'group', 'private', 'admin', 'botadmin', 'owner'])
-        .map((p) => `<option value="${p}">${p}</option>`)
-        .join('');
+      const allPerms = permissions || ['everyone', 'group', 'private', 'admin', 'botadmin', 'owner'];
+      const permLabels = {
+        everyone: 'Everyone',
+        group: 'Group Only',
+        private: 'Private Only',
+        admin: 'Admin Group',
+        botadmin: 'Bot Admin',
+        owner: 'Owner Only',
+      };
 
       box.innerHTML =
-        `<p class="sub" style="margin-bottom:0.75rem">Toggle & permission hanya berlaku untuk session ini. Perubahan langsung aktif tanpa restart.</p>` +
+        `<p class="sub" style="margin-bottom:0.75rem">Toggle ON/OFF & permission (bisa lebih dari satu — semua yang aktif harus terpenuhi). Default dari kode plugin sudah aktif otomatis.</p>` +
         plugins
           .map((p) => {
             const primary = (p.commands && p.commands[0]) || '';
             const tags = (p.tags || []).map(escapeHtml).join(', ');
+            const activePerms = new Set(p.permissions || p.defaultPermissions || ['everyone']);
+            const defaultPerms = new Set(p.defaultPermissions || ['everyone']);
+            const permToggles = allPerms
+              .map((perm) => {
+                const on = activePerms.has(perm);
+                const isDefault = defaultPerms.has(perm);
+                return `
+              <div class="switch-row" style="padding:0.35rem 0">
+                <span style="font-size:0.9rem">${escapeHtml(permLabels[perm] || perm)}${isDefault ? ' <span class="chip-mini">default</span>' : ''}</span>
+                <div class="switch ${on ? 'on' : ''}" data-perm="${escapeAttr(perm)}"></div>
+              </div>`;
+              })
+              .join('');
+
             return `
         <div class="card plugin-card" data-file="${escapeAttr(p.file)}" data-command="${escapeAttr(primary)}" style="padding:1.1rem;margin-bottom:1rem">
           <div class="plugin-head" style="display:flex;justify-content:space-between;align-items:center;gap:0.75rem;flex-wrap:wrap">
@@ -596,14 +641,11 @@
               <div class="plugin-name">${escapeHtml(p.file)}</div>
               <div class="plugin-tags">.${escapeHtml((p.commands || []).join(' .'))} · ${tags}</div>
             </div>
-            <div class="switch ${p.enabled ? 'on' : ''}" data-act="toggle" title="ON/OFF"></div>
+            <div class="switch ${p.enabled ? 'on' : ''}" data-act="toggle" title="Plugin ON/OFF"></div>
           </div>
-          <div class="field" style="margin-top:0.75rem">
-            <label>permission</label>
-            <select data-act="perm">${permOpts.replace(
-              `value="${p.permission}"`,
-              `value="${p.permission}" selected`
-            )}</select>
+          <div style="margin-top:0.75rem">
+            <label style="font-size:0.8rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.04em">Permissions (AND)</label>
+            ${permToggles}
           </div>
           ${
             p.responses && Object.keys(p.responses).length
@@ -618,7 +660,7 @@
                   .join('')
               : ''
           }
-          <div class="toolbar" style="margin-top:0.25rem">
+          <div class="toolbar" style="margin-top:0.5rem">
             <button class="btn btn-sm" data-act="saveState" type="button">simpan</button>
             ${
               p.responses && Object.keys(p.responses).length
@@ -630,28 +672,25 @@
           })
           .join('');
 
-      // Fix selected option for permission selects
       box.querySelectorAll('.plugin-card').forEach((card) => {
         const file = card.dataset.file;
         const command = card.dataset.command;
-        const plugin = plugins.find((x) => x.file === file);
-        if (plugin) {
-          const sel = card.querySelector('[data-act="perm"]');
-          if (sel) sel.value = plugin.permission || 'everyone';
-        }
 
-        card.querySelector('[data-act="toggle"]')?.addEventListener('click', (ev) => {
-          ev.currentTarget.classList.toggle('on');
+        card.querySelectorAll('.switch').forEach((sw) => {
+          sw.addEventListener('click', () => sw.classList.toggle('on'));
         });
 
         card.querySelector('[data-act="saveState"]')?.addEventListener('click', async () => {
           const enabled = card.querySelector('[data-act="toggle"]').classList.contains('on');
-          const permission = card.querySelector('[data-act="perm"]').value;
+          const permissions = [...card.querySelectorAll('.switch[data-perm].on')].map(
+            (el) => el.dataset.perm
+          );
+          // If nothing selected, default to everyone
+          if (!permissions.length) permissions.push('everyone');
           try {
             await API.updateSessionPlugins(sessionId, {
-              [file]: { enabled, permission },
+              [file]: { enabled, permissions },
             });
-            // Also save responses if any
             const respBody = {};
             let hasResp = false;
             card.querySelectorAll('[data-resp-key]').forEach((el) => {

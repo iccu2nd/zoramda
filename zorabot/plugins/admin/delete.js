@@ -39,6 +39,6 @@ let handler = async (m, { conn, isOwner, usedPrefix }) => {
 handler.help = ['delete (reply pesan)']
 handler.tags = ['admin']
 handler.command = ['delete', 'del']
-handler.permission = 'admin'
+handler.permission = ['admin', 'botadmin']
 
 export default handler

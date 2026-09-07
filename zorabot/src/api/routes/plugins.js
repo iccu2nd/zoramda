@@ -29,8 +29,7 @@ export default function createPluginRoutes(sessionManager) {
         commands: p.commands,
         help: p.help,
         tags: p.tags,
-        defaultPermission:
-          (p.handler.permission && String(p.handler.permission).toLowerCase()) || 'everyone',
+        defaultPermissions: p.permissions || ['everyone'],
         hasResponses: !!(p.handler.responses && Object.keys(p.handler.responses).length),
       }))
       res.json({ plugins: out, permissions: PERMISSIONS })
@@ -54,9 +53,8 @@ export default function createPluginRoutes(sessionManager) {
 
       const plugins = sessionManager.pluginLoader.getAllPlugins()
       const out = plugins.map((p) => {
-        const defaultPerm =
-          (p.handler.permission && String(p.handler.permission).toLowerCase()) || 'everyone'
-        const state = configService.getPluginState(sessionId, p.file, defaultPerm)
+        const defaultPerms = p.permissions || ['everyone']
+        const state = configService.getPluginState(sessionId, p.file, defaultPerms)
         const defaults = p.handler.responses || {}
         const overrides = configService.getPluginResponses(sessionId, p.commands[0])
         const responses = {}
@@ -73,8 +71,8 @@ export default function createPluginRoutes(sessionManager) {
           help: p.help,
           tags: p.tags,
           enabled: state.enabled,
-          permission: state.permission,
-          defaultPermission: defaultPerm,
+          permissions: state.permissions,
+          defaultPermissions: defaultPerms,
           responses,
         }
       })
