@@ -19,51 +19,57 @@
   <!-- login / register -->
   <div id="loginView" class="wrap">
     <div class="login-card">
-      <div class="brand" style="justify-content:center;margin-bottom:1rem">botenv</div>
+      <div class="brand" style="justify-content:center;margin-bottom:1.15rem">botenv</div>
 
-      <div class="auth-tabs">
-        <button class="auth-tab active" data-tab="login" type="button">masuk</button>
-        <button class="auth-tab" data-tab="register" type="button">daftar</button>
-      </div>
-
-      <!-- masuk -->
+      <!-- Sign in -->
       <form id="loginForm" class="auth-form">
-        <h1>masuk akun</h1>
-        <p class="sub">pakai akun kamu sendiri — bukan api key admin</p>
+        <h1>Masuk</h1>
+        <p class="sub">Masuk ke dashboard menggunakan akun Anda.</p>
         <div class="field">
-          <label>username</label>
-          <input type="text" id="loginUsername" placeholder="username" autocomplete="username" autocapitalize="off">
+          <label>Username</label>
+          <input type="text" id="loginUsername" placeholder="Masukkan username" autocomplete="username" autocapitalize="off" required>
         </div>
         <div class="field">
-          <label>password</label>
-          <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password">
+          <label>Password</label>
+          <input type="password" id="loginPassword" placeholder="Masukkan password" autocomplete="current-password" required>
         </div>
         <p class="auth-error" id="loginError"></p>
-        <button class="btn btn-block" id="loginBtn" type="submit">masuk</button>
+        <button class="btn btn-block" id="loginBtn" type="submit">Masuk</button>
+        <p class="auth-switch">Belum punya akun? <button type="button" class="auth-link" id="showRegister">Daftar</button></p>
       </form>
 
-      <!-- daftar -->
+      <!-- Create account -->
       <form id="registerForm" class="auth-form hidden">
-        <h1>buat akun</h1>
-        <p class="sub">satu akun, config &amp; session sendiri</p>
+        <h1>Daftar</h1>
+        <p class="sub">Lengkapi data berikut untuk membuat akun.</p>
         <div class="field">
-          <label>nama (opsional)</label>
-          <input type="text" id="regName" placeholder="nama kamu">
+          <label>Username</label>
+          <input type="text" id="regUsername" placeholder="Pilih username" autocomplete="username" autocapitalize="off" required>
         </div>
         <div class="field">
-          <label>username</label>
-          <input type="text" id="regUsername" placeholder="huruf kecil, angka, _ ." autocomplete="username" autocapitalize="off">
+          <label>Email</label>
+          <input type="email" id="regEmail" placeholder="name@example.com" autocomplete="email" required>
         </div>
         <div class="field">
-          <label>password</label>
-          <input type="password" id="regPassword" placeholder="minimal 6 karakter" autocomplete="new-password">
+          <label>Password</label>
+          <input type="password" id="regPassword" placeholder="Minimal 6 karakter" autocomplete="new-password" required>
+        </div>
+        <div class="field">
+          <label>Konfirmasi password</label>
+          <input type="password" id="regConfirmPassword" placeholder="Ulangi password" autocomplete="new-password" required>
+        </div>
+        <div class="field">
+          <label>Nomor WhatsApp</label>
+          <input type="tel" id="regPhone" placeholder="e.g. 6281234567890" autocomplete="tel" inputmode="numeric">
+          <p class="hint" style="margin:0.3rem 0 0;font-size:0.78rem;color:var(--muted)">Nomor pribadi Anda — bukan untuk sesi bot.</p>
         </div>
         <p class="auth-error" id="registerError"></p>
-        <button class="btn btn-block" id="registerBtn" type="submit">daftar &amp; masuk</button>
+        <button class="btn btn-block" id="registerBtn" type="submit">Daftar</button>
+        <p class="auth-switch">Sudah punya akun? <button type="button" class="auth-link" id="showLogin">Masuk</button></p>
       </form>
 
       <p style="text-align:center;margin-top:1rem;font-size:0.85rem;color:var(--muted);font-weight:500">
-        <a href="/" style="font-weight:700">← kembali</a>
+        <a href="/" style="font-weight:700">← Kembali</a>
       </p>
     </div>
   </div>

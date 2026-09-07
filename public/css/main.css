@@ -963,3 +963,34 @@ img { max-width: 100%; display: block; }
   font-weight: 500;
 }
 .hint { color: var(--muted); }
+
+
+/* auth switch links */
+.auth-switch {
+  text-align: center;
+  margin-top: 1rem;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+.auth-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 700;
+  color: var(--text);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.auth-link:hover { opacity: 0.85; }
+.auth-form h1 {
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.35rem;
+}
+.auth-form .sub {
+  margin-bottom: 1.15rem;
+}

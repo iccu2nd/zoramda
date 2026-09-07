@@ -24,12 +24,27 @@ function publicUser(user) {
   return {
     userId: user.userId,
     username: user.username,
+    email: user.email || '',
+    phone: user.phone || '',
     role: user.role,
     isAdmin: user.role === 'admin',
     name: user.name || '',
     apiKey: user.apiKey,
   }
 }
+
+function normalizeEmail(email) {
+  return String(email || '').trim().toLowerCase()
+}
+
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 120
+}
+
+function normalizePhone(phone) {
+  return String(phone || '').replace(/\D/g, '')
+}
+
 
 /**
  * Self-service registration – anyone can create their own account.
@@ -39,26 +54,46 @@ router.post(
   '/register',
   validateBody({
     username: { type: 'string', required: true, maxLength: 32 },
+    email: { type: 'string', required: true, maxLength: 120 },
     password: { type: 'string', required: true, maxLength: 128 },
+    confirmPassword: { type: 'string', maxLength: 128 },
+    phone: { type: 'string', maxLength: 20 },
     name: { type: 'string', maxLength: 64 },
   }),
   async (req, res) => {
     try {
       const username = normalizeUsername(req.body.username)
+      const email = normalizeEmail(req.body.email)
       const password = String(req.body.password || '')
+      const confirmPassword = String(req.body.confirmPassword ?? req.body.passwordConfirm ?? '')
+      const phone = normalizePhone(req.body.phone)
 
       if (!isValidUsername(username)) {
         return res.status(400).json({
-          error: 'Username 3-32 karakter, huruf kecil/angka/underscore/titik saja',
+          error: 'Username 3–32 karakter (huruf kecil, angka, underscore, titik).',
         })
       }
+      if (!isValidEmail(email)) {
+        return res.status(400).json({ error: 'Masukkan alamat email yang valid.' })
+      }
       if (!isValidPassword(password)) {
-        return res.status(400).json({ error: 'Password minimal 6 karakter' })
+        return res.status(400).json({ error: 'Password minimal 6 karakter.' })
+      }
+      if (confirmPassword && password !== confirmPassword) {
+        return res.status(400).json({ error: 'Konfirmasi password tidak cocok.' })
+      }
+      if (phone && (phone.length < 8 || phone.length > 16)) {
+        return res.status(400).json({ error: 'Masukkan nomor WhatsApp yang valid.' })
       }
 
-      const existing = await User.findOne({ username }).lean()
+      const existing = await User.findOne({
+        $or: [{ username }, { email }],
+      }).lean()
       if (existing) {
-        return res.status(409).json({ error: 'Username sudah dipakai' })
+        if (existing.username === username) {
+          return res.status(409).json({ error: 'Username sudah digunakan.' })
+        }
+        return res.status(409).json({ error: 'Email sudah terdaftar.' })
       }
 
       const userId = uuidv4()
@@ -68,6 +103,8 @@ router.post(
       const user = await User.create({
         userId,
         username,
+        email,
+        phone: phone || '',
         passwordHash,
         apiKey,
         role: 'user',
@@ -79,10 +116,10 @@ router.post(
       res.status(201).json({ token, user: publicUser(user) })
     } catch (err) {
       if (err.code === 11000) {
-        return res.status(409).json({ error: 'Username sudah dipakai' })
+        return res.status(409).json({ error: 'Username atau email sudah terdaftar.' })
       }
       logger.error({ err: err.message }, 'Register error')
-      res.status(500).json({ error: 'Failed to register' })
+      res.status(500).json({ error: 'Pendaftaran gagal.' })
     }
   }
 )

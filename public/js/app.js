@@ -73,25 +73,25 @@
     startPoll();
   }
 
-  /* auth tabs */
-  $$('.auth-tab').forEach((tab) => {
-    tab.addEventListener('click', () => {
-      $$('.auth-tab').forEach((t) => t.classList.remove('active'));
-      tab.classList.add('active');
-      const which = tab.dataset.tab;
-      $('#loginForm').classList.toggle('hidden', which !== 'login');
-      $('#registerForm').classList.toggle('hidden', which !== 'register');
-    });
-  });
+  function showAuthForm(which) {
+    const login = which === 'login';
+    $('#loginForm')?.classList.toggle('hidden', !login);
+    $('#registerForm')?.classList.toggle('hidden', login);
+    $('#loginError') && ($('#loginError').textContent = '');
+    $('#registerError') && ($('#registerError').textContent = '');
+  }
 
-  $('#loginForm').addEventListener('submit', async (e) => {
+  $('#showRegister')?.addEventListener('click', () => showAuthForm('register'));
+  $('#showLogin')?.addEventListener('click', () => showAuthForm('login'));
+
+  $('#loginForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const username = $('#loginUsername').value.trim();
     const password = $('#loginPassword').value;
     const errEl = $('#loginError');
     errEl.textContent = '';
     if (!username || !password) {
-      errEl.textContent = 'isi username dan password';
+      errEl.textContent = 'Username dan password wajib diisi.';
       return;
     }
     $('#loginBtn').disabled = true;
@@ -99,35 +99,53 @@
       const { token, user } = await API.login({ username, password });
       API.setToken(token);
       currentUser = user;
-      toast('berhasil masuk');
+      toast('Berhasil masuk');
       showApp();
     } catch (e2) {
-      errEl.textContent = e2.message || 'gagal masuk';
+      errEl.textContent = e2.message || 'Gagal masuk.';
     } finally {
       $('#loginBtn').disabled = false;
     }
   });
 
-  $('#registerForm').addEventListener('submit', async (e) => {
+  $('#registerForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const name = $('#regName').value.trim();
     const username = $('#regUsername').value.trim();
+    const email = $('#regEmail').value.trim();
     const password = $('#regPassword').value;
+    const confirmPassword = $('#regConfirmPassword').value;
+    const phone = ($('#regPhone')?.value || '').trim();
     const errEl = $('#registerError');
     errEl.textContent = '';
-    if (!username || !password) {
-      errEl.textContent = 'isi username dan password';
+
+    if (!username || !email || !password || !confirmPassword) {
+      errEl.textContent = 'Lengkapi semua field yang wajib diisi.';
       return;
     }
+    if (password !== confirmPassword) {
+      errEl.textContent = 'Konfirmasi password tidak cocok.';
+      return;
+    }
+    if (password.length < 6) {
+      errEl.textContent = 'Password minimal 6 karakter.';
+      return;
+    }
+
     $('#registerBtn').disabled = true;
     try {
-      const { token, user } = await API.register({ username, password, name });
+      const { token, user } = await API.register({
+        username,
+        email,
+        password,
+        confirmPassword,
+        phone,
+      });
       API.setToken(token);
       currentUser = user;
-      toast('akun dibuat, selamat datang!');
+      toast('Akun berhasil dibuat');
       showApp();
     } catch (e2) {
-      errEl.textContent = e2.message || 'gagal daftar';
+      errEl.textContent = e2.message || 'Pendaftaran gagal.';
     } finally {
       $('#registerBtn').disabled = false;
     }
@@ -138,7 +156,7 @@
     if (API.clearAdminKey) API.clearAdminKey();
     currentUser = null;
     showLogin();
-    toast('keluar');
+    toast('Berhasil keluar');
   });
 
   /* ——— nav ——— */
