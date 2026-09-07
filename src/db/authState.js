@@ -14,6 +14,9 @@ export async function useMongoAuthState(sessionId) {
 
   let creds
   let keys = {}
+  // Serialize writes so concurrent key updates can't race each other,
+  // and so callers can truly await persistence completing.
+  let writeQueue = Promise.resolve()
 
   if (doc && doc.creds) {
     // Restore with BufferJSON.reviver
@@ -55,20 +58,30 @@ export async function useMongoAuthState(sessionId) {
             }
           }
         }
-        // Persist keys (non-blocking best-effort)
-        AuthState.findOneAndUpdate(
-          { sessionId },
-          { keys: JSON.parse(JSON.stringify(keys, BufferJSON.replacer)) },
-          { upsert: true }
-        ).catch((err) => {
-          logger.error({ sessionId, err: err.message }, 'Failed to save auth keys')
-        })
+        // IMPORTANT: this must be awaited before returning. Baileys advances
+        // the signal-protocol ratchet on every message and relies on this
+        // resolving only once the new key state is durably saved — otherwise
+        // a process restart right after a message can load stale keys while
+        // WhatsApp has already moved the counter forward, causing
+        // "MessageCounterError: Key used already or never filled".
+        const snapshot = JSON.parse(JSON.stringify(keys, BufferJSON.replacer))
+        writeQueue = writeQueue.then(() =>
+          AuthState.findOneAndUpdate({ sessionId }, { keys: snapshot }, { upsert: true }).catch(
+            (err) => {
+              logger.error({ sessionId, err: err.message }, 'Failed to save auth keys')
+            }
+          )
+        )
+        await writeQueue
       },
     },
   }
 
   const saveCreds = async () => {
     try {
+      // Make sure any in-flight key writes land before we also persist creds,
+      // so a save always reflects a consistent creds+keys snapshot.
+      await writeQueue
       await AuthState.findOneAndUpdate(
         { sessionId },
         {
@@ -84,6 +97,7 @@ export async function useMongoAuthState(sessionId) {
 
   const clearAuth = async () => {
     try {
+      await writeQueue
       await AuthState.deleteOne({ sessionId })
       keys = {}
     } catch (err) {
