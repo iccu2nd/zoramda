@@ -45,7 +45,6 @@ let handler = async (m, { usedPrefix, botName, isOwner }) => {
   text += isOwner
     ? '_Kamu login sebagai owner — semua command di atas bisa dipakai._'
     : '_Command "admin grup" bisa dipakai kalau kamu admin di grup ini. Command "(owner)" cuma bisa dipakai owner bot._'
-  text += '\n\n🌐 _Kontrol penuh (semua user & semua bot) juga bisa lewat dashboard website → menu "admin".'
 
   await m.reply(text)
 }

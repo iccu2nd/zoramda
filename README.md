@@ -72,31 +72,6 @@ Body for create / connect (optional):
 { "name": "My Bot", "pairingPhone": "628xxxxxxxxxx" }
 ```
 
-### Admin (superadmin — semua user & semua bot)
-
-Semua endpoint di bawah butuh akun dengan `role: admin` (JWT `Bearer` atau `x-api-key` milik akun admin, atau `ADMIN_API_KEY` operator shortcut).
-
-| Method | Path | Description |
-|---|---|---|
-| GET | /api/admin/overview | Statistik platform (users, sessions, server) |
-| GET | /api/admin/users | List semua user platform |
-| PATCH | /api/admin/users/:userId | Ubah role / isActive / maxSessions / name |
-| POST | /api/admin/users/:userId/reset-password | Reset password user |
-| DELETE | /api/admin/users/:userId | Nonaktifkan user + stop semua bot miliknya |
-| GET | /api/admin/users/:userId/banned | List nomor WA yang di-ban di bot user tsb |
-| POST | /api/admin/users/:userId/banned | Ban nomor WA `{ number }` |
-| DELETE | /api/admin/users/:userId/banned/:jid | Unban nomor WA |
-| GET | /api/admin/sessions | List semua bot/session dari semua user |
-| GET | /api/admin/sessions/:id/groups | List grup WA yang diikuti bot tsb |
-| POST | /api/admin/sessions/:id/broadcast | Broadcast pesan ke semua grup bot tsb `{ message }` |
-| POST | /api/admin/sessions/:id/groups/:gid/settings | `{ action: open\|close\|name\|desc, value? }` |
-| POST | /api/admin/sessions/:id/groups/:gid/members | `{ action: kick\|promote\|demote, number }` |
-| POST | /api/admin/sessions/:id/groups/:gid/tag | `{ message?, hide? }` — tagall / hidetag |
-
-Connect/disconnect/delete bot milik user manapun pakai endpoint session yang sama seperti biasa (`/api/sessions/:id/...`) — backend sudah mengizinkan bypass kepemilikan untuk akun admin.
-
-Dashboard website punya halaman **admin** (menu sidebar, muncul otomatis untuk akun `role: admin`) yang membungkus semua endpoint di atas: overview, users, bots, dan broadcast & grup.
-
 ## Plugins
 
 Put files under `plugins/<category>/*.js`:

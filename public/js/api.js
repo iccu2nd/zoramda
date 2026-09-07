@@ -51,58 +51,6 @@ const API = {
       method: 'PATCH',
       body: JSON.stringify(body),
     }),
-
-  // admin (superadmin — semua user & semua bot)
-  adminOverview: () => API.request('/api/admin/overview'),
-  adminUsers: () => API.request('/api/admin/users'),
-  adminUpdateUser: (userId, body) =>
-    API.request('/api/admin/users/' + encodeURIComponent(userId), { method: 'PATCH', body: JSON.stringify(body) }),
-  adminResetPassword: (userId, password) =>
-    API.request('/api/admin/users/' + encodeURIComponent(userId) + '/reset-password', {
-      method: 'POST',
-      body: JSON.stringify({ password }),
-    }),
-  adminDeactivateUser: (userId) =>
-    API.request('/api/admin/users/' + encodeURIComponent(userId), { method: 'DELETE' }),
-  adminBannedNumbers: (userId) => API.request('/api/admin/users/' + encodeURIComponent(userId) + '/banned'),
-  adminBanNumber: (userId, number) =>
-    API.request('/api/admin/users/' + encodeURIComponent(userId) + '/banned', {
-      method: 'POST',
-      body: JSON.stringify({ number }),
-    }),
-  adminUnbanNumber: (userId, jid) =>
-    API.request('/api/admin/users/' + encodeURIComponent(userId) + '/banned/' + encodeURIComponent(jid), {
-      method: 'DELETE',
-    }),
-
-  adminSessions: () => API.request('/api/admin/sessions'),
-  adminGroups: (sessionId) => API.request('/api/admin/sessions/' + sessionId + '/groups'),
-  adminBroadcast: (sessionId, message) =>
-    API.request('/api/admin/sessions/' + sessionId + '/broadcast', {
-      method: 'POST',
-      body: JSON.stringify({ message }),
-    }),
-  adminGroupSettings: (sessionId, groupId, body) =>
-    API.request('/api/admin/sessions/' + sessionId + '/groups/' + encodeURIComponent(groupId) + '/settings', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
-  adminGroupMembers: (sessionId, groupId, body) =>
-    API.request('/api/admin/sessions/' + sessionId + '/groups/' + encodeURIComponent(groupId) + '/members', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
-  adminGroupTag: (sessionId, groupId, body) =>
-    API.request('/api/admin/sessions/' + sessionId + '/groups/' + encodeURIComponent(groupId) + '/tag', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
-
-  // reuse per-session endpoints for admin control over any bot — the
-  // backend already lets isAdmin bypass ownership checks on these
-  adminConnectSession: (id, body) => API.connect(id, body),
-  adminDisconnectSession: (id, body) => API.disconnect(id, body),
-  adminDeleteSession: (id) => API.deleteSession(id),
 };
 
 window.API = API;
