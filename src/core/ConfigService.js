@@ -86,6 +86,12 @@ function cleanPartial(partial) {
 }
 
 function toCache(doc) {
+  // Defensive: any caller that hands us a null/undefined doc (a failed
+  // upsert, an update that matched nothing, a swallowed error further up)
+  // should fall back to defaults instead of throwing "Cannot read
+  // properties of null (reading 'botName')".
+  if (!doc) return { ...DEFAULTS, pluginResponses: {} }
+
   const next = { ...DEFAULTS }
   for (const key of EDITABLE_FIELDS) {
     if (doc[key] !== undefined && doc[key] !== null) {
@@ -147,7 +153,11 @@ class ConfigService {
     } catch (err) {
       // Duplicate key can still happen in a true race (two upserts landing
       // at once) — that just means the doc now exists, so re-read it.
-      if (err.code === 11000) {
+      // Check both err.code and the message text: some driver/server
+      // versions wrap this as "Plan executor error during findAndModify ::
+      // caused by :: E11000 ..." without surfacing a clean numeric code.
+      const isDupKey = err.code === 11000 || /E11000/.test(err.message || '')
+      if (isDupKey) {
         try {
           const doc = await BotConfig.findOne({ userId }).lean()
           if (doc) {
@@ -201,36 +211,55 @@ class ConfigService {
   }
 
   async updatePluginResponses(userId, command, partial) {
-    // Build a dot-notation $set so the update is atomic on Mongo's side —
-    // no more findOne-then-merge-then-write. The old read-merge-write
-    // pattern raced with itself under upsert:true (two calls for the same
-    // not-yet-existing userId could both try to insert), which surfaced as
-    // "Plan executor error during findAndModify :: caused by :: E11000
-    // duplicate key". It also silently dropped concurrent updates to
-    // different commands (lost update).
+    // Build a dot-notation update so it's atomic on Mongo's side — no more
+    // findOne-then-merge-then-write. The old read-merge-write pattern raced
+    // with itself under upsert:true (two calls for the same not-yet-existing
+    // userId could both try to insert), which surfaced as "Plan executor
+    // error during findAndModify :: caused by :: E11000 duplicate key". It
+    // also silently dropped concurrent updates to different commands.
+    //
+    // The route sends `undefined` for a key to mean "reset to default" (see
+    // routes/plugins.js). That must become $unset, not $set — handing Mongo
+    // a field explicitly set to `undefined` produced a bad update that came
+    // back as null, which then crashed on `null.botName` below.
     const set = {}
+    const unset = {}
     for (const key of Object.keys(partial)) {
-      set[`pluginResponses.${command}.${key}`] = partial[key]
+      const path = `pluginResponses.${command}.${key}`
+      if (partial[key] === undefined) {
+        unset[path] = ''
+      } else {
+        set[path] = partial[key]
+      }
     }
+
+    const update = { $setOnInsert: { userId } }
+    if (Object.keys(set).length) update.$set = set
+    if (Object.keys(unset).length) update.$unset = unset
 
     let updated
     try {
-      updated = await BotConfig.findOneAndUpdate(
-        { userId },
-        { $set: set, $setOnInsert: { userId } },
-        { upsert: true, new: true, setDefaultsOnInsert: true }
-      ).lean()
+      updated = await BotConfig.findOneAndUpdate({ userId }, update, {
+        upsert: true,
+        new: true,
+        setDefaultsOnInsert: true,
+      }).lean()
     } catch (err) {
-      if (err.code === 11000) {
+      const isDupKey = err.code === 11000 || /E11000/.test(err.message || '')
+      if (isDupKey) {
         // Lost the upsert race — the doc exists now, retry as a plain update.
-        updated = await BotConfig.findOneAndUpdate(
-          { userId },
-          { $set: set },
-          { new: true }
-        ).lean()
+        const { $setOnInsert, ...rest } = update
+        updated = await BotConfig.findOneAndUpdate({ userId }, rest, { new: true }).lean()
       } else {
         throw err
       }
+    }
+
+    // Belt-and-suspenders: if the update still somehow came back empty
+    // (shouldn't happen with upsert, but never crash on it), fall back to a
+    // plain read rather than caching bad data.
+    if (!updated) {
+      updated = await BotConfig.findOne({ userId }).lean()
     }
 
     const cfg = toCache(updated)
