@@ -127,6 +127,9 @@ function normalizePlugins(raw) {
     out[key] = {
       enabled: val.enabled !== false,
       permissions: normalizePermList(val.permissions ?? val.permission, ['everyone']),
+      commands: Array.isArray(val.commands)
+        ? val.commands.map((c) => String(c).toLowerCase().trim()).filter(Boolean)
+        : undefined,
     }
   }
   return out
@@ -291,15 +294,40 @@ class ConfigService {
       return {
         enabled: true,
         permissions: defaults,
+        commands: undefined,
       }
     }
     return {
       enabled: state.enabled !== false,
-      // If session has never customized permissions, fall back to plugin defaults
       permissions: Array.isArray(state.permissions) && state.permissions.length
         ? normalizePermList(state.permissions, defaults)
         : defaults,
+      commands:
+        Array.isArray(state.commands) && state.commands.length ? state.commands : undefined,
     }
+  }
+
+  /**
+   * Resolve which plugin files handle a command for this session,
+   * respecting per-session custom command aliases.
+   * Returns Set of plugin file paths that should run for this command.
+   */
+  resolveCommandFiles(sessionId, command, allPlugins) {
+    const cmd = String(command || '').toLowerCase()
+    if (!cmd) return new Set()
+    const cfg = this.getCached(sessionId)
+    const matched = new Set()
+
+    for (const p of allPlugins) {
+      const state = cfg.plugins && cfg.plugins[p.file]
+      const custom =
+        state && Array.isArray(state.commands) && state.commands.length
+          ? state.commands.map((c) => String(c).toLowerCase())
+          : null
+      const cmds = custom || p.commands || []
+      if (cmds.includes(cmd)) matched.add(p.file)
+    }
+    return matched
   }
 
   async updatePluginStates(sessionId, userId, states) {
@@ -314,6 +342,17 @@ class ConfigService {
       if (val.permissions !== undefined || val.permission !== undefined) {
         const list = normalizePermList(val.permissions ?? val.permission, ['everyone'])
         set[`plugins.${file}.permissions`] = list
+      }
+      if (val.commands !== undefined) {
+        if (val.commands === null || (Array.isArray(val.commands) && val.commands.length === 0)) {
+          // empty array / null → clear custom commands (revert to plugin defaults)
+          set[`plugins.${file}.commands`] = []
+        } else if (Array.isArray(val.commands)) {
+          set[`plugins.${file}.commands`] = val.commands
+            .map((c) => String(c).toLowerCase().trim())
+            .filter(Boolean)
+            .slice(0, 20)
+        }
       }
     }
 

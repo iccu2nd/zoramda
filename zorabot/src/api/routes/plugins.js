@@ -65,9 +65,13 @@ export default function createPluginRoutes(sessionManager) {
             overridden: overrides[key] !== undefined,
           }
         }
+        const effectiveCommands =
+          state.commands && state.commands.length ? state.commands : p.commands
         return {
           file: p.file,
-          commands: p.commands,
+          commands: effectiveCommands,
+          defaultCommands: p.commands,
+          customCommands: state.commands || null,
           help: p.help,
           tags: p.tags,
           enabled: state.enabled,

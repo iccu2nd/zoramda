@@ -8,14 +8,37 @@ const API = {
   clearToken() {
     try { localStorage.removeItem('zb_token'); } catch {}
   },
+
+  getAdminKey() {
+    try { return sessionStorage.getItem('zb_admin_key') || ''; } catch { return ''; }
+  },
+  setAdminKey(k) {
+    try {
+      if (k) sessionStorage.setItem('zb_admin_key', k);
+      else sessionStorage.removeItem('zb_admin_key');
+    } catch {}
+  },
+  clearAdminKey() {
+    try { sessionStorage.removeItem('zb_admin_key'); } catch {}
+  },
+
   async request(path, opts = {}) {
     const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
     const token = this.getToken();
     if (token) headers['Authorization'] = 'Bearer ' + token;
+
+    // Admin routes: prefer ADMIN_API_KEY when provided
+    const adminKey = this.getAdminKey();
+    if (adminKey && String(path).startsWith('/api/admin')) {
+      headers['x-api-key'] = adminKey;
+      // Admin key auth should not mix with user JWT for these routes
+      delete headers['Authorization'];
+    }
+
     const res = await fetch(path, { ...opts, headers });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const err = new Error(data.error || res.statusText || 'request failed');
+      const err = new Error(data.error || res.statusText || 'Request failed');
       err.status = res.status;
       err.data = data;
       throw err;
@@ -23,13 +46,11 @@ const API = {
     return data;
   },
 
-  // auth
   register: (body) => API.request('/api/auth/register', { method: 'POST', body: JSON.stringify(body) }),
   login: (body) => API.request('/api/auth/login', { method: 'POST', body: JSON.stringify(body) }),
   me: () => API.request('/api/auth/me'),
   rotateApiKey: () => API.request('/api/auth/apikey/rotate', { method: 'POST' }),
 
-  // sessions
   sessions: () => API.request('/api/sessions'),
   createSession: (body) => API.request('/api/sessions', { method: 'POST', body: JSON.stringify(body || {}) }),
   session: (id) => API.request('/api/sessions/' + id),
@@ -39,7 +60,6 @@ const API = {
   disconnect: (id, body) => API.request('/api/sessions/' + id + '/disconnect', { method: 'POST', body: JSON.stringify(body || {}) }),
   deleteSession: (id) => API.request('/api/sessions/' + id, { method: 'DELETE' }),
 
-  // session-scoped config (Manajemen Bot → Settings)
   config: (sessionId) => API.request('/api/config/' + encodeURIComponent(sessionId)),
   updateConfig: (sessionId, body) =>
     API.request('/api/config/' + encodeURIComponent(sessionId), {
@@ -48,7 +68,6 @@ const API = {
     }),
   configSchema: () => API.request('/api/config/schema/fields'),
 
-  // plugins – global list + per-session state
   plugins: () => API.request('/api/plugins'),
   sessionPlugins: (sessionId) =>
     API.request('/api/plugins/session/' + encodeURIComponent(sessionId)),
@@ -66,6 +85,28 @@ const API = {
         '/responses',
       { method: 'PATCH', body: JSON.stringify(body) }
     ),
+
+  adminStats: () => API.request('/api/admin/stats'),
+  adminUsers: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return API.request('/api/admin/users' + (q ? '?' + q : ''));
+  },
+  adminPatchUser: (userId, body) =>
+    API.request('/api/admin/users/' + encodeURIComponent(userId), {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  adminSessions: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return API.request('/api/admin/sessions' + (q ? '?' + q : ''));
+  },
+  adminDisconnectSession: (id, body) =>
+    API.request('/api/admin/sessions/' + encodeURIComponent(id) + '/disconnect', {
+      method: 'POST',
+      body: JSON.stringify(body || {}),
+    }),
+  adminDeleteSession: (id) =>
+    API.request('/api/admin/sessions/' + encodeURIComponent(id), { method: 'DELETE' }),
 };
 
 window.API = API;

@@ -62,6 +62,8 @@ const sessionConfigSchema = new mongoose.Schema(
             type: [String],
             default: ['everyone'],
           },
+          // Custom command aliases for this plugin in this session (empty = use plugin defaults)
+          commands: { type: [String], default: undefined },
         },
         { _id: false }
       ),

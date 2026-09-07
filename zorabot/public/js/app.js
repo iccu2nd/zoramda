@@ -1,7 +1,7 @@
 (function () {
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-  const PAGES = ['sessions', 'config', 'plugins', 'account'];
+  const PAGES = ['sessions', 'config', 'plugins', 'admin', 'account'];
 
   let currentUser = null;
   let pollTimer = null;
@@ -55,6 +55,7 @@
       return true;
     } catch {
       API.clearToken();
+      if (API.clearAdminKey) API.clearAdminKey();
       return false;
     }
   }
@@ -134,6 +135,7 @@
 
   $('#logoutBtn').addEventListener('click', () => {
     API.clearToken();
+    if (API.clearAdminKey) API.clearAdminKey();
     currentUser = null;
     showLogin();
     toast('keluar');
@@ -150,6 +152,7 @@
       if (page === 'sessions') loadSessions();
       if (page === 'plugins') loadPlugins();
       if (page === 'account') loadAccount();
+      if (page === 'admin') loadAdmin();
       closeSidebar();
     });
   });
@@ -463,14 +466,14 @@
 
   async function loadConfig() {
     const box = $('#configForm');
-    box.innerHTML = '<p style="color:var(--muted);font-weight:500">memuat session...</p>';
+    box.innerHTML = '<p style="color:var(--muted);font-weight:500">Loading…</p>';
     try {
       const selHtml = `<div class="field session-pick"><label>Session</label><select id="configSessionSelect"></select></div>`;
       box.innerHTML = selHtml + '<div id="configFields"></div>';
       const select = $('#configSessionSelect');
       const sessions = await fillSessionSelect(select, selectedConfigSession);
       if (!sessions.length) {
-        $('#configFields').innerHTML = '<div class="empty">buat session dulu di halaman Sessions.</div>';
+        $('#configFields').innerHTML = '<div class="empty">Create a session first from the Sessions page.</div>';
         return;
       }
       if (!selectedConfigSession || !sessions.find((s) => s.sessionId === selectedConfigSession)) {
@@ -542,7 +545,7 @@
 
   $('#saveConfigBtn').addEventListener('click', async () => {
     if (!selectedConfigSession) {
-      toast('pilih session dulu');
+      toast('Select a session first');
       return;
     }
     const body = {};
@@ -558,23 +561,23 @@
     });
     try {
       await API.updateConfig(selectedConfigSession, body);
-      toast('settings session disimpan');
+      toast('Settings saved');
       renderConfigFields(selectedConfigSession);
     } catch (e) {
-      toast(e.message || 'gagal simpan');
+      toast(e.message || 'Save failed');
     }
   });
 
   /* ——— plugins (toggle + permission per-session) ——— */
   async function loadPlugins() {
     const box = $('#pluginList');
-    box.innerHTML = '<p style="color:var(--muted);font-weight:500">memuat session...</p>';
+    box.innerHTML = '<p style="color:var(--muted);font-weight:500">Loading…</p>';
     try {
       box.innerHTML = `<div class="field session-pick"><label>Session</label><select id="pluginSessionSelect"></select></div><div id="pluginCards"></div>`;
       const select = $('#pluginSessionSelect');
       const sessions = await fillSessionSelect(select, selectedPluginSession);
       if (!sessions.length) {
-        $('#pluginCards').innerHTML = '<div class="empty">buat session dulu di halaman Sessions.</div>';
+        $('#pluginCards').innerHTML = '<div class="empty">Create a session first from the Sessions page.</div>';
         return;
       }
       if (!selectedPluginSession || !sessions.find((s) => s.sessionId === selectedPluginSession)) {
@@ -597,11 +600,11 @@
       box.innerHTML = '';
       return;
     }
-    box.innerHTML = '<p style="color:var(--muted);font-weight:500">memuat plugins...</p>';
+    box.innerHTML = '<p style="color:var(--muted);font-weight:500">Loading plugins…</p>';
     try {
       const { plugins, permissions } = await API.sessionPlugins(sessionId);
       if (!plugins?.length) {
-        box.innerHTML = `<div class="empty">tidak ada plugin ter-load.</div>`;
+        box.innerHTML = `<div class="empty">No plugins loaded.</div>`;
         return;
       }
       const allPerms = permissions || ['everyone', 'group', 'private', 'admin', 'botadmin', 'owner'];
@@ -687,14 +690,19 @@
               </div>
               <div class="switch ${p.enabled ? 'on' : ''}" data-act="toggle" title="ON/OFF"></div>
             </div>
+            <div class="field" style="margin:0.45rem 0 0.25rem">
+              <label>Custom commands</label>
+              <input type="text" data-act="commands" placeholder="${escapeAttr((p.defaultCommands || p.commands || []).join(', '))}" value="${escapeAttr((p.customCommands || []).join(', '))}" />
+              <p class="hint" style="margin:0.25rem 0 0;font-size:0.78rem;color:var(--muted)">Leave empty to use defaults (${escapeHtml((p.defaultCommands || p.commands || []).join(', '))})</p>
+            </div>
             <div class="perm-list">
               <div class="perm-list-title">Permissions</div>
               ${permToggles}
             </div>
             ${responsesHtml}
             <div class="toolbar plugin-actions">
-              <button class="btn btn-sm" data-act="saveState" type="button">simpan</button>
-              <button class="btn btn-sm btn-ghost" data-act="resetDefault" type="button">reset default</button>
+              <button class="btn btn-sm" data-act="saveState" type="button">Save</button>
+              <button class="btn btn-sm btn-ghost" data-act="resetDefault" type="button">Reset</button>
             </div>
           </div>`;
         }
@@ -735,9 +743,14 @@
             (el) => el.dataset.perm
           );
           if (!permissions.length) permissions.push('everyone');
+          const cmdInput = card.querySelector('[data-act="commands"]');
+          const cmdRaw = (cmdInput?.value || '').trim();
+          const commands = cmdRaw
+            ? cmdRaw.split(/[,\s]+/).map((c) => c.replace(/^\./, '').toLowerCase()).filter(Boolean)
+            : [];
           try {
             await API.updateSessionPlugins(sessionId, {
-              [file]: { enabled, permissions },
+              [file]: { enabled, permissions, commands },
             });
             const respBody = {};
             let hasResp = false;
@@ -748,16 +761,16 @@
             if (hasResp && command) {
               await API.updatePluginResponses(sessionId, command, respBody);
             }
-            toast('disimpan · ' + file);
+            toast('Saved · ' + file);
           } catch (e) {
-            toast(e.message || 'gagal simpan');
+            toast(e.message || 'Save failed');
           }
         });
 
         card.querySelector('[data-act="resetDefault"]')?.addEventListener('click', async () => {
           try {
             await API.updateSessionPlugins(sessionId, {
-              [file]: { enabled: true, permissions: defaults },
+              [file]: { enabled: true, permissions: defaults, commands: [] },
             });
             if (command && card.querySelectorAll('[data-resp-key]').length) {
               const body = {};
@@ -766,10 +779,10 @@
               });
               await API.updatePluginResponses(sessionId, command, body);
             }
-            toast('reset default · ' + file);
+            toast('Reset · ' + file);
             renderPluginCards(sessionId);
           } catch (e) {
-            toast(e.message || 'gagal reset');
+            toast(e.message || 'Reset failed');
           }
         });
       });
@@ -867,4 +880,244 @@
     if (await tryAuth()) showApp();
     else showLogin();
   })();
+
+
+  /* ——— admin panel (ADMIN_API_KEY) ——— */
+  function renderAdminGate(box) {
+    box.innerHTML = `
+      <div class="card" style="padding:1.25rem;max-width:420px">
+        <h2 class="admin-h2" style="margin-bottom:0.35rem">Admin access</h2>
+        <p class="plugin-tags" style="margin-bottom:1rem">Enter the server <code>ADMIN_API_KEY</code> to open the admin panel.</p>
+        <div class="field">
+          <label>Admin API key</label>
+          <input type="password" id="adminKeyInput" placeholder="ADMIN_API_KEY" autocomplete="off" />
+        </div>
+        <p class="auth-error" id="adminKeyError"></p>
+        <button class="btn" type="button" id="adminKeySubmit">Continue</button>
+      </div>`;
+    $('#adminKeySubmit')?.addEventListener('click', async () => {
+      const key = ($('#adminKeyInput')?.value || '').trim();
+      const err = $('#adminKeyError');
+      if (err) err.textContent = '';
+      if (!key) {
+        if (err) err.textContent = 'Admin API key is required.';
+        return;
+      }
+      API.setAdminKey(key);
+      try {
+        await API.adminStats();
+        await loadAdmin();
+      } catch (e) {
+        API.clearAdminKey();
+        if (err) err.textContent = e.status === 401 || e.status === 403
+          ? 'Invalid admin API key.'
+          : (e.message || 'Authentication failed.');
+      }
+    });
+    $('#adminKeyInput')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') $('#adminKeySubmit')?.click();
+    });
+  }
+
+  async function loadAdmin() {
+    const box = $('#adminBox');
+    if (!box) return;
+
+    if (!API.getAdminKey()) {
+      renderAdminGate(box);
+      return;
+    }
+
+    box.innerHTML = '<p style="color:var(--muted);font-weight:500">Loading…</p>';
+    try {
+      const [stats, usersData, sessionsData] = await Promise.all([
+        API.adminStats(),
+        API.adminUsers({ limit: 50 }),
+        API.adminSessions(),
+      ]);
+
+      const s = stats;
+      box.innerHTML = `
+        <div class="toolbar" style="margin-bottom:0.75rem">
+          <div class="spacer"></div>
+          <button class="btn btn-sm btn-ghost" type="button" id="adminLockBtn">Sign out admin</button>
+        </div>
+        <div class="admin-stats">
+          <div class="admin-stat"><div class="admin-stat-val">${s.users?.total ?? 0}</div><div class="admin-stat-label">Users</div></div>
+          <div class="admin-stat"><div class="admin-stat-val">${s.users?.active ?? 0}</div><div class="admin-stat-label">Active</div></div>
+          <div class="admin-stat"><div class="admin-stat-val">${s.sessions?.connectedLive ?? 0}</div><div class="admin-stat-label">Connected</div></div>
+          <div class="admin-stat"><div class="admin-stat-val">${s.sessions?.total ?? 0}</div><div class="admin-stat-label">Sessions</div></div>
+          <div class="admin-stat"><div class="admin-stat-val">${s.plugins ?? 0}</div><div class="admin-stat-label">Plugins</div></div>
+        </div>
+
+        <div class="admin-section">
+          <div class="admin-section-head">
+            <h2 class="admin-h2">Registered users</h2>
+            <input type="search" id="adminUserQ" placeholder="Search username" class="admin-search" />
+          </div>
+          <div id="adminUserList"></div>
+        </div>
+
+        <div class="admin-section">
+          <div class="admin-section-head">
+            <h2 class="admin-h2">Bot sessions</h2>
+            <button class="btn btn-sm btn-ghost" type="button" id="adminRefreshSessions">Refresh</button>
+          </div>
+          <div id="adminSessionList"></div>
+        </div>
+      `;
+
+      $('#adminLockBtn')?.addEventListener('click', () => {
+        API.clearAdminKey();
+        renderAdminGate(box);
+      });
+
+      renderAdminUsers(usersData.users || []);
+      renderAdminSessions(sessionsData.sessions || []);
+
+      let searchTimer;
+      $('#adminUserQ')?.addEventListener('input', (e) => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(async () => {
+          try {
+            const data = await API.adminUsers({ q: e.target.value, limit: 50 });
+            renderAdminUsers(data.users || []);
+          } catch (err) {
+            toast(err.message || 'Search failed');
+          }
+        }, 280);
+      });
+
+      $('#adminRefreshSessions')?.addEventListener('click', async () => {
+        try {
+          const data = await API.adminSessions();
+          renderAdminSessions(data.sessions || []);
+          toast('Sessions updated');
+        } catch (err) {
+          toast(err.message || 'Refresh failed');
+        }
+      });
+    } catch (e) {
+      if (e.status === 401 || e.status === 403) {
+        API.clearAdminKey();
+        renderAdminGate(box);
+        const err = $('#adminKeyError');
+        if (err) err.textContent = 'Invalid or expired admin API key.';
+        return;
+      }
+      box.innerHTML = `<p style="color:var(--red)">${escapeHtml(e.message)}</p>`;
+    }
+  }
+
+  function renderAdminUsers(users) {
+    const el = $('#adminUserList');
+    if (!el) return;
+    if (!users.length) {
+      el.innerHTML = '<div class="empty">No users found.</div>';
+      return;
+    }
+    el.innerHTML = users
+      .map((u) => {
+        const sess = u.sessions || {};
+        return `<div class="card admin-user-card" data-uid="${escapeAttr(u.userId)}">
+          <div class="admin-user-top">
+            <div>
+              <div class="plugin-name">${escapeHtml(u.username)}${u.role === 'admin' ? ' · admin' : ''}</div>
+              <div class="plugin-tags">${escapeHtml(u.name || '—')} · ${sess.total || 0} sessions · ${sess.connected || 0} connected</div>
+            </div>
+            <div class="switch ${u.isActive ? 'on' : ''}" data-act="active" title="Active"></div>
+          </div>
+          <div class="admin-user-row">
+            <label>Role</label>
+            <select data-act="role">
+              <option value="user" ${u.role === 'user' ? 'selected' : ''}>user</option>
+              <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>admin</option>
+            </select>
+          </div>
+          <div class="admin-user-row">
+            <label>Max sessions</label>
+            <input type="number" min="0" max="50" data-act="maxSessions" value="${u.maxSessions ?? 5}" />
+          </div>
+          <div class="toolbar" style="margin-top:0.55rem">
+            <button class="btn btn-sm" data-act="saveUser" type="button">Save</button>
+          </div>
+        </div>`;
+      })
+      .join('');
+
+    el.querySelectorAll('.admin-user-card').forEach((card) => {
+      const uid = card.dataset.uid;
+      card.querySelector('[data-act="active"]')?.addEventListener('click', (e) => {
+        e.currentTarget.classList.toggle('on');
+      });
+      card.querySelector('[data-act="saveUser"]')?.addEventListener('click', async () => {
+        const body = {
+          isActive: card.querySelector('[data-act="active"]').classList.contains('on'),
+          role: card.querySelector('[data-act="role"]').value,
+          maxSessions: parseInt(card.querySelector('[data-act="maxSessions"]').value, 10),
+        };
+        try {
+          await API.adminPatchUser(uid, body);
+          toast('User updated');
+        } catch (e) {
+          toast(e.message || 'Update failed');
+        }
+      });
+    });
+  }
+
+  function renderAdminSessions(sessions) {
+    const el = $('#adminSessionList');
+    if (!el) return;
+    if (!sessions.length) {
+      el.innerHTML = '<div class="empty">No active sessions.</div>';
+      return;
+    }
+    el.innerHTML = sessions
+      .map((s) => {
+        const uname = s.user?.username || s.userId?.slice(0, 8) || '—';
+        return `<div class="card admin-session-card" data-sid="${escapeAttr(s.sessionId)}">
+          <div class="admin-user-top">
+            <div>
+              <div class="plugin-name">${escapeHtml(s.name || s.sessionId.slice(0, 8))}</div>
+              <div class="plugin-tags">
+                <span class="${statusClass(s.status)}">${escapeHtml((s.status || '').toLowerCase())}</span>
+                · ${escapeHtml(uname)}
+                ${s.phoneNumber ? ' · ' + escapeHtml(s.phoneNumber) : ''}
+              </div>
+            </div>
+          </div>
+          <div class="toolbar" style="margin-top:0.55rem">
+            <button class="btn btn-sm btn-ghost" data-act="disc" type="button">Disconnect</button>
+            <button class="btn btn-sm btn-ghost" data-act="del" type="button">Delete</button>
+          </div>
+        </div>`;
+      })
+      .join('');
+
+    el.querySelectorAll('.admin-session-card').forEach((card) => {
+      const sid = card.dataset.sid;
+      card.querySelector('[data-act="disc"]')?.addEventListener('click', async () => {
+        try {
+          await API.adminDisconnectSession(sid, { logout: false });
+          toast('Session disconnected');
+          loadAdmin();
+        } catch (e) {
+          toast(e.message || 'Disconnect failed');
+        }
+      });
+      card.querySelector('[data-act="del"]')?.addEventListener('click', async () => {
+        if (!confirm('Delete this session permanently?')) return;
+        try {
+          await API.adminDeleteSession(sid);
+          toast('Session deleted');
+          loadAdmin();
+        } catch (e) {
+          toast(e.message || 'Delete failed');
+        }
+      });
+    });
+  }
+
+
 })();

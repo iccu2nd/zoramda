@@ -93,7 +93,14 @@ export class MessageHandler {
         return
       }
 
-      const handlers = this.pluginLoader.getHandlers(m.command)
+      // Resolve handlers: global command map + per-session custom command aliases
+      const allPlugins = this.pluginLoader.getAllPlugins()
+      const matchedFiles = configService.resolveCommandFiles(sessionId, m.command, allPlugins)
+      let handlers = allPlugins.filter((p) => matchedFiles.has(p.file))
+      // Fallback to global registry if no session mapping matched
+      if (handlers.length === 0) {
+        handlers = this.pluginLoader.getHandlers(m.command)
+      }
       if (handlers.length === 0) return
 
       latency.mark('plugin_started')

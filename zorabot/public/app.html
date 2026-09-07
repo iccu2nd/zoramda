@@ -89,6 +89,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>
         akun
       </button>
+      <button class="side-link" data-page="admin" type="button" id="navAdmin">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg>
+        admin
+      </button>
       <div class="side-foot">
         <button class="side-link" id="themeBtn" data-theme-toggle type="button" aria-pressed="false">
           <div class="switch" style="width:40px;height:22px;flex-shrink:0"></div>
@@ -112,7 +116,7 @@
       <!-- sessions page -->
       <section id="page-sessions">
         <h1 class="page-title">sessions</h1>
-        <p class="page-sub">kelola koneksi whatsapp kamu</p>
+        <p class="page-sub">Manage WhatsApp connections and session status</p>
         <div class="toolbar">
           <button class="btn btn-sm" id="refreshSessions" type="button">refresh</button>
           <div class="spacer"></div>
@@ -124,7 +128,7 @@
       <!-- config page -->
       <section id="page-config" class="hidden">
         <h1 class="page-title">config</h1>
-        <p class="page-sub">settings per-session — perubahan langsung aktif, tidak memengaruhi session lain</p>
+        <p class="page-sub">Per-session bot settings. Changes apply immediately and stay isolated.</p>
         <div class="card" id="configForm" style="padding:1.25rem"></div>
         <div class="toolbar" style="margin-top:1rem">
           <button class="btn" id="saveConfigBtn" type="button">simpan</button>
@@ -134,14 +138,20 @@
       <!-- plugins page -->
       <section id="page-plugins" class="hidden">
         <h1 class="page-title">plugins</h1>
-        <p class="page-sub">atur plugin per-session · dikelompokkan per folder</p>
+        <p class="page-sub">Enable plugins, permissions, custom commands, and responses per session</p>
         <div id="pluginList"></div>
       </section>
 
       <!-- account page -->
+      <section id="page-admin" class="hidden">
+        <h1 class="page-title">admin</h1>
+        <p class="page-sub">Platform overview — users, connected bots, and sessions</p>
+        <div id="adminBox"></div>
+      </section>
+
       <section id="page-account" class="hidden">
         <h1 class="page-title">akun</h1>
-        <p class="page-sub">info akun &amp; api key untuk akses programatik</p>
+        <p class="page-sub">Account details and API key for programmatic access</p>
         <div class="card" id="accountBox" style="padding:1.25rem"></div>
       </section>
     </main>
