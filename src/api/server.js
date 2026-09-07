@@ -30,6 +30,7 @@ export function createServer(sessionManager) {
   // legacy /app → /dash
   app.get('/app', (req, res) => res.redirect(301, '/dash'))
   app.get(/^\/app(\/.*)?$/, (req, res) => res.redirect(301, '/dash'))
+  app.get('/login', (req, res) => res.sendFile(join(publicDir, 'app.html')))
   app.get('/dash', (req, res) => res.sendFile(join(publicDir, 'app.html')))
   app.get(/^\/dash(\/.*)?$/, (req, res) => res.sendFile(join(publicDir, 'app.html')))
 

@@ -1128,3 +1128,45 @@ img { max-width: 100%; display: block; }
     max-width: 100%;
   }
 }
+
+
+/* password show/hide */
+.outline-field.has-toggle input {
+  padding-right: 2.75rem;
+}
+.pw-toggle {
+  position: absolute;
+  right: 0.55rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 10px;
+  padding: 0;
+}
+.pw-toggle:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--chip) 70%, transparent);
+}
+.pw-toggle svg {
+  width: 18px;
+  height: 18px;
+}
+.pw-toggle .hidden {
+  display: none;
+}
+
+
+.side-theme {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.65rem 0.5rem;
+}

@@ -14,34 +14,8 @@
     })();
   </script>
   <link rel="stylesheet" href="/css/main.css">
-  <style>
-    .theme-opt {
-      display: flex;
-      align-items: center;
-      gap: 0.45rem;
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: var(--text);
-      cursor: pointer;
-      user-select: none;
-      background: none;
-      border: none;
-      padding: 0;
-      font-family: inherit;
-    }
-    .theme-opt .switch {
-      width: 40px;
-      height: 22px;
-      flex-shrink: 0;
-    }
-    .theme-opt .switch::after {
-      width: 16px;
-      height: 16px;
-    }
-    .theme-opt .switch.on::after {
-      transform: translateX(18px);
-    }
-  </style>
+  <link rel="stylesheet" href="/css/theme-switch.css">
+
 </head>
 <body>
   <nav class="nav">
@@ -53,11 +27,32 @@
         <a href="#faq">faq</a>
       </div>
       <div class="nav-right">
-        <button type="button" class="theme-opt" data-theme-toggle aria-label="toggle dark mode">
-          <div class="switch" data-theme-switch></div>
-          <span data-theme-label>Dark</span>
-        </button>
-        <a href="/dash" class="btn btn-sm">masuk</a>
+<label class="theme-switch" data-theme-toggle aria-label="Toggle dark mode">
+          <input type="checkbox" data-theme-input />
+          <div class="slider round">
+            <div class="sun-moon">
+              <svg class="moon-dot md1" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+              <svg class="moon-dot md2" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+              <svg class="moon-dot md3" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+              <svg class="light-ray lr1" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+              <svg class="light-ray lr2" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+              <svg class="light-ray lr3" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+              <svg class="cloud-dark c1" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+              <svg class="cloud-dark c2" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+              <svg class="cloud-dark c3" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+              <svg class="cloud-light c4" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+              <svg class="cloud-light c5" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+              <svg class="cloud-light c6" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+            </div>
+            <div class="stars">
+              <svg class="star s1" viewBox="0 0 20 20"><path d="M 0 10 C 10 10,10 10 ,0 10 C 10 10 , 10 10 , 10 20 C 10 10 , 10 10 , 20 10 C 10 10 , 10 10 , 10 0 C 10 10,10 10 ,0 10 Z"></path></svg>
+              <svg class="star s2" viewBox="0 0 20 20"><path d="M 0 10 C 10 10,10 10 ,0 10 C 10 10 , 10 10 , 10 20 C 10 10 , 10 10 , 20 10 C 10 10 , 10 10 , 10 0 C 10 10,10 10 ,0 10 Z"></path></svg>
+              <svg class="star s3" viewBox="0 0 20 20"><path d="M 0 10 C 10 10,10 10 ,0 10 C 10 10 , 10 10 , 10 20 C 10 10 , 10 10 , 20 10 C 10 10 , 10 10 , 10 0 C 10 10,10 10 ,0 10 Z"></path></svg>
+              <svg class="star s4" viewBox="0 0 20 20"><path d="M 0 10 C 10 10,10 10 ,0 10 C 10 10 , 10 10 , 10 20 C 10 10 , 10 10 , 20 10 C 10 10 , 10 10 , 10 0 C 10 10,10 10 ,0 10 Z"></path></svg>
+            </div>
+          </div>
+        </label>
+        <a href="/login" class="btn btn-sm">masuk</a>
       </div>
     </div>
   </nav>
@@ -71,7 +66,7 @@
       <h1 class="fade-in"><span class="hl">whatsapp gateway</span> ringan, stabil, siap produksi</h1>
       <p class="sub fade-in">hubungkan nomor, kelola session, atur bot dari satu dashboard. latency rendah, arsitektur bersih, tanpa ribet.</p>
       <div class="hero-cta fade-in">
-        <a href="/dash" class="btn">mulai sekarang</a>
+        <a href="/login" class="btn">mulai sekarang</a>
         <a href="#features" class="btn btn-ghost">lihat fitur</a>
       </div>
     </div>

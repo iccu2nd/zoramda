@@ -14,6 +14,7 @@
     })();
   </script>
   <link rel="stylesheet" href="/css/main.css">
+  <link rel="stylesheet" href="/css/theme-switch.css">
 </head>
 <body>
   <!-- login / register -->
@@ -40,9 +41,13 @@
             <label for="loginUsername">Username</label>
             <input type="text" id="loginUsername" placeholder="username kamu" autocomplete="username" autocapitalize="off" required>
           </div>
-          <div class="outline-field">
+          <div class="outline-field has-toggle">
             <label for="loginPassword">Password</label>
             <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password" required>
+            <button type="button" class="pw-toggle" data-target="loginPassword" aria-label="Tampilkan password">
+              <svg class="icon-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg class="icon-eye-off hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 19c-6.5 0-10-7-10-7a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c6.5 0 10 7 10 7a18.5 18.5 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><path d="m1 1 22 22"/></svg>
+            </button>
           </div>
 
           <p class="auth-error" id="loginError"></p>
@@ -63,13 +68,21 @@
             <label for="regEmail">Email</label>
             <input type="email" id="regEmail" placeholder="name@example.com" autocomplete="email" required>
           </div>
-          <div class="outline-field">
+          <div class="outline-field has-toggle">
             <label for="regPassword">Password</label>
             <input type="password" id="regPassword" placeholder="minimal 6 karakter" autocomplete="new-password" required>
+            <button type="button" class="pw-toggle" data-target="regPassword" aria-label="Tampilkan password">
+              <svg class="icon-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg class="icon-eye-off hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 19c-6.5 0-10-7-10-7a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c6.5 0 10 7 10 7a18.5 18.5 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><path d="m1 1 22 22"/></svg>
+            </button>
           </div>
-          <div class="outline-field">
+          <div class="outline-field has-toggle">
             <label for="regConfirmPassword">Konfirmasi password</label>
             <input type="password" id="regConfirmPassword" placeholder="ulangi password" autocomplete="new-password" required>
+            <button type="button" class="pw-toggle" data-target="regConfirmPassword" aria-label="Tampilkan password">
+              <svg class="icon-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg class="icon-eye-off hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 19c-6.5 0-10-7-10-7a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c6.5 0 10 7 10 7a18.5 18.5 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><path d="m1 1 22 22"/></svg>
+            </button>
           </div>
           <div class="outline-field">
             <label for="regPhone">Nomor WhatsApp</label>
@@ -111,10 +124,33 @@
         admin
       </button>
       <div class="side-foot">
-        <button class="side-link" id="themeBtn" data-theme-toggle type="button" aria-pressed="false">
-          <div class="switch" style="width:40px;height:22px;flex-shrink:0"></div>
-          <span data-theme-label>Dark</span>
-        </button>
+        <div class="side-theme">
+          <label class="theme-switch" data-theme-toggle aria-label="Toggle dark mode">
+          <input type="checkbox" data-theme-input />
+          <div class="slider round">
+            <div class="sun-moon">
+              <svg class="moon-dot md1" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+              <svg class="moon-dot md2" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+              <svg class="moon-dot md3" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+              <svg class="light-ray lr1" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+              <svg class="light-ray lr2" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+              <svg class="light-ray lr3" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+              <svg class="cloud-dark c1" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+              <svg class="cloud-dark c2" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+              <svg class="cloud-dark c3" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+              <svg class="cloud-light c4" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+              <svg class="cloud-light c5" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+              <svg class="cloud-light c6" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50"></circle></svg>
+            </div>
+            <div class="stars">
+              <svg class="star s1" viewBox="0 0 20 20"><path d="M 0 10 C 10 10,10 10 ,0 10 C 10 10 , 10 10 , 10 20 C 10 10 , 10 10 , 20 10 C 10 10 , 10 10 , 10 0 C 10 10,10 10 ,0 10 Z"></path></svg>
+              <svg class="star s2" viewBox="0 0 20 20"><path d="M 0 10 C 10 10,10 10 ,0 10 C 10 10 , 10 10 , 10 20 C 10 10 , 10 10 , 20 10 C 10 10 , 10 10 , 10 0 C 10 10,10 10 ,0 10 Z"></path></svg>
+              <svg class="star s3" viewBox="0 0 20 20"><path d="M 0 10 C 10 10,10 10 ,0 10 C 10 10 , 10 10 , 10 20 C 10 10 , 10 10 , 20 10 C 10 10 , 10 10 , 10 0 C 10 10,10 10 ,0 10 Z"></path></svg>
+              <svg class="star s4" viewBox="0 0 20 20"><path d="M 0 10 C 10 10,10 10 ,0 10 C 10 10 , 10 10 , 10 20 C 10 10 , 10 10 , 20 10 C 10 10 , 10 10 , 10 0 C 10 10,10 10 ,0 10 Z"></path></svg>
+            </div>
+          </div>
+        </label>
+        </div>
         <button class="side-link" id="logoutBtn" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
           keluar

@@ -7,15 +7,11 @@
 
   function updateToggleButtons() {
     const isDark = currentTheme() === 'dark';
-    document.querySelectorAll('[data-theme-toggle]').forEach((btn) => {
-      const sw = btn.querySelector('.switch');
-      if (sw) {
-        sw.classList.toggle('on', isDark);
-        sw.setAttribute('aria-checked', String(isDark));
-      }
-      const label = btn.querySelector('[data-theme-label]');
-      if (label) label.textContent = 'Dark';
-      btn.setAttribute('aria-pressed', String(isDark));
+    document.querySelectorAll('[data-theme-input]').forEach((input) => {
+      input.checked = isDark;
+    });
+    document.querySelectorAll('[data-theme-toggle]').forEach((el) => {
+      el.setAttribute('aria-pressed', String(isDark));
     });
   }
 
@@ -36,8 +32,10 @@
 
   document.addEventListener('DOMContentLoaded', function () {
     updateToggleButtons();
-    document.querySelectorAll('[data-theme-toggle]').forEach((btn) => {
-      btn.addEventListener('click', toggle);
+    document.querySelectorAll('[data-theme-input]').forEach((input) => {
+      input.addEventListener('change', function () {
+        apply(input.checked ? 'dark' : 'light');
+      });
     });
   });
 

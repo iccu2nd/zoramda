@@ -64,11 +64,17 @@
     $('#loginView').classList.remove('hidden');
     $('#appView').classList.add('hidden');
     stopPoll();
+    if (location.pathname.startsWith('/dash')) {
+      try { history.replaceState(null, '', '/login'); } catch (_) {}
+    }
   }
 
   function showApp() {
     $('#loginView').classList.add('hidden');
     $('#appView').classList.remove('hidden');
+    if (location.pathname === '/login' || location.pathname === '/') {
+      try { history.replaceState(null, '', '/dash'); } catch (_) {}
+    }
     loadSessions();
     startPoll();
   }
@@ -80,6 +86,22 @@
     $('#loginError') && ($('#loginError').textContent = '');
     $('#registerError') && ($('#registerError').textContent = '');
   }
+
+
+  // password visibility toggles
+  document.querySelectorAll('.pw-toggle').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.target;
+      const input = document.getElementById(id);
+      if (!input) return;
+      const show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      btn.classList.toggle('is-on', show);
+      btn.querySelector('.icon-eye')?.classList.toggle('hidden', show);
+      btn.querySelector('.icon-eye-off')?.classList.toggle('hidden', !show);
+      btn.setAttribute('aria-label', show ? 'Sembunyikan password' : 'Tampilkan password');
+    });
+  });
 
   $('#showRegister')?.addEventListener('click', () => showAuthForm('register'));
   $('#showLogin')?.addEventListener('click', () => showAuthForm('login'));

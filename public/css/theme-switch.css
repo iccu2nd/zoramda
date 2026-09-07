@@ -1,0 +1,133 @@
+/* Theme switch — Uiverse.io by RiccardoRapelli (scoped) */
+.theme-switch {
+  position: relative;
+  display: inline-block;
+  width: 60px;
+  height: 34px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.theme-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+.theme-switch .slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #2196f3;
+  transition: 0.4s;
+  z-index: 0;
+  overflow: hidden;
+}
+.theme-switch .sun-moon {
+  position: absolute;
+  height: 26px;
+  width: 26px;
+  left: 4px;
+  bottom: 4px;
+  background-color: yellow;
+  transition: 0.4s;
+}
+.theme-switch input:checked + .slider {
+  background-color: #111;
+}
+.theme-switch input:focus + .slider {
+  box-shadow: 0 0 1px #2196f3;
+}
+.theme-switch input:checked + .slider .sun-moon {
+  transform: translateX(26px);
+  background-color: #fff;
+  animation: theme-rotate-center 0.6s ease-in-out both;
+}
+.theme-switch .moon-dot {
+  opacity: 0;
+  transition: 0.4s;
+  fill: gray;
+}
+.theme-switch input:checked + .slider .sun-moon .moon-dot {
+  opacity: 1;
+}
+.theme-switch .slider.round {
+  border-radius: 34px;
+}
+.theme-switch .slider.round .sun-moon {
+  border-radius: 50%;
+}
+.theme-switch .moon-dot {
+  position: absolute;
+  z-index: 4;
+}
+.theme-switch .moon-dot.md1 { left: 10px; top: 3px; width: 6px; height: 6px; }
+.theme-switch .moon-dot.md2 { left: 2px; top: 10px; width: 10px; height: 10px; }
+.theme-switch .moon-dot.md3 { left: 16px; top: 18px; width: 3px; height: 3px; }
+
+.theme-switch .light-ray {
+  position: absolute;
+  z-index: -1;
+  fill: white;
+  opacity: 0.1;
+}
+.theme-switch .light-ray.lr1 { left: -8px; top: -8px; width: 43px; height: 43px; }
+.theme-switch .light-ray.lr2 { left: -50%; top: -50%; width: 55px; height: 55px; }
+.theme-switch .light-ray.lr3 { left: -18px; top: -18px; width: 60px; height: 60px; }
+
+.theme-switch .cloud-light {
+  position: absolute;
+  fill: #eee;
+  animation: theme-cloud-move 6s infinite;
+}
+.theme-switch .cloud-dark {
+  position: absolute;
+  fill: #ccc;
+  animation: theme-cloud-move 6s infinite 1s;
+}
+.theme-switch .c1 { left: 30px; top: 15px; width: 40px; }
+.theme-switch .c2 { left: 44px; top: 10px; width: 20px; }
+.theme-switch .c3 { left: 18px; top: 24px; width: 30px; }
+.theme-switch .c4 { left: 36px; top: 18px; width: 40px; }
+.theme-switch .c5 { left: 48px; top: 14px; width: 20px; }
+.theme-switch .c6 { left: 22px; top: 26px; width: 30px; }
+
+@keyframes theme-cloud-move {
+  0% { transform: translateX(0); }
+  40% { transform: translateX(4px); }
+  80% { transform: translateX(-4px); }
+  100% { transform: translateX(0); }
+}
+@keyframes theme-rotate-center {
+  0% { transform: translateX(26px) rotate(0); }
+  100% { transform: translateX(26px) rotate(360deg); }
+}
+
+.theme-switch .stars {
+  transform: translateY(-32px);
+  opacity: 0;
+  transition: 0.4s;
+}
+.theme-switch .star {
+  fill: white;
+  position: absolute;
+  transition: 0.4s;
+  animation: theme-star-twinkle 2s infinite;
+}
+.theme-switch input:checked + .slider .stars {
+  transform: translateY(0);
+  opacity: 1;
+}
+.theme-switch .star.s1 { width: 20px; top: 2px; left: 3px; animation-delay: 0.3s; }
+.theme-switch .star.s2 { width: 6px; top: 16px; left: 3px; }
+.theme-switch .star.s3 { width: 12px; top: 20px; left: 10px; animation-delay: 0.6s; }
+.theme-switch .star.s4 { width: 18px; top: 0; left: 18px; animation-delay: 1.3s; }
+
+@keyframes theme-star-twinkle {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.2); }
+  80% { transform: scale(0.8); }
+  100% { transform: scale(1); }
+}
