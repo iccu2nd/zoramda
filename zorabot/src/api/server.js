@@ -26,8 +26,11 @@ export function createServer(sessionManager) {
   // Static UI
   app.use(express.static(publicDir, { index: false, maxAge: config.isProd ? '1h' : 0 }))
   app.get('/', (req, res) => res.sendFile(join(publicDir, 'index.html')))
-  app.get('/app', (req, res) => res.sendFile(join(publicDir, 'app.html')))
-  app.get(/^\/app(\/.*)?$/, (req, res) => res.sendFile(join(publicDir, 'app.html')))
+  // legacy /app → /dash
+  app.get('/app', (req, res) => res.redirect(301, '/dash'))
+  app.get(/^\/app(\/.*)?$/, (req, res) => res.redirect(301, '/dash'))
+  app.get('/dash', (req, res) => res.sendFile(join(publicDir, 'app.html')))
+  app.get(/^\/dash(\/.*)?$/, (req, res) => res.sendFile(join(publicDir, 'app.html')))
 
   // Request logging (lightweight)
   app.use((req, res, next) => {
