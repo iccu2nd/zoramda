@@ -15,36 +15,35 @@ export default function createPluginRoutes(sessionManager) {
 
   router.use(authenticate)
 
-  // List all loaded plugins with their editable responses (defaults + user overrides)
+  // List every loaded plugin (all commands found under /plugins), each with
+  // its editable responses (defaults + this user's overrides) if any exist.
   router.get('/', async (req, res) => {
     try {
       const plugins = sessionManager.pluginLoader.getAllPlugins()
       const userId = req.user.userId
-      const out = plugins
-        .map((p) => {
-          const defaults = p.handler.responses || {}
-          const keys = Object.keys(defaults)
-          if (keys.length === 0) return null // nothing editable
-          const command = p.commands[0]
-          const overrides = configService.getPluginResponses(userId, command)
-          const responses = {}
-          for (const key of keys) {
-            responses[key] = {
-              default: defaults[key],
-              value: overrides[key] !== undefined ? overrides[key] : defaults[key],
-              overridden: overrides[key] !== undefined,
-            }
+      const out = plugins.map((p) => {
+        const defaults = p.handler.responses || {}
+        const keys = Object.keys(defaults)
+        const command = p.commands[0]
+        const overrides = keys.length ? configService.getPluginResponses(userId, command) : {}
+        const responses = {}
+        for (const key of keys) {
+          responses[key] = {
+            default: defaults[key],
+            value: overrides[key] !== undefined ? overrides[key] : defaults[key],
+            overridden: overrides[key] !== undefined,
           }
-          return {
-            command,
-            commands: p.commands,
-            help: p.help,
-            tags: p.tags,
-            file: p.file,
-            responses,
-          }
-        })
-        .filter(Boolean)
+        }
+        return {
+          command,
+          commands: p.commands,
+          help: p.help,
+          tags: p.tags,
+          file: p.file,
+          editable: keys.length > 0,
+          responses,
+        }
+      })
 
       res.json({ plugins: out })
     } catch (err) {

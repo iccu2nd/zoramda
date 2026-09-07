@@ -479,14 +479,14 @@
     }
   });
 
-  /* ——— plugins (edit teks balasan bot) ——— */
+  /* ——— plugins (semua command yang ke-load dari folder /plugins) ——— */
   async function loadPlugins() {
     const box = $('#pluginList');
     box.innerHTML = '<p style="color:var(--muted);font-weight:500">memuat...</p>';
     try {
       const { plugins } = await API.plugins();
       if (!plugins?.length) {
-        box.innerHTML = `<div class="empty">tidak ada respons plugin yang bisa diedit.</div>`;
+        box.innerHTML = `<div class="empty">belum ada plugin ter-load.</div>`;
         return;
       }
       box.innerHTML = plugins
@@ -495,30 +495,38 @@
         <div class="card plugin-card" data-command="${escapeAttr(p.command)}" style="padding:1.1rem;margin-bottom:1rem">
           <div class="plugin-head">
             <div>
-              <div class="plugin-name">.${escapeHtml(p.command)}</div>
+              <div class="plugin-name">.${escapeHtml((p.commands || [p.command]).join(' / .'))}</div>
               <div class="plugin-tags">${(p.tags || []).map(escapeHtml).join(', ')}</div>
             </div>
           </div>
-          ${Object.entries(p.responses)
-            .map(
-              ([key, r]) => `
+          ${
+            p.editable
+              ? Object.entries(p.responses)
+                  .map(
+                    ([key, r]) => `
             <div class="field">
               <label>${escapeHtml(key)}${r.overridden ? ' <span class="chip-mini">custom</span>' : ''}</label>
               <textarea data-resp-key="${escapeAttr(key)}">${escapeHtml(r.value)}</textarea>
             </div>`
-            )
-            .join('')}
-          <div class="toolbar" style="margin-top:0.25rem">
+                  )
+                  .join('')
+              : `<p class="hint">tidak ada teks balasan yang bisa diedit untuk command ini.</p>`
+          }
+          ${
+            p.editable
+              ? `<div class="toolbar" style="margin-top:0.25rem">
             <button class="btn btn-sm" data-act="savePlugin" type="button">simpan</button>
             <button class="btn btn-sm btn-ghost" data-act="resetPlugin" type="button">reset ke default</button>
-          </div>
+          </div>`
+              : ''
+          }
         </div>`
         )
         .join('');
 
       box.querySelectorAll('.plugin-card').forEach((card) => {
         const command = card.dataset.command;
-        card.querySelector('[data-act="savePlugin"]').addEventListener('click', async () => {
+        card.querySelector('[data-act="savePlugin"]')?.addEventListener('click', async () => {
           const body = {};
           card.querySelectorAll('[data-resp-key]').forEach((el) => {
             body[el.dataset.respKey] = el.value;
@@ -531,7 +539,7 @@
             toast(e.message || 'gagal simpan');
           }
         });
-        card.querySelector('[data-act="resetPlugin"]').addEventListener('click', async () => {
+        card.querySelector('[data-act="resetPlugin"]')?.addEventListener('click', async () => {
           const body = {};
           card.querySelectorAll('[data-resp-key]').forEach((el) => {
             body[el.dataset.respKey] = ''; // empty string resets to default
