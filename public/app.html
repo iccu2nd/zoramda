@@ -124,6 +124,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
         pricing
       </button>
+      <button class="side-link hidden" data-page="payment" type="button" id="navPayment">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg>
+        payment
+      </button>
       <button class="side-link" data-page="account" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>
         akun
@@ -185,7 +189,8 @@
       <!-- sessions page -->
       <section id="page-sessions">
         <h1 class="page-title">sessions</h1>
-        <p class="page-sub">Manage WhatsApp connections and session status</p>
+        <p class="page-sub">Kelola koneksi WhatsApp dan status akun</p>
+        <div id="dashOverview" class="dash-overview"></div>
         <div class="toolbar">
           <button class="btn btn-sm" id="refreshSessions" type="button">refresh</button>
           <div class="spacer"></div>
@@ -198,6 +203,7 @@
       <section id="page-config" class="hidden">
         <h1 class="page-title">config</h1>
         <p class="page-sub">Per-session bot settings. Changes apply immediately and stay isolated.</p>
+        <div id="configLocked" class="feature-lock hidden"></div>
         <div class="card" id="configForm" style="padding:1.25rem"></div>
         <div class="toolbar" style="margin-top:1rem">
           <button class="btn" id="saveConfigBtn" type="button">simpan</button>
@@ -208,6 +214,7 @@
       <section id="page-plugins" class="hidden">
         <h1 class="page-title">plugins</h1>
         <p class="page-sub">Enable plugins, permissions, custom commands, and responses per session</p>
+        <div id="pluginsLocked" class="feature-lock hidden"></div>
         <div id="pluginList"></div>
       </section>
 
@@ -220,11 +227,17 @@
 
       <section id="page-pricing" class="hidden">
         <h1 class="page-title">pricing</h1>
-        <p class="page-sub">Pilih paket, bayar QRIS, lalu cek status pembayaran</p>
+        <p class="page-sub">Pilih paket yang sesuai. Bayar hanya lewat QRIS.</p>
         <div id="pricingRoot"></div>
       </section>
 
-      <section id="page-account" class="hidden">
+      <section id="page-payment" class="hidden">
+        <h1 class="page-title">payment</h1>
+        <p class="page-sub">Selesaikan pembayaran QRIS, lalu cek status secara manual</p>
+        <div id="paymentRoot"></div>
+      </section>
+
+<section id="page-account" class="hidden">
         <h1 class="page-title">akun</h1>
         <p class="page-sub">Account details and API key for programmatic access</p>
         <div class="card" id="accountBox" style="padding:1.25rem"></div>

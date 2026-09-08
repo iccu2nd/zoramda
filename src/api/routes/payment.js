@@ -1,9 +1,9 @@
 import { Router } from 'express'
-import { v4 as uuidv4 } from 'uuid'
 import { authenticate } from '../middleware/auth.js'
 import User from '../../db/models/User.js'
 import Payment from '../../db/models/Payment.js'
-import { publicPlans, getPlan } from '../../config/plans.js'
+import Session from '../../db/models/Session.js'
+import { publicPlans, getPlan, QRIS_TTL_MS, resolveEffectivePlan } from '../../config/plans.js'
 import { createQrisPayment, checkPaymentStatus } from '../../services/sociabuzz.js'
 import logger from '../../utils/logger.js'
 
@@ -30,12 +30,10 @@ function publicPayment(doc) {
 async function applyPlanToUser(userId, planId) {
   const plan = getPlan(planId)
   if (!plan || planId === 'free') return null
-
   const expires = plan.durationDays
     ? new Date(Date.now() + plan.durationDays * 24 * 60 * 60 * 1000)
     : null
-
-  const user = await User.findOneAndUpdate(
+  return User.findOneAndUpdate(
     { userId },
     {
       $set: {
@@ -46,35 +44,46 @@ async function applyPlanToUser(userId, planId) {
     },
     { new: true }
   )
-  return user
 }
 
-/** GET /api/payment/plans */
 router.get('/plans', authenticate, (req, res) => {
   res.json({ plans: publicPlans() })
 })
 
-/** GET /api/payment/me — current plan summary */
 router.get('/me', authenticate, async (req, res) => {
   try {
     const user = await User.findOne({ userId: req.user.userId }).lean()
     if (!user) return res.status(404).json({ error: 'User not found' })
-    const plan = getPlan(user.plan) || getPlan('free')
+    const effective = resolveEffectivePlan(user)
+    const lastTrx = await Payment.findOne({ userId: user.userId })
+      .sort({ createdAt: -1 })
+      .lean()
+    const sessions = await Session.countDocuments({ userId: user.userId, isActive: true })
+    const connected = await Session.countDocuments({
+      userId: user.userId,
+      isActive: true,
+      status: 'CONNECTED',
+    })
     res.json({
-      plan: user.plan || 'free',
+      plan: effective.id,
+      planName: effective.name,
       planExpiresAt: user.planExpiresAt || null,
-      maxSessions: user.maxSessions ?? plan.maxSessions,
+      maxSessions: req.user.maxSessions ?? effective.maxSessions,
+      features: effective.features,
       role: user.role,
+      sessionCount: sessions,
+      connectedCount: connected,
+      lastPayment: publicPayment(lastTrx),
     })
   } catch (err) {
+    logger.error({ err: err.message }, 'payment/me error')
     res.status(500).json({ error: 'Gagal memuat paket' })
   }
 })
 
 /**
- * POST /api/payment/checkout
- * Body: { plan: 'pro' | 'business' }
- * Creates Sociabuzz QRIS transaction (server-side only).
+ * POST /api/payment/checkout { plan }
+ * QRIS only. expiredAt fixed = now + 1h (backend).
  */
 router.post('/checkout', authenticate, async (req, res) => {
   try {
@@ -84,15 +93,13 @@ router.post('/checkout', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'Paket tidak valid. Pilih Pro atau Business.' })
     }
 
-    // Block if already on same or higher paid plan that is not expired
     const user = await User.findOne({ userId: req.user.userId })
     if (!user) return res.status(404).json({ error: 'User not found' })
-
     if (user.role === 'admin') {
       return res.status(400).json({ error: 'Akun admin tidak perlu upgrade paket.' })
     }
 
-    // Cancel previous pending txs for this user (soft)
+    // one pending at a time
     await Payment.updateMany(
       { userId: user.userId, status: 'pending' },
       { $set: { status: 'expired' } }
@@ -112,6 +119,7 @@ router.post('/checkout', authenticate, async (req, res) => {
       })
     }
 
+    const expiredAt = new Date(Date.now() + QRIS_TTL_MS)
     const trxId = `TRX-${Date.now()}${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`
 
     const payment = await Payment.create({
@@ -128,7 +136,7 @@ router.post('/checkout', authenticate, async (req, res) => {
       pendingUrl: gateway.pendingUrl,
       qrString: gateway.qrString,
       paymentUrl: gateway.paymentUrl,
-      expiredAt: gateway.expiredAt,
+      expiredAt,
       raw: gateway.raw,
     })
 
@@ -139,9 +147,6 @@ router.post('/checkout', authenticate, async (req, res) => {
   }
 })
 
-/**
- * GET /api/payment/:trxId
- */
 router.get('/:trxId', authenticate, async (req, res) => {
   try {
     const payment = await Payment.findOne({
@@ -156,9 +161,7 @@ router.get('/:trxId', authenticate, async (req, res) => {
 })
 
 /**
- * POST /api/payment/:trxId/check
- * Manual status check only — no background polling.
- * On success, applies plan to user exactly once.
+ * POST /api/payment/:trxId/check — manual only
  */
 router.post('/:trxId/check', authenticate, async (req, res) => {
   try {
@@ -168,7 +171,6 @@ router.post('/:trxId/check', authenticate, async (req, res) => {
     })
     if (!payment) return res.status(404).json({ error: 'Transaksi tidak ditemukan' })
 
-    // Already applied
     if (payment.status === 'paid' && payment.applied) {
       return res.json({
         payment: publicPayment(payment),
@@ -176,7 +178,6 @@ router.post('/:trxId/check', authenticate, async (req, res) => {
       })
     }
 
-    // Local expiry
     if (
       payment.status === 'pending' &&
       payment.expiredAt &&
@@ -201,7 +202,7 @@ router.post('/:trxId/check', authenticate, async (req, res) => {
     }
 
     if (!payment.pendingUrl) {
-      return res.status(400).json({ error: 'URL status tidak tersedia untuk transaksi ini' })
+      return res.status(400).json({ error: 'URL status tidak tersedia' })
     }
 
     let result
@@ -226,7 +227,6 @@ router.post('/:trxId/check', authenticate, async (req, res) => {
 
     if (mapped === 'paid' && !payment.applied) {
       payment.paidAt = new Date()
-      // Apply plan only after gateway confirms success
       const user = await applyPlanToUser(payment.userId, payment.plan)
       if (user) {
         payment.applied = true
@@ -240,11 +240,11 @@ router.post('/:trxId/check', authenticate, async (req, res) => {
     await payment.save()
 
     const messages = {
-      pending: 'Menunggu pembayaran. Scan QRIS lalu cek status lagi.',
+      pending: 'Pembayaran belum masuk. Scan QRIS lalu cek lagi.',
       paid: 'Pembayaran berhasil. Paket sudah diaktifkan.',
       expired: 'Transaksi kedaluwarsa. Buat pembayaran baru.',
       failed: 'Pembayaran gagal atau tidak ditemukan.',
-      unknown: 'Status belum jelas. Coba cek lagi sebentar.',
+      unknown: 'Status belum jelas. Coba lagi sebentar.',
     }
 
     res.json({
@@ -257,7 +257,6 @@ router.post('/:trxId/check', authenticate, async (req, res) => {
   }
 })
 
-/** Recent payments for current user */
 router.get('/', authenticate, async (req, res) => {
   try {
     const list = await Payment.find({ userId: req.user.userId })

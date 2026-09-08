@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { authenticate } from '../middleware/auth.js'
+import { authenticate, requireFeature } from '../middleware/auth.js'
 import configService, { EDITABLE_FIELDS } from '../../core/ConfigService.js'
 import logger from '../../utils/logger.js'
 
@@ -12,6 +12,7 @@ export default function createConfigRoutes(sessionManager) {
   const router = Router()
 
   router.use(authenticate)
+  router.use(requireFeature('botSettings'))
 
   async function assertSession(req, sessionId) {
     await sessionManager.assertOwnership(sessionId, req.user.userId, req.user.isAdmin)

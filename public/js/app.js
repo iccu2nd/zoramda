@@ -1,7 +1,7 @@
 (function () {
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-  const PAGES = ['sessions', 'config', 'plugins', 'admin', 'account', 'pricing'];
+  const PAGES = ['sessions', 'config', 'plugins', 'admin', 'account', 'pricing', 'payment'];
 
   let currentUser = null;
   let pollTimer = null;
@@ -225,7 +225,10 @@
     if (page === 'sessions') loadSessions();
     if (page === 'plugins') loadPlugins();
     if (page === 'account') loadAccount();
+    if (page === 'config' || page === 'plugins') applyBotSettingsGate();
     if (page === 'pricing') loadPricing();
+    if (page === 'payment') loadPaymentPage();
+    if (page === 'sessions') refreshDashOverview();
     if (page === 'admin') loadAdmin();
   }
 
@@ -608,6 +611,8 @@
   }
 
   async function loadConfig() {
+    if (!userHasBotSettings()) { applyBotSettingsGate(); return; }
+
     const box = $('#configForm');
     box.innerHTML = '<p style="color:var(--muted);font-weight:500">Loading…</p>';
     try {
@@ -772,6 +777,8 @@
 
   /* ——— plugins (toggle + permission per-session) ——— */
   async function loadPlugins() {
+    if (!userHasBotSettings()) { applyBotSettingsGate(); return; }
+
     const box = $('#pluginList');
     box.innerHTML = '<p style="color:var(--muted);font-weight:500">Loading…</p>';
     try {
@@ -998,58 +1005,176 @@
   }
 
 
-  /* ——— pricing / payment (QRIS via Sociabuzz, manual status check) ——— */
-  let activeCheckoutTrx = null;
+
+  /* ——— plan access, pricing, payment ——— */
+  let activeCheckoutTrxId = null;
+  let payCountdownTimer = null;
+
+  function userHasBotSettings() {
+    if (!currentUser) return false;
+    if (currentUser.isAdmin || currentUser.role === 'admin') return true;
+    const f = currentUser.features;
+    if (f && typeof f.botSettings === 'boolean') return f.botSettings;
+    const plan = (currentUser.plan || 'free').toLowerCase();
+    return plan === 'pro' || plan === 'business';
+  }
 
   function formatRp(n) {
     return 'Rp' + Number(n || 0).toLocaleString('id-ID');
   }
 
+  function formatWib(iso) {
+    if (!iso) return '-';
+    try {
+      return new Date(iso).toLocaleString('id-ID', {
+        timeZone: 'Asia/Jakarta',
+        hour: '2-digit',
+        minute: '2-digit',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      }) + ' WIB';
+    } catch {
+      return String(iso);
+    }
+  }
+
   function statusLabel(s) {
     const map = {
       pending: 'Pending',
-      paid: 'Berhasil',
+      paid: 'Success',
       expired: 'Expired',
-      failed: 'Gagal',
-      unknown: 'Tidak diketahui',
+      failed: 'Failed',
+      unknown: 'Unknown',
     };
     return map[s] || s || '-';
   }
 
-  function statusClass(s) {
-    if (s === 'paid') return 'pay-status ok';
-    if (s === 'pending') return 'pay-status wait';
-    if (s === 'expired' || s === 'failed') return 'pay-status bad';
-    return 'pay-status';
+  function payStatusIcon(s) {
+    if (s === 'paid') {
+      return `<span class="pay-anim ok" aria-hidden="true">
+        <svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" fill="none"/><path fill="none" d="M14 27l8 8 16-16"/></svg>
+      </span>`;
+    }
+    if (s === 'pending') {
+      return `<span class="pay-anim wait" aria-hidden="true">
+        <svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" fill="none"/><path fill="none" d="M16 16l20 20M36 16L16 36"/></svg>
+      </span>`;
+    }
+    return `<span class="pay-anim bad" aria-hidden="true">
+      <svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" fill="none"/><path fill="none" d="M16 16l20 20M36 16L16 36"/></svg>
+    </span>`;
+  }
+
+  function renderFeatureLock(el) {
+    if (!el) return;
+    el.classList.remove('hidden');
+    el.innerHTML = `
+      <div class="lock-card">
+        <div class="lock-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+        </div>
+        <h3>Bot Settings terkunci</h3>
+        <p>Upgrade ke Pro untuk mengakses pengaturan bot.</p>
+        <button type="button" class="btn" id="lockUpgradeBtn">Upgrade ke Pro</button>
+      </div>`;
+    $('#lockUpgradeBtn')?.addEventListener('click', () => showPage('pricing'));
+  }
+
+  function applyBotSettingsGate() {
+    const locked = !userHasBotSettings();
+    const configForm = $('#configForm');
+    const pluginsList = $('#pluginsList');
+    const configLocked = $('#configLocked');
+    const pluginsLocked = $('#pluginsLocked');
+
+    if (locked) {
+      if (configForm) configForm.classList.add('hidden');
+      if (pluginsList) pluginsList.classList.add('hidden');
+      renderFeatureLock(configLocked);
+      renderFeatureLock(pluginsLocked);
+    } else {
+      if (configForm) configForm.classList.remove('hidden');
+      if (pluginsList) pluginsList.classList.remove('hidden');
+      configLocked?.classList.add('hidden');
+      pluginsLocked?.classList.add('hidden');
+    }
+  }
+
+  async function syncPlanFromServer() {
+    try {
+      const me = await API.paymentMe();
+      if (!currentUser) currentUser = {};
+      currentUser.plan = me.plan;
+      currentUser.planExpiresAt = me.planExpiresAt;
+      currentUser.maxSessions = me.maxSessions;
+      currentUser.features = me.features || {};
+      currentUser._planMeta = me;
+      applyBotSettingsGate();
+      return me;
+    } catch {
+      applyBotSettingsGate();
+      return null;
+    }
+  }
+
+  async function refreshDashOverview() {
+    const root = $('#dashOverview');
+    if (!root) return;
+    const me = await syncPlanFromServer();
+    const plan = (me?.plan || currentUser?.plan || 'free').toUpperCase();
+    const exp = me?.planExpiresAt || currentUser?.planExpiresAt;
+    const last = me?.lastPayment;
+    root.innerHTML = `
+      <div class="ov-grid">
+        <div class="ov-card">
+          <div class="ov-label">Plan saat ini</div>
+          <div class="ov-value">${escapeHtml(plan)}</div>
+        </div>
+        <div class="ov-card">
+          <div class="ov-label">Status akun</div>
+          <div class="ov-value">${currentUser?.isAdmin ? 'Admin' : 'Aktif'}</div>
+        </div>
+        <div class="ov-card">
+          <div class="ov-label">Status bot</div>
+          <div class="ov-value">${me?.connectedCount ?? 0} / ${me?.sessionCount ?? 0} connected</div>
+        </div>
+        <div class="ov-card">
+          <div class="ov-label">Masa berlaku</div>
+          <div class="ov-value">${exp ? formatWib(exp) : (plan === 'FREE' ? '—' : '—')}</div>
+        </div>
+        <div class="ov-card">
+          <div class="ov-label">Transaksi terakhir</div>
+          <div class="ov-value">${last ? escapeHtml(statusLabel(last.status)) + ' · ' + escapeHtml(last.trxId || '') : 'Belum ada'}</div>
+        </div>
+        <div class="ov-card ov-cta">
+          <div class="ov-label">Upgrade</div>
+          <button type="button" class="btn btn-sm" id="ovUpgradeBtn">Lihat Pricing</button>
+        </div>
+      </div>`;
+    $('#ovUpgradeBtn')?.addEventListener('click', () => showPage('pricing'));
   }
 
   async function loadPricing() {
     const root = $('#pricingRoot');
     if (!root) return;
-    root.innerHTML = '<p style="color:var(--muted);font-weight:500">Memuat paket…</p>';
+    root.innerHTML = '<p class="hint">Memuat paket…</p>';
     try {
-      const [plansRes, meRes] = await Promise.all([API.paymentPlans(), API.paymentMe()]);
+      const [plansRes, me] = await Promise.all([API.paymentPlans(), syncPlanFromServer()]);
       const plans = plansRes.plans || [];
-      const me = meRes || {};
-      if (currentUser) {
-        currentUser.plan = me.plan || currentUser.plan;
-        currentUser.maxSessions = me.maxSessions;
-        currentUser.planExpiresAt = me.planExpiresAt;
-      }
+      const cur = (me?.plan || 'free').toLowerCase();
 
       let html = `<div class="pay-current">
-        <div><strong>Paket aktif:</strong> ${(me.plan || 'free').toUpperCase()}</div>
-        <div class="hint">Maks session: ${me.maxSessions ?? 1}${
-          me.planExpiresAt
-            ? ' · berakhir ' + new Date(me.planExpiresAt).toLocaleDateString('id-ID')
-            : ''
-        }</div>
+        <strong>Paket aktif:</strong> ${escapeHtml((me?.plan || 'free').toUpperCase())}
+        <span class="hint"> · maks ${me?.maxSessions ?? 1} session${
+          me?.planExpiresAt ? ' · berlaku s/d ' + formatWib(me.planExpiresAt) : ''
+        }</span>
       </div>
       <div class="pricing-grid dash-pricing">`;
 
       for (const p of plans) {
-        const isCurrent = (me.plan || 'free') === p.id;
-        const canBuy = p.amount > 0 && !isCurrent;
+        const isCurrent = cur === p.id;
+        const canBuy = p.amount > 0;
         html += `<div class="price-card ${isCurrent ? 'featured' : ''}">
           ${isCurrent ? '<div class="price-badge">aktif</div>' : ''}
           <div class="price-tier">${escapeHtml(p.name)}</div>
@@ -1057,108 +1182,182 @@
             p.amount > 0 ? '/bulan' : ''
           }</span></div>
           <ul class="price-features">
-            ${(p.features || []).map((f) => `<li>${escapeHtml(f)}</li>`).join('')}
-            <li>${p.maxSessions} session</li>
+            ${(p.featureList || p.features || [])
+              .map((f) => (typeof f === 'string' ? `<li>${escapeHtml(f)}</li>` : ''))
+              .join('')}
           </ul>
           ${
             canBuy
               ? `<button type="button" class="btn" style="width:100%;justify-content:center" data-buy="${escapeAttr(
                   p.id
-                )}">Beli — QRIS</button>`
-              : `<button type="button" class="btn btn-ghost" style="width:100%;justify-content:center" disabled>${
-                  isCurrent ? 'Paket aktif' : 'Gratis'
-                }</button>`
+                )}">${isCurrent ? 'Perpanjang' : 'Pilih paket'}</button>`
+              : `<button type="button" class="btn btn-ghost" style="width:100%;justify-content:center" disabled>Gratis</button>`
           }
         </div>`;
       }
-      html += `</div><div id="checkoutPanel" class="checkout-panel hidden"></div>`;
+      html += '</div>';
       root.innerHTML = html;
-
       root.querySelectorAll('[data-buy]').forEach((btn) => {
-        btn.addEventListener('click', () => startCheckout(btn.dataset.buy, btn));
+        btn.addEventListener('click', async () => {
+          btn.disabled = true;
+          btn.textContent = 'Menyiapkan…';
+          try {
+            const { payment } = await API.paymentCheckout(btn.dataset.buy);
+            activeCheckoutTrxId = payment.trxId;
+            try {
+              sessionStorage.setItem('zb_active_trx', payment.trxId);
+            } catch {}
+            showPage('payment');
+            toast('QRIS siap', 'success');
+          } catch (e) {
+            toast(e.message || 'Checkout gagal', 'error');
+          } finally {
+            btn.disabled = false;
+            btn.textContent = 'Pilih paket';
+          }
+        });
       });
-
-      if (activeCheckoutTrx) {
-        renderCheckoutPanel(activeCheckoutTrx);
-      }
     } catch (e) {
       root.innerHTML = `<p style="color:var(--red)">${escapeHtml(e.message)}</p>`;
     }
   }
 
-  async function startCheckout(planId, btn) {
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = 'Membuat QRIS…';
-    }
-    try {
-      const { payment } = await API.paymentCheckout(planId);
-      activeCheckoutTrx = payment;
-      renderCheckoutPanel(payment);
-      toast('QRIS siap — scan untuk bayar', 'success');
-    } catch (e) {
-      toast(e.message || 'Checkout gagal', 'error');
-    } finally {
-      if (btn) {
-        btn.disabled = false;
-        btn.textContent = 'Beli — QRIS';
-      }
+  function stopPayCountdown() {
+    if (payCountdownTimer) {
+      clearInterval(payCountdownTimer);
+      payCountdownTimer = null;
     }
   }
 
-  function renderCheckoutPanel(payment) {
-    const panel = $('#checkoutPanel');
-    if (!panel || !payment) return;
-    panel.classList.remove('hidden');
-    const qr = payment.qrString
-      ? `<img class="qris-img" alt="QRIS" src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
+  function startPayCountdown(expiredAt, el) {
+    stopPayCountdown();
+    if (!el || !expiredAt) return;
+    const end = new Date(expiredAt).getTime();
+    function tick() {
+      const left = end - Date.now();
+      if (left <= 0) {
+        el.textContent = 'Berakhir dalam 00:00';
+        stopPayCountdown();
+        return;
+      }
+      const m = Math.floor(left / 60000);
+      const s = Math.floor((left % 60000) / 1000);
+      el.textContent =
+        'Berakhir dalam ' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+    }
+    tick();
+    payCountdownTimer = setInterval(tick, 1000);
+  }
+
+  async function loadPaymentPage() {
+    const root = $('#paymentRoot');
+    if (!root) return;
+    let trxId = activeCheckoutTrxId;
+    try {
+      if (!trxId) trxId = sessionStorage.getItem('zb_active_trx');
+    } catch {}
+    if (!trxId) {
+      root.innerHTML = `
+        <div class="checkout-card">
+          <p>Belum ada transaksi aktif.</p>
+          <button type="button" class="btn" id="goPricingBtn">Pilih paket</button>
+        </div>`;
+      $('#goPricingBtn')?.addEventListener('click', () => showPage('pricing'));
+      return;
+    }
+    root.innerHTML = '<p class="hint">Memuat transaksi…</p>';
+    try {
+      const { payment } = await API.paymentGet(trxId);
+      activeCheckoutTrxId = payment.trxId;
+      renderPaymentPage(payment);
+    } catch (e) {
+      root.innerHTML = `<p style="color:var(--red)">${escapeHtml(e.message)}</p>
+        <button type="button" class="btn" id="goPricingBtn2">Pilih paket</button>`;
+      $('#goPricingBtn2')?.addEventListener('click', () => showPage('pricing'));
+    }
+  }
+
+  function renderPaymentPage(payment) {
+    const root = $('#paymentRoot');
+    if (!root || !payment) return;
+    const canPay = payment.status === 'pending';
+    const qrBlock = payment.qrString
+      ? `<div class="qris-wrap"><img class="qris-img" id="qrisImg" alt="QRIS" src="https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(
           payment.qrString
-        )}" />`
-      : `<p class="hint">Kode QR tidak tersedia. Coba checkout ulang.</p>`;
-    panel.innerHTML = `
-      <div class="checkout-card">
-        <h3>Pembayaran QRIS</h3>
-        <p class="hint">Order <code class="allow-select">${escapeHtml(payment.trxId)}</code> · ${escapeHtml(
-          (payment.plan || '').toUpperCase()
-        )} · ${formatRp(payment.totalAmount || payment.amount)}</p>
-        <div class="${statusClass(payment.status)}">${statusLabel(payment.status)}</div>
-        <div class="qris-wrap">${qr}</div>
-        ${
-          payment.qrString
-            ? `<p class="hint allow-select" style="word-break:break-all;font-size:0.75rem">${escapeHtml(
-                payment.qrString
-              )}</p>`
-            : ''
-        }
-        <p class="hint">Bayar dengan aplikasi e-wallet / mobile banking (QRIS). Setelah transfer, tekan tombol di bawah — status tidak dicek otomatis.</p>
-        <div class="toolbar" style="margin-top:0.75rem;gap:0.5rem;flex-wrap:wrap">
-          <button type="button" class="btn" id="checkPayBtn">Cek Status Pembayaran</button>
-          <button type="button" class="btn btn-ghost" id="closePayBtn">Tutup</button>
+        )}"/></div>
+         <div class="toolbar" style="justify-content:center;gap:0.5rem;margin-bottom:0.75rem">
+           <a class="btn btn-sm btn-ghost" id="dlQris" href="https://api.qrserver.com/v1/create-qr-code/?size=512x512&data=${encodeURIComponent(
+             payment.qrString
+           )}" download="qris-${escapeAttr(payment.trxId)}.png" target="_blank" rel="noopener">Download QRIS</a>
+         </div>`
+      : `<p class="hint">QRIS tidak tersedia. Buat pembayaran baru.</p>`;
+
+    root.innerHTML = `
+      <div class="checkout-card pay-page-card">
+        <div class="pay-status-row">
+          ${payStatusIcon(payment.status)}
+          <div>
+            <div class="pay-status-text">${statusLabel(payment.status)}</div>
+            <div class="hint">${escapeHtml((payment.plan || '').toUpperCase())} · ${formatRp(
+              payment.totalAmount || payment.amount
+            )}</div>
+          </div>
         </div>
-        <p class="hint" id="payMsg" style="margin-top:0.5rem"></p>
+        <div class="pay-meta">
+          <div><span class="hint">ID transaksi</span><br/><code class="allow-select">${escapeHtml(
+            payment.trxId
+          )}</code></div>
+          <div><span class="hint">Nominal</span><br/><strong>${formatRp(
+            payment.totalAmount || payment.amount
+          )}</strong></div>
+          <div><span class="hint">Expired</span><br/><strong>${formatWib(
+            payment.expiredAt
+          )}</strong></div>
+        </div>
+        ${canPay ? `<div class="pay-countdown" id="payCountdown">Berakhir dalam --:--</div>` : ''}
+        ${canPay ? qrBlock : ''}
+        <p class="hint">Pembayaran hanya QRIS. Status tidak dicek otomatis — tekan tombol di bawah setelah bayar.</p>
+        <div class="toolbar" style="gap:0.5rem;flex-wrap:wrap;margin-top:0.75rem">
+          ${
+            canPay
+              ? `<button type="button" class="btn" id="checkPayBtn">Cek Status Pembayaran</button>`
+              : ''
+          }
+          ${
+            payment.status === 'expired' || payment.status === 'failed'
+              ? `<button type="button" class="btn" id="newPayBtn">Buat Pembayaran Baru</button>`
+              : ''
+          }
+          <button type="button" class="btn btn-ghost" id="backPricingBtn">Kembali ke Pricing</button>
+        </div>
+        <p class="hint" id="payMsg" style="margin-top:0.6rem"></p>
       </div>`;
+
+    if (canPay && payment.expiredAt) {
+      startPayCountdown(payment.expiredAt, $('#payCountdown'));
+    }
 
     $('#checkPayBtn')?.addEventListener('click', async () => {
       const b = $('#checkPayBtn');
       if (b) {
         b.disabled = true;
-        b.textContent = 'Mengecek…';
+        b.innerHTML = '<span class="btn-spin"></span> Mengecek…';
       }
       try {
         const res = await API.paymentCheck(payment.trxId);
-        activeCheckoutTrx = res.payment;
-        renderCheckoutPanel(res.payment);
+        renderPaymentPage(res.payment);
         const msg = $('#payMsg');
         if (msg) msg.textContent = res.message || '';
         if (res.payment?.status === 'paid') {
           toast(res.message || 'Pembayaran berhasil', 'success');
+          await syncPlanFromServer();
           try {
-            const me = await API.me();
-            if (me?.user) currentUser = me.user;
+            const u = await API.me();
+            if (u?.user) Object.assign(currentUser, u.user);
+            else if (u) Object.assign(currentUser, u);
           } catch {}
-          loadPricing();
         } else if (res.payment?.status === 'pending') {
-          toast(res.message || 'Masih pending', 'info');
+          toast(res.message || 'Belum masuk', 'info');
         } else {
           toast(res.message || statusLabel(res.payment?.status), 'warning');
         }
@@ -1172,11 +1371,9 @@
         }
       }
     });
-    $('#closePayBtn')?.addEventListener('click', () => {
-      activeCheckoutTrx = null;
-      panel.classList.add('hidden');
-      panel.innerHTML = '';
-    });
+
+    $('#newPayBtn')?.addEventListener('click', () => showPage('pricing'));
+    $('#backPricingBtn')?.addEventListener('click', () => showPage('pricing'));
   }
 
   /* ——— account ——— */

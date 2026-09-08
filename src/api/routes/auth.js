@@ -4,6 +4,7 @@ import User from '../../db/models/User.js'
 import { authenticate, requireAdmin } from '../middleware/auth.js'
 import { validateBody } from '../middleware/validate.js'
 import config from '../../config/index.js'
+import { resolveEffectivePlan } from '../../config/plans.js'
 import logger from '../../utils/logger.js'
 import {
   hashPassword,
@@ -21,6 +22,7 @@ function generateApiKey() {
 }
 
 function publicUser(user) {
+  const effective = resolveEffectivePlan(user)
   return {
     userId: user.userId,
     username: user.username,
@@ -28,9 +30,10 @@ function publicUser(user) {
     phone: user.phone || '',
     role: user.role,
     isAdmin: user.role === 'admin',
-    plan: user.plan || 'free',
+    plan: effective.id,
     planExpiresAt: user.planExpiresAt || null,
-    maxSessions: user.maxSessions ?? 1,
+    maxSessions: user.role === 'admin' ? user.maxSessions ?? 15 : effective.maxSessions,
+    features: effective.features || {},
     name: user.name || '',
     apiKey: user.apiKey,
   }
