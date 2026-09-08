@@ -150,14 +150,14 @@ img { max-width: 100%; display: block; }
 
 .icon-btn {
   width: 40px; height: 40px;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  background: var(--card);
+  border: none;
+  background: transparent;
+  color: var(--muted);
   display: grid; place-items: center;
   cursor: pointer;
-  transition: transform 0.2s var(--ease), background 0.2s var(--ease), border-color 0.2s;
+  transition: color 0.2s var(--ease), transform 0.2s var(--ease);
 }
-.icon-btn:hover { transform: translateY(-1px); border-color: var(--muted); }
+.icon-btn:hover { color: var(--text); transform: translateY(-1px); }
 .icon-btn svg { width: 18px; height: 18px; }
 
 .btn {
@@ -1166,7 +1166,6 @@ img { max-width: 100%; display: block; }
 }
 .pw-toggle:hover {
   color: var(--text);
-  background: color-mix(in srgb, var(--chip) 70%, transparent);
 }
 .pw-toggle svg {
   width: 18px;
