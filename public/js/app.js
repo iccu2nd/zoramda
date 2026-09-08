@@ -275,9 +275,7 @@
   function updateConnectedNav(sessions) {
     const hasSession = (sessions || []).length > 0;
     const navBotSettingsGroup = document.getElementById('navBotSettingsGroup');
-    const navPlugins = document.getElementById('navPlugins');
     if (navBotSettingsGroup) navBotSettingsGroup.style.display = hasSession ? '' : 'none';
-    if (navPlugins) navPlugins.style.display = hasSession ? '' : 'none';
 
     // If user is on config/plugins but no sessions left, bounce to sessions
     if (!hasSession) {
@@ -602,6 +600,12 @@
     return list;
   }
 
+  /** Only show the session dropdown when there's more than one session to pick from */
+  function toggleSessionPick(selectEl, sessions) {
+    const pick = selectEl?.closest('.session-pick');
+    if (pick) pick.style.display = (sessions || []).length > 1 ? '' : 'none';
+  }
+
   async function loadConfig() {
     const box = $('#configForm');
     box.innerHTML = '<p style="color:var(--muted);font-weight:500">Loading…</p>';
@@ -610,6 +614,7 @@
       box.innerHTML = selHtml + '<div id="configFields"></div>';
       const select = $('#configSessionSelect');
       const sessions = await fillSessionSelect(select, selectedConfigSession);
+      toggleSessionPick(select, sessions);
       if (!sessions.length) {
         $('#configFields').innerHTML = '<div class="empty">Create a session first from the Sessions page.</div>';
         return;
@@ -772,6 +777,7 @@
       box.innerHTML = `<div class="field session-pick"><label>Session</label><select id="pluginSessionSelect"></select></div><div id="pluginCards"></div>`;
       const select = $('#pluginSessionSelect');
       const sessions = await fillSessionSelect(select, selectedPluginSession);
+      toggleSessionPick(select, sessions);
       if (!sessions.length) {
         $('#pluginCards').innerHTML = '<div class="empty">Create a session first from the Sessions page.</div>';
         return;
