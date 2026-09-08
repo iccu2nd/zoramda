@@ -361,6 +361,100 @@ code::-moz-selection,
 .card h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: 0.35rem; }
 .card p { color: var(--muted); font-size: 0.92rem; font-weight: 500; }
 
+
+/* ——— pricing ——— */
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  max-width: 960px;
+  margin: 0 auto;
+}
+.price-card {
+  position: relative;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.5rem 1.35rem 1.4rem;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.25s var(--ease), box-shadow 0.25s var(--ease);
+}
+.price-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg);
+}
+.price-card.featured {
+  border-color: color-mix(in srgb, var(--text) 35%, var(--border));
+  box-shadow: var(--shadow-lg);
+}
+.price-badge {
+  position: absolute;
+  top: 0.85rem;
+  right: 0.85rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  background: var(--text);
+  color: var(--bg);
+}
+.price-tier {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--muted);
+  margin-bottom: 0.35rem;
+}
+.price-amount {
+  font-size: 1.85rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  margin-bottom: 0.35rem;
+}
+.price-amount span {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0;
+}
+.price-desc {
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 500;
+  margin-bottom: 1rem;
+}
+.price-features {
+  list-style: none;
+  margin: 0 0 1.25rem;
+  padding: 0;
+  flex: 1;
+}
+.price-features li {
+  position: relative;
+  padding: 0.4rem 0 0.4rem 1.35rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  border-bottom: 1px solid var(--border-soft);
+}
+.price-features li:last-child { border-bottom: none; }
+.price-features li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.7rem;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+}
+@media (max-width: 800px) {
+  .pricing-grid { grid-template-columns: 1fr; max-width: 400px; }
+}
+
 .faq-item {
   background: var(--card);
   border: 1px solid var(--border);

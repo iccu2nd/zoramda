@@ -1,22 +1,148 @@
 import { jidNormalizedUser } from '@whiskeysockets/baileys'
 
+/** Phone-number JID: 628xxx@s.whatsapp.net */
+export function isPnJid(jid) {
+  return typeof jid === 'string' && jid.endsWith('@s.whatsapp.net')
+}
+
+/** Linked Identity JID: opaqueid@lid (WhatsApp privacy addressing) */
+export function isLidJid(jid) {
+  return typeof jid === 'string' && (jid.endsWith('@lid') || jid.includes('@lid'))
+}
+
+export function isGroupJid(jid) {
+  return typeof jid === 'string' && jid.endsWith('@g.us')
+}
+
+/**
+ * Normalize a JID for storage/comparison.
+ * Keeps @lid as-is (must not strip to digits — LID is not a phone number).
+ * PN JIDs go through Baileys jidNormalizedUser.
+ */
 export function normalizeJid(jid) {
   if (!jid) return null
-  try {
-    return jidNormalizedUser(jid)
-  } catch {
-    return jid
+  const s = String(jid).trim()
+  if (!s) return null
+  if (isLidJid(s)) {
+    // keep full lid form; strip device suffix if any (123:device@lid → 123@lid)
+    const [user, domain] = s.split('@')
+    const bare = user.split(':')[0]
+    return `${bare}@${domain || 'lid'}`
   }
+  try {
+    return jidNormalizedUser(s)
+  } catch {
+    return s
+  }
+}
+
+/**
+ * Collect all known identity strings for a participant / user object or raw jid.
+ * Used so LID and PN for the same person match each other.
+ */
+export function collectIdentities(...inputs) {
+  const out = new Set()
+  const add = (v) => {
+    if (!v) return
+    const n = normalizeJid(v)
+    if (n) out.add(n)
+    // also bare user part for loose match within same domain later
+    const bare = String(v).split('@')[0]?.split(':')[0]
+    if (bare) out.add(bare)
+  }
+  for (const input of inputs) {
+    if (!input) continue
+    if (typeof input === 'string') {
+      add(input)
+      continue
+    }
+    if (typeof input === 'object') {
+      add(input.id)
+      add(input.jid)
+      add(input.lid)
+      add(input.phoneNumber)
+      add(input.pn)
+      add(input.participant)
+      add(input.participantAlt)
+      add(input.remoteJid)
+      add(input.remoteJidAlt)
+      // nested attrs from some Baileys group update payloads
+      if (input.content?.attrs) {
+        add(input.content.attrs.jid)
+        add(input.content.attrs.phone_number)
+        add(input.content.attrs.lid)
+      }
+    }
+  }
+  return out
+}
+
+/** True if two identity sets share any key (same WhatsApp user). */
+export function identitiesMatch(a, b) {
+  if (!a || !b) return false
+  const setA = a instanceof Set ? a : collectIdentities(a)
+  const setB = b instanceof Set ? b : collectIdentities(b)
+  for (const x of setA) {
+    if (setB.has(x)) return true
+  }
+  return false
+}
+
+/**
+ * Resolve sender identity from a Baileys message key.
+ * Prefer PN when available (participantAlt / remoteJidAlt), keep LID as alt.
+ */
+export function resolveSenderFromKey(key, isGroup) {
+  if (!key) return { jid: null, lid: null, pn: null }
+  if (isGroup) {
+    const primary = key.participant || null
+    const alt = key.participantAlt || key.participantPn || null
+    const lid = isLidJid(primary) ? normalizeJid(primary) : isLidJid(alt) ? normalizeJid(alt) : null
+    const pn = isPnJid(alt) ? normalizeJid(alt) : isPnJid(primary) ? normalizeJid(primary) : null
+    // Prefer PN for owner/premium matching; fall back to LID
+    const jid = pn || normalizeJid(primary) || normalizeJid(alt)
+    return { jid, lid, pn }
+  }
+  // DM
+  const primary = key.remoteJid || null
+  const alt = key.remoteJidAlt || null
+  const lid = isLidJid(primary) ? normalizeJid(primary) : isLidJid(alt) ? normalizeJid(alt) : null
+  const pn = isPnJid(alt) ? normalizeJid(alt) : isPnJid(primary) ? normalizeJid(primary) : null
+  const jid = pn || normalizeJid(primary) || normalizeJid(alt)
+  return { jid, lid, pn }
+}
+
+/**
+ * Find a group participant matching sender (LID or PN).
+ * Baileys 6/7 may put LID in `id` and PN in `phoneNumber` / `jid`.
+ */
+export function findParticipant(participants, senderJid, senderAlts = {}) {
+  if (!Array.isArray(participants) || !senderJid) return null
+  const want = collectIdentities(senderJid, senderAlts.lid, senderAlts.pn, senderAlts.jid)
+  for (const p of participants) {
+    const have = collectIdentities(p)
+    if (identitiesMatch(want, have)) return p
+  }
+  return null
+}
+
+export function isParticipantAdmin(p) {
+  if (!p) return false
+  const a = p.admin
+  return a === 'admin' || a === 'superadmin' || a === true
 }
 
 export function isOwner(jid, ownerNumbers = []) {
   if (!jid) return false
-  const num = jid.split('@')[0].replace(/\D/g, '')
-  return ownerNumbers.some(o => o.replace(/\D/g, '') === num)
+  // LID cannot match phone-number owner list by digits alone
+  if (isLidJid(jid)) return false
+  const num = String(jid).split('@')[0].replace(/\D/g, '')
+  if (!num) return false
+  return ownerNumbers.some((o) => String(o).replace(/\D/g, '') === num)
 }
 
 export function sleep(ms) {
-  return new Promise(r => setTimeout(r, ms))
+  return new Promise((r) => setTimeout(r, ms))
 }
 
 export function safeJsonParse(str, fallback = null) {
@@ -57,8 +183,7 @@ export function serializeError(err) {
 }
 
 /**
- * Turn a raw number/text arg into a WhatsApp JID.
- * Accepts "6281234567890", "0812-3456-7890", "@6281234567890", etc.
+ * Turn a raw number/text arg into a WhatsApp PN JID.
  */
 export function numberToJid(text) {
   if (!text) return null
@@ -68,10 +193,7 @@ export function numberToJid(text) {
 }
 
 /**
- * Resolve the target user(s) for an admin command (ban, kick, promote, ...)
- * in priority order: @mentions in the message, the participant of a quoted
- * (replied-to) message, then a plain number passed as the first argument.
- * Returns a de-duplicated array of normalized JIDs (may be empty).
+ * Resolve targets for admin commands: mentions, quoted, then number arg.
  */
 export function resolveTargets(m, args = []) {
   const targets = []
@@ -93,27 +215,23 @@ export function resolveTargets(m, args = []) {
 }
 
 /**
- * Fetch group metadata and answer the two questions every group-admin
- * command needs: is the sender a group admin, and is the bot itself a
- * group admin (WhatsApp silently ignores kick/promote/demote/etc if the
- * bot isn't one, so we check up front and give a clear error instead).
+ * Group admin check with LID + PN awareness.
  */
-export async function checkGroupAdmin(sock, chat, senderJid) {
+export async function checkGroupAdmin(sock, chat, senderJid, senderAlts = {}) {
   const metadata = await sock.groupMetadata(chat)
   const participants = metadata.participants || []
-  const botJid = normalizeJid(sock.user?.id)
-  const senderNorm = normalizeJid(senderJid)
+  const botId = sock.user?.id
+  const botLid = sock.user?.lid || null
 
-  const findAdmin = (jid) => {
-    const num = String(jid || '').split('@')[0]
-    const p = participants.find((p) => String(p.id).split('@')[0] === num)
-    return !!p && (p.admin === 'admin' || p.admin === 'superadmin')
-  }
+  const senderP = findParticipant(participants, senderJid, senderAlts)
+  const botP = findParticipant(participants, botId, { lid: botLid, pn: normalizeJid(botId) })
 
   return {
     metadata,
     participants,
-    isSenderAdmin: findAdmin(senderNorm),
-    isBotAdmin: findAdmin(botJid),
+    isSenderAdmin: isParticipantAdmin(senderP),
+    isBotAdmin: isParticipantAdmin(botP),
+    senderParticipant: senderP,
+    botParticipant: botP,
   }
 }

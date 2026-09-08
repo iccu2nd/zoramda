@@ -13,7 +13,15 @@
  */
 import { getContentType, extractMessageContent } from '@whiskeysockets/baileys'
 import logger from '../utils/logger.js'
-import { extractCommand, normalizeJid, applyTemplate } from '../utils/helpers.js'
+import {
+  extractCommand,
+  normalizeJid,
+  applyTemplate,
+  resolveSenderFromKey,
+  findParticipant,
+  isParticipantAdmin,
+  collectIdentities,
+} from '../utils/helpers.js'
 import LatencyTracker from './LatencyTracker.js'
 import configService from './ConfigService.js'
 
@@ -102,7 +110,7 @@ export class MessageHandler {
 
       latency.mark('command_detected')
 
-      const isOwner = configService.isOwner(sessionId, m.sender)
+      const isOwner = configService.isOwner(sessionId, m.senderPn || m.sender)
 
       // Anti-spam (memory only, no DB)
       if (cfg.antiSpam && !isOwner) {
@@ -132,7 +140,7 @@ export class MessageHandler {
         return
       }
 
-      if (!isOwner && configService.isBanned(sessionId, m.sender)) return
+      if (!isOwner && configService.isBanned(sessionId, m.senderPn || m.sender)) return
       if (cfg.publicMode === false && !isOwner) return
 
       // Resolve plugins (custom commands + defaults)
@@ -205,10 +213,14 @@ export class MessageHandler {
 
     const parsed = extractCommand(text, prefix)
     const jid = raw.key.remoteJid
-    const sender = raw.key.participant || raw.key.remoteJid
     const isGroup = jid?.endsWith('@g.us')
+    const resolved = resolveSenderFromKey(raw.key, isGroup)
+    const sender = resolved.jid
+    const senderLid = resolved.lid
+    const senderPn = resolved.pn
 
-    const quotedParticipant = contextInfo?.participant || null
+    const quotedParticipant =
+      contextInfo?.participant || contextInfo?.participantAlt || null
     const quotedMessage = contextInfo?.quotedMessage || null
     const quoted = quotedMessage
       ? {
@@ -217,7 +229,7 @@ export class MessageHandler {
           key: {
             remoteJid: jid,
             id: contextInfo?.stanzaId,
-            fromMe: normalizeJid(quotedParticipant) === normalizeJid(sock.user?.id),
+            fromMe: false,
             participant: quotedParticipant,
           },
         }
@@ -237,7 +249,9 @@ export class MessageHandler {
       raw,
       key: raw.key,
       chat: jid,
-      sender: normalizeJid(sender),
+      sender: sender || normalizeJid(raw.key.participant || raw.key.remoteJid),
+      senderLid,
+      senderPn,
       fromMe: !!raw.key.fromMe,
       isGroup,
       text,
@@ -265,16 +279,17 @@ export class MessageHandler {
       case PERM_OWNER:
         return isOwner
       case PERM_PREMIUM:
-        return isOwner || configService.isPremium(sessionId, m.sender)
+        return isOwner || configService.isPremium(sessionId, m.senderPn || m.sender)
       case PERM_ADMIN: {
         if (!m.isGroup) return false
         if (isOwner) return true
         try {
           const meta = metaBag.meta || (metaBag.meta = await getGroupMeta(sock, m.chat))
-          const participant = meta.participants?.find(
-            (p) => normalizeJid(p.id) === m.sender
-          )
-          return !!(participant?.admin === 'admin' || participant?.admin === 'superadmin')
+          const p = findParticipant(meta.participants || [], m.sender, {
+            lid: m.senderLid,
+            pn: m.senderPn,
+          })
+          return isParticipantAdmin(p)
         } catch {
           return false
         }
@@ -283,9 +298,13 @@ export class MessageHandler {
         if (!m.isGroup) return false
         try {
           const meta = metaBag.meta || (metaBag.meta = await getGroupMeta(sock, m.chat))
-          const botId = normalizeJid(sock.user?.id)
-          const botPart = meta.participants?.find((p) => normalizeJid(p.id) === botId)
-          return !!(botPart?.admin === 'admin' || botPart?.admin === 'superadmin')
+          const botId = sock.user?.id
+          const botLid = sock.user?.lid || null
+          const p = findParticipant(meta.participants || [], botId, {
+            lid: botLid,
+            pn: normalizeJid(botId),
+          })
+          return isParticipantAdmin(p)
         } catch {
           return false
         }
@@ -344,7 +363,7 @@ export class MessageHandler {
 
     // Limit — memory-first (no await DB)
     if (configService.isLimitEnabled(sessionId) && !isOwner) {
-      const isPremiumUser = configService.isPremium(sessionId, m.sender)
+      const isPremiumUser = configService.isPremium(sessionId, m.senderPn || m.sender)
       const bypassLimit = isPremiumUser && botCfg.premiumUnlimited
       if (!bypassLimit) {
         const result = configService.consumeLimit(sessionId, userId, m.sender)
@@ -379,7 +398,7 @@ export class MessageHandler {
       sessionId,
       userId,
       isOwner,
-      isPremium: isOwner || configService.isPremium(sessionId, m.sender),
+      isPremium: isOwner || configService.isPremium(sessionId, m.senderPn || m.sender),
       plugins: this.pluginLoader,
       botConfig: botCfg,
       botName: botCfg.botName,
