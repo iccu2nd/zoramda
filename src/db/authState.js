@@ -2,6 +2,11 @@ import { initAuthCreds, BufferJSON, proto } from '@whiskeysockets/baileys'
 import AuthState from './models/AuthState.js'
 import logger from '../utils/logger.js'
 
+/**
+ * Mongo-backed Baileys auth state with debounced writes.
+ * Key reads are pure memory. Writes batch into a single flush so
+ * high-frequency Signal key updates never serialize the message path.
+ */
 export async function useMongoAuthState(sessionId) {
   const doc = await AuthState.findOne({ sessionId }).lean()
 
@@ -20,27 +25,36 @@ export async function useMongoAuthState(sessionId) {
     )
   }
 
-  let pendingFlush = null
+  let flushTimer = null
+  let flushPromise = null
+  let dirty = false
 
-  const flush = () => {
-    if (pendingFlush) return pendingFlush
-    pendingFlush = new Promise((resolve) => {
-      setImmediate(async () => {
-        const snapshot = {
-          creds: JSON.parse(JSON.stringify(creds, BufferJSON.replacer)),
-          keys: JSON.parse(JSON.stringify(keys, BufferJSON.replacer)),
-        }
-        try {
-          await AuthState.findOneAndUpdate({ sessionId }, snapshot, { upsert: true })
-        } catch (err) {
-          logger.error({ sessionId, err: err.message }, 'Failed to persist auth state')
-        } finally {
-          pendingFlush = null
-          resolve()
-        }
+  const doFlush = async () => {
+    if (!dirty) return
+    dirty = false
+    const snapshot = {
+      creds: JSON.parse(JSON.stringify(creds, BufferJSON.replacer)),
+      keys: JSON.parse(JSON.stringify(keys, BufferJSON.replacer)),
+    }
+    try {
+      await AuthState.findOneAndUpdate({ sessionId }, snapshot, { upsert: true })
+    } catch (err) {
+      logger.error({ sessionId, err: err.message }, 'Failed to persist auth state')
+      dirty = true // retry later
+    }
+  }
+
+  const scheduleFlush = (delayMs = 80) => {
+    dirty = true
+    if (flushTimer) return
+    flushTimer = setTimeout(() => {
+      flushTimer = null
+      flushPromise = doFlush().finally(() => {
+        flushPromise = null
+        // if more writes arrived during flush, schedule again
+        if (dirty) scheduleFlush(40)
       })
-    })
-    return pendingFlush
+    }, delayMs)
   }
 
   const state = {
@@ -48,8 +62,10 @@ export async function useMongoAuthState(sessionId) {
     keys: {
       get: async (type, ids) => {
         const data = {}
+        const bucket = keys?.[type]
+        if (!bucket) return data
         for (const id of ids) {
-          let value = keys?.[type]?.[id]
+          let value = bucket[id]
           if (type === 'app-state-sync-key' && value) {
             value = proto.Message.AppStateSyncKeyData.fromObject(value)
           }
@@ -66,17 +82,29 @@ export async function useMongoAuthState(sessionId) {
             else delete keys[category][id]
           }
         }
-        await flush()
+        // Do NOT await Mongo here — return immediately so Signal pipeline stays free
+        scheduleFlush(80)
       },
     },
   }
 
   const saveCreds = async () => {
-    await flush()
+    scheduleFlush(20)
+    // optionally wait for pending flush when explicitly requested (logout/stop)
+    if (flushTimer) {
+      clearTimeout(flushTimer)
+      flushTimer = null
+    }
+    await doFlush()
   }
 
   const clearAuth = async () => {
     try {
+      if (flushTimer) {
+        clearTimeout(flushTimer)
+        flushTimer = null
+      }
+      dirty = false
       await AuthState.deleteOne({ sessionId })
       keys = {}
     } catch (err) {

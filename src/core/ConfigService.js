@@ -546,11 +546,11 @@ class ConfigService {
 
   /**
    * Gate + spend limit for a command use.
-   * Owners and (by default) premium users are meant to be excluded by the
-   * caller before this runs — see MessageHandler for the exact policy.
+   * HOT PATH: update in-memory cache immediately, persist to Mongo async
+   * so light commands never wait on a DB round-trip.
    * Returns { allowed, remaining, cost }.
    */
-  async consumeLimit(sessionId, userId, jid) {
+  consumeLimit(sessionId, userId, jid) {
     const cfg = this.getCached(sessionId)
     const cost = Math.max(0, cfg.limitCost || 0)
     const current = this.getUserLimit(sessionId, jid)
@@ -561,14 +561,23 @@ class ConfigService {
 
     const next = current - cost
     const key = String(jid).split('@')[0].replace(/\D/g, '')
-    await safeGetOrCreate(sessionId, userId)
-    const updated = await SessionConfig.findOneAndUpdate(
-      { sessionId },
-      { $set: { [`userLimits.${key}`]: next } },
-      { new: true }
-    ).lean()
-    const updatedCfg = toCache(updated)
-    this._cache.set(sessionId, updatedCfg)
+
+    // memory-first
+    if (!cfg.userLimits || typeof cfg.userLimits !== 'object') cfg.userLimits = {}
+    cfg.userLimits[key] = next
+    this._cache.set(sessionId, cfg)
+
+    // persist off the hot path
+    setImmediate(() => {
+      SessionConfig.findOneAndUpdate(
+        { sessionId },
+        { $set: { [`userLimits.${key}`]: next } },
+        { upsert: false }
+      ).catch((err) => {
+        logger.warn({ sessionId, err: err.message }, 'Limit persist failed')
+      })
+    })
+
     return { allowed: true, remaining: next, cost }
   }
 

@@ -20,6 +20,26 @@ import { serializeError } from '../utils/helpers.js'
 
 const baileysLogger = pino({ level: 'silent' })
 
+/** Cache WA web version across sessions — avoids network on every reconnect */
+let cachedWaVersion = null
+let cachedWaVersionAt = 0
+const WA_VERSION_TTL_MS = 6 * 60 * 60 * 1000
+
+async function getWaVersion() {
+  const now = Date.now()
+  if (cachedWaVersion && now - cachedWaVersionAt < WA_VERSION_TTL_MS) {
+    return cachedWaVersion
+  }
+  try {
+    const { version } = await fetchLatestBaileysVersion()
+    cachedWaVersion = version
+    cachedWaVersionAt = now
+    return version
+  } catch {
+    return cachedWaVersion || [2, 3000, 1025190524]
+  }
+}
+
 export const STATES = {
   CREATING: 'CREATING',
   CONNECTING: 'CONNECTING',
@@ -59,22 +79,19 @@ export class ConnectionManager {
 
   async setStatus(status, extra = {}) {
     this.status = status
-    try {
-      await Session.findOneAndUpdate(
-        { sessionId: this.sessionId },
-        {
-          status,
-          qr: this.qr,
-          pairingCode: this.pairingCode,
-          phoneNumber: this.phoneNumber,
-          lastError: extra.error || null,
-          ...extra.fields,
-        }
-      )
-    } catch (err) {
-      logger.error({ sessionId: this.sessionId, err: err.message }, 'Failed to update session status')
-    }
     this.onStatusChange(this.sessionId, status, extra)
+    // Persist off the critical path so WS events stay responsive
+    const payload = {
+      status,
+      qr: this.qr,
+      pairingCode: this.pairingCode,
+      phoneNumber: this.phoneNumber,
+      lastError: extra.error || null,
+      ...extra.fields,
+    }
+    Session.findOneAndUpdate({ sessionId: this.sessionId }, payload).catch((err) => {
+      logger.error({ sessionId: this.sessionId, err: err.message }, 'Failed to update session status')
+    })
   }
 
   async start({ pairingPhone } = {}) {
@@ -99,7 +116,7 @@ export class ConnectionManager {
       this.saveCreds = saveCreds
       this.clearAuth = clearAuth
 
-      const { version } = await fetchLatestBaileysVersion()
+      const version = await getWaVersion()
 
       const sock = makeWASocket({
         version,
@@ -113,15 +130,17 @@ export class ConnectionManager {
         syncFullHistory: false,
         markOnlineOnConnect: false,
         generateHighQualityLinkPreview: false,
-        // Don't retry decrypt failures aggressively — reduces Bad MAC spam
         getMessage: async () => undefined,
         shouldIgnoreJid: (jid) => jid === 'status@broadcast',
-        // Keep connection lean for multi-session stability
-        keepAliveIntervalMs: 30000,
-        connectTimeoutMs: 60000,
-        defaultQueryTimeoutMs: 60000,
+        // Lean multi-session socket
+        keepAliveIntervalMs: 25000,
+        connectTimeoutMs: 45000,
+        defaultQueryTimeoutMs: 45000,
         emitOwnEvents: false,
         fireInitQueries: true,
+        // Reduce background sync load that steals event-loop time
+        shouldSyncHistoryMessage: () => false,
+        transactionOpts: { maxCommitRetries: 2, delayBetweenTriesMs: 100 },
       })
 
       this.sock = sock
@@ -244,14 +263,16 @@ export class ConnectionManager {
       }
     }
 
-    const onCredsUpdate = async () => {
-      if (this.saveCreds) await this.saveCreds()
+    const onCredsUpdate = () => {
+      // Never await on the Baileys event path — authState debounces writes
+      if (this.saveCreds) this.saveCreds().catch(() => {})
     }
 
-    const onMessagesUpsert = async (m) => {
+    const onMessagesUpsert = (m) => {
       if (!this.messageHandler) return
+      // Must not await — keeps Baileys event loop free for decrypt/send
       this.messageHandler.handle(this.sessionId, this.userId, sock, m).catch((err) => {
-        logger.error({ sessionId: this.sessionId, err: err.message }, 'Message handler error')
+        logger.error({ sessionId: this.sessionId, err: err?.message }, 'Message handler error')
       })
     }
 

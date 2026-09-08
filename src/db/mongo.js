@@ -18,8 +18,8 @@ export async function connectMongo() {
   connectionPromise = mongoose
     .connect(config.mongo.uri, {
       dbName: config.mongo.dbName,
-      maxPoolSize: 20,
-      minPoolSize: 2,
+      maxPoolSize: 50,
+      minPoolSize: 5,
       serverSelectionTimeoutMS: 10000,
       socketTimeoutMS: 45000,
       connectTimeoutMS: 10000,
