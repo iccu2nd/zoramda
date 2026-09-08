@@ -188,6 +188,8 @@
   /* ——— nav ——— */
   function activatePage(page) {
     $$('.side-link[data-page]').forEach((b) => b.classList.remove('active'));
+    $$('.side-sublink').forEach((b) => b.classList.remove('active'));
+    $('#navBotSettings')?.classList.remove('active');
     PAGES.forEach((p) => $('#page-' + p).classList.toggle('hidden', p !== page));
     if (page === 'config') loadConfig();
     if (page === 'sessions') loadSessions();
@@ -204,7 +206,24 @@
     });
   });
 
-  /* Bot Settings now a simple page link (no submenu/tabs) */
+  /* Bot Settings submenu: parent expands/collapses, children navigate to
+     the config page and pick a tab (config / message / system) */
+  $('#navBotSettings')?.addEventListener('click', () => {
+    const submenu = $('#submenuBotSettings');
+    if (!submenu) return;
+    const isOpen = submenu.classList.toggle('open');
+    $('#navBotSettings').classList.toggle('expanded', isOpen);
+  });
+
+  $$('.side-sublink[data-page]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      pendingConfigTab = btn.dataset.configTab || null;
+      activatePage(btn.dataset.page);
+      btn.classList.add('active');
+      $('#navBotSettings')?.classList.add('active');
+      closeSidebar();
+    });
+  });
 
   function openSidebar() {
     $('#sidebar').classList.add('open');
@@ -225,9 +244,9 @@
   /** Show Config / Plugins once user has at least one session (connect not required) */
   function updateConnectedNav(sessions) {
     const hasSession = (sessions || []).length > 0;
-    const navBotSettings = document.getElementById('navBotSettings');
+    const navBotSettingsGroup = document.getElementById('navBotSettingsGroup');
     const navPlugins = document.getElementById('navPlugins');
-    if (navBotSettings) navBotSettings.style.display = hasSession ? '' : 'none';
+    if (navBotSettingsGroup) navBotSettingsGroup.style.display = hasSession ? '' : 'none';
     if (navPlugins) navPlugins.style.display = hasSession ? '' : 'none';
 
     // If user is on config/plugins but no sessions left, bounce to sessions
@@ -236,7 +255,9 @@
       const onPlugins = !$('#page-plugins').classList.contains('hidden');
       if (onConfig || onPlugins) {
         $$('.side-link[data-page]').forEach((b) => b.classList.remove('active'));
-        $('#navBotSettings')?.classList.remove('active');
+        $$('.side-sublink').forEach((b) => b.classList.remove('active'));
+        $('#navBotSettings')?.classList.remove('active', 'expanded');
+        $('#submenuBotSettings')?.classList.remove('open');
         const sessionsBtn = document.querySelector('.side-link[data-page="sessions"]');
         if (sessionsBtn) sessionsBtn.classList.add('active');
         PAGES.forEach((p) => $('#page-' + p).classList.toggle('hidden', p !== 'sessions'));
@@ -494,6 +515,7 @@
 
   /* ——— Manajemen Bot (per-session) ——— */
   let selectedConfigSession = null;
+  let pendingConfigTab = null;
   let selectedPluginSession = null;
 
   async function fillSessionSelect(selectEl, selectedId, connectedOnly = false) {
@@ -551,74 +573,83 @@
       const { config } = await API.config(sessionId);
       box.innerHTML = `
         <p class="sub" style="margin-bottom:0.75rem">Settings berlaku langsung untuk session ini saja. Session lain tidak terpengaruh.</p>
-
-        <p class="sub" style="margin:0 0 0.5rem;font-weight:700;color:var(--text)">Config</p>
-        <div class="field"><label>nama bot</label><input data-k="botName" value="${escapeAttr(config.botName || '')}"></div>
-        <div class="field-row">
-          <div class="field"><label>prefix</label><input data-k="prefix" value="${escapeAttr(config.prefix || '.')}"></div>
-          <div class="field"><label>nama owner</label><input data-k="ownerName" value="${escapeAttr(config.ownerName || '')}"></div>
+        <div class="config-tabs">
+          <button type="button" class="config-tab active" data-tab="info">config</button>
+          <button type="button" class="config-tab" data-tab="pesan">message</button>
+          <button type="button" class="config-tab" data-tab="system">system</button>
         </div>
-        <div class="field"><label>nomor owner (pisah koma)</label><input data-k="ownerNumbers" value="${escapeAttr((config.ownerNumbers || []).join(','))}"></div>
-        <div class="field-row">
-          <div class="field"><label>pack name</label><input data-k="packName" value="${escapeAttr(config.packName || '')}"></div>
-          <div class="field"><label>author</label><input data-k="author" value="${escapeAttr(config.author || '')}"></div>
-        </div>
-        <div class="field"><label>judul menu</label><input data-k="menuTitle" value="${escapeAttr(config.menuTitle || '')}"></div>
 
-        <p class="sub" style="margin:1.1rem 0 0.5rem;font-weight:700;color:var(--text)">Pesan</p>
-        <div class="field"><label>pesan welcome</label><textarea data-k="welcomeMessage">${escapeHtml(config.welcomeMessage || '')}</textarea></div>
-        <div class="field"><label>pesan maintenance</label><textarea data-k="maintenanceMessage">${escapeHtml(config.maintenanceMessage || '')}</textarea></div>
-        <div class="field"><label>pesan khusus owner</label><textarea data-k="ownerOnlyMessage">${escapeHtml(config.ownerOnlyMessage || '')}</textarea></div>
-        <div class="field"><label>pesan khusus admin</label><textarea data-k="adminOnlyMessage">${escapeHtml(config.adminOnlyMessage || '')}</textarea></div>
-        <div class="field"><label>pesan khusus group</label><textarea data-k="groupOnlyMessage">${escapeHtml(config.groupOnlyMessage || '')}</textarea></div>
-        <div class="field"><label>pesan khusus private chat</label><textarea data-k="privateOnlyMessage">${escapeHtml(config.privateOnlyMessage || '')}</textarea></div>
-        <div class="field"><label>pesan khusus premium</label><textarea data-k="premiumOnlyMessage">${escapeHtml(config.premiumOnlyMessage || '')}</textarea></div>
-        <div class="field"><label>pesan khusus limit habis</label><textarea data-k="limitMessage">${escapeHtml(config.limitMessage || '')}</textarea></div>
-
-        <p class="sub" style="margin:1.1rem 0 0.5rem;font-weight:700;color:var(--text)">Sistem Limit</p>
-        <div class="switch-row">
-          <span>gunakan limit</span>
-          <div class="switch ${config.useLimit ? 'on' : ''}" data-k="useLimit" data-bool id="swUseLimit"></div>
-        </div>
-        <div id="limitFields" style="${config.useLimit ? '' : 'display:none'}">
+        <div class="config-tab-panel" data-panel="info">
+          <div class="field"><label>nama bot</label><input data-k="botName" value="${escapeAttr(config.botName || '')}"></div>
           <div class="field-row">
-            <div class="field"><label>limit terpakai per perintah</label><input type="number" min="0" data-k="limitCost" value="${escapeAttr(config.limitCost ?? 1)}"></div>
-            <div class="field"><label>limit default user baru</label><input type="number" min="0" data-k="defaultLimit" value="${escapeAttr(config.defaultLimit ?? 10)}"></div>
+            <div class="field"><label>prefix</label><input data-k="prefix" value="${escapeAttr(config.prefix || '.')}"></div>
+            <div class="field"><label>nama owner</label><input data-k="ownerName" value="${escapeAttr(config.ownerName || '')}"></div>
+          </div>
+          <div class="field"><label>nomor owner (pisah koma)</label><input data-k="ownerNumbers" value="${escapeAttr((config.ownerNumbers || []).join(','))}"></div>
+          <div class="field-row">
+            <div class="field"><label>pack name</label><input data-k="packName" value="${escapeAttr(config.packName || '')}"></div>
+            <div class="field"><label>author</label><input data-k="author" value="${escapeAttr(config.author || '')}"></div>
+          </div>
+          <div class="field"><label>judul menu</label><input data-k="menuTitle" value="${escapeAttr(config.menuTitle || '')}"></div>
+        </div>
+
+        <div class="config-tab-panel" data-panel="pesan" style="display:none">
+          <div class="field"><label>pesan welcome</label><textarea data-k="welcomeMessage">${escapeHtml(config.welcomeMessage || '')}</textarea></div>
+          <div class="field"><label>pesan maintenance</label><textarea data-k="maintenanceMessage">${escapeHtml(config.maintenanceMessage || '')}</textarea></div>
+          <div class="field"><label>pesan khusus owner</label><textarea data-k="ownerOnlyMessage">${escapeHtml(config.ownerOnlyMessage || '')}</textarea></div>
+          <div class="field"><label>pesan khusus admin</label><textarea data-k="adminOnlyMessage">${escapeHtml(config.adminOnlyMessage || '')}</textarea></div>
+          <div class="field"><label>pesan khusus group</label><textarea data-k="groupOnlyMessage">${escapeHtml(config.groupOnlyMessage || '')}</textarea></div>
+          <div class="field"><label>pesan khusus private chat</label><textarea data-k="privateOnlyMessage">${escapeHtml(config.privateOnlyMessage || '')}</textarea></div>
+          <div class="field"><label>pesan khusus premium</label><textarea data-k="premiumOnlyMessage">${escapeHtml(config.premiumOnlyMessage || '')}</textarea></div>
+          <div class="field"><label>pesan khusus limit habis</label><textarea data-k="limitMessage">${escapeHtml(config.limitMessage || '')}</textarea></div>
+        </div>
+
+        <div class="config-tab-panel" data-panel="system" style="display:none">
+          <p class="sub" style="margin:0 0 0.5rem;font-weight:700;color:var(--text)">Sistem Limit</p>
+          <div class="switch-row">
+            <span>gunakan limit</span>
+            <div class="switch ${config.useLimit ? 'on' : ''}" data-k="useLimit" data-bool></div>
+          </div>
+          <div id="limitFields" style="${config.useLimit ? '' : 'display:none'}">
+            <div class="field-row">
+              <div class="field"><label>limit terpakai per perintah</label><input type="number" min="0" data-k="limitCost" value="${escapeAttr(config.limitCost ?? 1)}"></div>
+              <div class="field"><label>limit default user baru</label><input type="number" min="0" data-k="defaultLimit" value="${escapeAttr(config.defaultLimit ?? 10)}"></div>
+            </div>
+            <div class="switch-row">
+              <span>premium unlimited</span>
+              <div class="switch ${config.premiumUnlimited ? 'on' : ''}" data-k="premiumUnlimited" data-bool></div>
+            </div>
+            <div class="field" id="premiumLimitField" style="${config.premiumUnlimited ? 'display:none' : ''}">
+              <label>limit default premium (jika tidak unlimited)</label>
+              <input type="number" min="0" data-k="premiumDefaultLimit" value="${escapeAttr(config.premiumDefaultLimit ?? 100)}">
+            </div>
+          </div>
+
+          <p class="sub" style="margin:1.1rem 0 0.5rem;font-weight:700;color:var(--text)">Perilaku Bot</p>
+          <div class="switch-row">
+            <span>mode publik</span>
+            <div class="switch ${config.publicMode ? 'on' : ''}" data-k="publicMode" data-bool></div>
           </div>
           <div class="switch-row">
-            <span>premium unlimited</span>
-            <div class="switch ${config.premiumUnlimited ? 'on' : ''}" data-k="premiumUnlimited" data-bool id="swPremiumUnlimited"></div>
+            <span>maintenance</span>
+            <div class="switch ${config.maintenanceMode ? 'on' : ''}" data-k="maintenanceMode" data-bool></div>
           </div>
-          <div class="field" id="premiumLimitField" style="${config.premiumUnlimited ? 'display:none' : ''}">
-            <label>limit default premium (jika tidak unlimited)</label>
-            <input type="number" min="0" data-k="premiumDefaultLimit" value="${escapeAttr(config.premiumDefaultLimit ?? 100)}">
+          <div class="switch-row">
+            <span>anti spam</span>
+            <div class="switch ${config.antiSpam ? 'on' : ''}" data-k="antiSpam" data-bool></div>
           </div>
-        </div>
-
-        <p class="sub" style="margin:1.1rem 0 0.5rem;font-weight:700;color:var(--text)">Perilaku Bot</p>
-        <div class="switch-row">
-          <span>mode publik</span>
-          <div class="switch ${config.publicMode ? 'on' : ''}" data-k="publicMode" data-bool></div>
-        </div>
-        <div class="switch-row">
-          <span>maintenance</span>
-          <div class="switch ${config.maintenanceMode ? 'on' : ''}" data-k="maintenanceMode" data-bool></div>
-        </div>
-        <div class="switch-row">
-          <span>anti spam</span>
-          <div class="switch ${config.antiSpam ? 'on' : ''}" data-k="antiSpam" data-bool></div>
-        </div>
-        <div class="switch-row">
-          <span>read message</span>
-          <div class="switch ${config.readMessages ? 'on' : ''}" data-k="readMessages" data-bool></div>
-        </div>
-        <div class="switch-row">
-          <span>typing indicator</span>
-          <div class="switch ${config.sendTyping ? 'on' : ''}" data-k="sendTyping" data-bool></div>
-        </div>
-        <div class="switch-row">
-          <span>recording indicator</span>
-          <div class="switch ${config.sendRecording ? 'on' : ''}" data-k="sendRecording" data-bool></div>
+          <div class="switch-row">
+            <span>read message</span>
+            <div class="switch ${config.readMessages ? 'on' : ''}" data-k="readMessages" data-bool></div>
+          </div>
+          <div class="switch-row">
+            <span>typing indicator</span>
+            <div class="switch ${config.sendTyping ? 'on' : ''}" data-k="sendTyping" data-bool></div>
+          </div>
+          <div class="switch-row">
+            <span>recording indicator</span>
+            <div class="switch ${config.sendRecording ? 'on' : ''}" data-k="sendRecording" data-bool></div>
+          </div>
         </div>
       `;
       box.querySelectorAll('.switch[data-bool]').forEach((sw) => {
@@ -634,6 +665,19 @@
           }
         });
       });
+      function activateConfigTab(target) {
+        box.querySelectorAll('.config-tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === target));
+        box.querySelectorAll('.config-tab-panel').forEach((panel) => {
+          panel.style.display = panel.dataset.panel === target ? '' : 'none';
+        });
+      }
+      box.querySelectorAll('.config-tab').forEach((btn) => {
+        btn.addEventListener('click', () => activateConfigTab(btn.dataset.tab));
+      });
+      if (pendingConfigTab) {
+        activateConfigTab(pendingConfigTab);
+        pendingConfigTab = null;
+      }
     } catch (e) {
       box.innerHTML = `<p style="color:var(--red)">${escapeHtml(e.message)}</p>`;
     }
