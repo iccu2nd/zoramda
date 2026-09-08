@@ -710,15 +710,21 @@ code::-moz-selection,
   margin: 0.75rem 0;
 }
 .qr-box img { width: 220px; height: 220px; }
+.pairing-code-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  margin: 0.75rem 0;
+}
 .pairing-code {
   font-size: 1.75rem;
   font-weight: 700;
   letter-spacing: 0.2em;
   text-align: center;
-  padding: 0.75rem;
+  padding: 0.75rem 1rem;
   background: var(--chip);
   border-radius: 12px;
-  margin: 0.75rem 0;
   /* pairing code must be selectable / copyable */
   -webkit-user-select: text !important;
   -moz-user-select: text !important;
@@ -726,6 +732,8 @@ code::-moz-selection,
   user-select: text !important;
   -webkit-touch-callout: default;
   cursor: text;
+  flex: 1;
+  min-width: 0;
 }
 .pairing-code::selection {
   background: rgba(37, 99, 235, 0.35);
@@ -734,6 +742,108 @@ code::-moz-selection,
 .pairing-code::-moz-selection {
   background: rgba(37, 99, 235, 0.35);
   color: inherit;
+}
+
+/* Icon copy button (pairing code) — adapted from Uiverse.io / Galahhad */
+.copy {
+  --button-bg: var(--chip);
+  --button-hover-bg: var(--border);
+  --button-text-color: var(--muted);
+  --button-hover-text-color: var(--text);
+  --button-border-radius: 10px;
+  --button-diameter: 40px;
+  --tooltip-bg: var(--text);
+  --tooltip-border-radius: 6px;
+  --tooltip-font-size: 11px;
+  --tooltip-text-color: var(--bg);
+  --tooltip-padding-x: 8px;
+  --tooltip-padding-y: 6px;
+  --tooltip-offset: 8px;
+  box-sizing: border-box;
+  width: var(--button-diameter);
+  height: var(--button-diameter);
+  border-radius: var(--button-border-radius);
+  background: var(--button-bg);
+  color: var(--button-text-color);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  position: relative;
+  outline: none;
+  flex-shrink: 0;
+  transition: background 0.2s var(--ease), color 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+.copy .tooltip {
+  position: absolute;
+  opacity: 0;
+  visibility: hidden;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: var(--tooltip-font-size);
+  font-weight: 600;
+  font-family: var(--font);
+  color: var(--tooltip-text-color);
+  background: var(--tooltip-bg);
+  padding: var(--tooltip-padding-y) var(--tooltip-padding-x);
+  border-radius: var(--tooltip-border-radius);
+  pointer-events: none;
+  transition: opacity 0.2s, visibility 0.2s, top 0.2s;
+  z-index: 5;
+}
+.copy .tooltip::before {
+  content: attr(data-text-initial);
+}
+.copy .tooltip::after {
+  content: "";
+  position: absolute;
+  bottom: -3px;
+  width: 6px;
+  height: 6px;
+  background: inherit;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  z-index: -1;
+}
+.copy-icons {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+}
+.copy svg {
+  grid-area: 1 / 1;
+  display: block;
+}
+.copy .checkmark {
+  display: none;
+}
+.copy:hover .tooltip,
+.copy.copied .tooltip {
+  opacity: 1;
+  visibility: visible;
+  top: calc((100% + var(--tooltip-offset)) * -1);
+}
+.copy.copied .tooltip::before {
+  content: attr(data-text-end);
+}
+.copy.copied .clipboard {
+  display: none;
+}
+.copy.copied .checkmark {
+  display: block;
+}
+.copy:hover,
+.copy:focus-visible {
+  background: var(--button-hover-bg);
+  color: var(--button-hover-text-color);
+}
+.copy:active {
+  transform: scale(0.96);
 }
 
 .pairing-spinner {
@@ -754,25 +864,150 @@ code::-moz-selection,
   position: fixed;
   bottom: 1.25rem;
   right: 1.25rem;
-  z-index: 200;
+  left: auto;
+  z-index: 300;
   display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  flex-direction: column-reverse;
+  align-items: flex-end;
+  gap: 0.55rem;
+  pointer-events: none;
+  max-width: min(360px, calc(100vw - 1.5rem));
 }
 .toast {
+  pointer-events: auto;
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 0.75rem 1rem;
+  border-radius: 14px;
+  padding: 0.85rem 0.9rem 0.9rem;
   box-shadow: var(--shadow-lg);
   font-weight: 600;
   font-size: 0.88rem;
-  animation: toastIn 0.35s var(--ease);
-  max-width: 320px;
+  line-height: 1.35;
+  max-width: 100%;
+  min-width: 220px;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(14px) scale(0.96);
+  transition:
+    opacity 0.32s var(--ease),
+    transform 0.32s var(--ease);
 }
-@keyframes toastIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: none; }
+.toast.show {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+.toast.hide {
+  opacity: 0;
+  transform: translateY(10px) scale(0.96);
+}
+.toast-icon {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  display: grid;
+  place-items: center;
+}
+.toast-icon svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+.toast-msg {
+  flex: 1;
+  min-width: 0;
+  padding-top: 1px;
+  word-break: break-word;
+}
+.toast-close {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 6px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  opacity: 0.7;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+.toast-close svg {
+  width: 14px;
+  height: 14px;
+}
+.toast-close:hover {
+  opacity: 1;
+  color: var(--text);
+  background: var(--chip);
+}
+.toast-progress {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  width: 100%;
+  transform-origin: left center;
+  animation: toastProgress linear forwards;
+  border-radius: 0 0 14px 14px;
+  opacity: 0.85;
+}
+.toast-success .toast-progress { animation-duration: 2.8s; }
+.toast-info .toast-progress { animation-duration: 2.8s; }
+.toast-warning .toast-progress { animation-duration: 2.8s; }
+.toast-error .toast-progress { animation-duration: 3.8s; }
+@keyframes toastProgress {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+/* toast type colors */
+.toast-success {
+  border-color: color-mix(in srgb, var(--green) 35%, var(--border));
+  background: color-mix(in srgb, var(--green) 8%, var(--card));
+}
+.toast-success .toast-icon { color: var(--green); }
+.toast-success .toast-progress { background: var(--green); }
+
+.toast-error {
+  border-color: color-mix(in srgb, var(--red) 40%, var(--border));
+  background: color-mix(in srgb, var(--red) 8%, var(--card));
+}
+.toast-error .toast-icon { color: var(--red); }
+.toast-error .toast-progress { background: var(--red); }
+
+.toast-warning {
+  border-color: color-mix(in srgb, var(--orange) 40%, var(--border));
+  background: color-mix(in srgb, var(--orange) 8%, var(--card));
+}
+.toast-warning .toast-icon { color: var(--orange); }
+.toast-warning .toast-progress { background: var(--orange); }
+
+.toast-info {
+  border-color: color-mix(in srgb, var(--blue) 30%, var(--border));
+  background: color-mix(in srgb, var(--blue) 7%, var(--card));
+}
+.toast-info .toast-icon { color: var(--blue); }
+.toast-info .toast-progress { background: var(--blue); }
+
+@media (max-width: 480px) {
+  .toast-wrap {
+    right: 0.75rem;
+    left: 0.75rem;
+    bottom: 1rem;
+    align-items: stretch;
+    max-width: none;
+  }
+  .toast {
+    min-width: 0;
+    width: 100%;
+  }
 }
 
 .empty {
@@ -939,31 +1174,46 @@ code::-moz-selection,
 }
 .plugin-folder-body {
   display: none;
-  padding: 0.25rem 0.9rem 0.9rem;
+  padding: 0;
   border-top: 1px solid var(--border);
+  background: var(--card);
 }
 .plugin-folder.open .plugin-folder-body {
   display: block;
 }
 .plugin-card {
-  padding: 1rem 0.1rem;
+  padding: 1rem 1rem 1.1rem;
   margin: 0;
   border: none;
   border-radius: 0;
-  box-shadow: none;
-  background: transparent;
+  box-shadow: none !important;
+  background: transparent !important;
   border-bottom: 1px solid var(--border-soft);
+  transform: none !important;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.plugin-card:hover {
+  transform: none !important;
+  box-shadow: none !important;
 }
 .plugin-card:last-child {
   border-bottom: none;
-  padding-bottom: 0.35rem;
+}
+.plugin-card .field,
+.plugin-card .field input,
+.plugin-card .field textarea {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 .plugin-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 0.75rem;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.45rem;
 }
 .plugin-head-text { min-width: 0; flex: 1; }
 .plugin-name {
@@ -979,21 +1229,22 @@ code::-moz-selection,
   word-break: break-word;
 }
 .perm-list {
-  margin-top: 0.25rem;
+  margin-top: 0.35rem;
 }
 .perm-list-title {
   font-size: 0.9rem;
   font-weight: 600;
   color: var(--text);
-  margin: 0.3rem 0 0.1rem;
+  margin: 0.35rem 0 0.1rem;
 }
 .perm-list .switch-row {
-  padding: 0.75rem 0;
+  padding: 0.8rem 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
   border-bottom: 1px solid var(--border-soft);
+  width: 100%;
 }
 .perm-list .switch-row:last-child {
   border-bottom: none;
@@ -1004,9 +1255,10 @@ code::-moz-selection,
   color: var(--text);
 }
 .plugin-actions {
-  margin-top: 0.7rem;
+  margin-top: 0.75rem;
   gap: 0.45rem;
   flex-wrap: wrap;
+  display: flex;
 }
 .plugin-responses {
   margin-top: 0.55rem;
@@ -1016,46 +1268,11 @@ code::-moz-selection,
 }
 .plugin-responses textarea {
   min-height: 3.5rem;
+  width: 100%;
 }
 .session-pick {
   margin-bottom: 0.9rem;
 }
-
-
-/* clean permission rows — like settings toggles, no gray box */
-.perm-list {
-  margin-top: 0.25rem;
-}
-.perm-list-title {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--text);
-  margin: 0.35rem 0 0.15rem;
-}
-.perm-list .switch-row {
-  padding: 0.85rem 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  border-bottom: 1px solid var(--border-soft);
-}
-.perm-list .switch-row:last-child {
-  border-bottom: none;
-}
-.perm-list .switch-row span {
-  font-size: 0.95rem;
-  font-weight: 500;
-  color: var(--text);
-}
-.plugin-actions {
-  margin-top: 0.55rem;
-  gap: 0.45rem;
-}
-.plugin-responses {
-  margin-top: 0.5rem;
-}
-.plugin-responses .field { margin-bottom: 0.45rem; }
 
 
 

@@ -6,16 +6,46 @@
   let currentUser = null;
   let pollTimer = null;
 
-  function toast(msg) {
+  function toast(msg, type) {
+    // auto-detect type from message if not provided
+    if (!type) {
+      const m = String(msg || '').toLowerCase();
+      if (/gagal|fail|error|tolak|forbidden|invalid|tidak/.test(m)) type = 'error';
+      else if (/berhasil|saved|disalin|dibuat|dihapus|diperbarui|updated|tersalin|masuk|keluar|reset|menghubungkan|dihentikan/.test(m)) type = 'success';
+      else type = 'info';
+    }
+    const icons = {
+      success: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m8.5 12.5 2.5 2.5 4.5-5"/></svg>`,
+      error: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6M9 9l6 6"/></svg>`,
+      warning: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>`,
+      info: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>`,
+    };
     const el = document.createElement('div');
-    el.className = 'toast';
-    el.textContent = msg;
-    $('#toasts').appendChild(el);
-    setTimeout(() => {
-      el.style.opacity = '0';
-      el.style.transition = 'opacity .25s';
-      setTimeout(() => el.remove(), 250);
-    }, 2800);
+    el.className = `toast toast-${type}`;
+    el.innerHTML = `
+      <span class="toast-icon">${icons[type] || icons.info}</span>
+      <span class="toast-msg">${escapeHtml(String(msg || ''))}</span>
+      <button type="button" class="toast-close" aria-label="Tutup">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+      <span class="toast-progress"></span>
+    `;
+    const wrap = $('#toasts');
+    wrap.appendChild(el);
+    // force reflow then show
+    requestAnimationFrame(() => el.classList.add('show'));
+
+    const duration = type === 'error' ? 3800 : 2800;
+    let closed = false;
+    const close = () => {
+      if (closed) return;
+      closed = true;
+      el.classList.remove('show');
+      el.classList.add('hide');
+      setTimeout(() => el.remove(), 320);
+    };
+    el.querySelector('.toast-close')?.addEventListener('click', close);
+    setTimeout(close, duration);
   }
 
   function showModal({ title, sub = '', body = '', actions = [] }) {
@@ -327,9 +357,19 @@
       showModal({
         title: 'pairing code',
         sub: 'masukkan di whatsapp → perangkat tertaut → tautkan dengan nomor telepon',
-        body: `<div class="pairing-code allow-select" id="pairingCodeValue">${escapeHtml(result.code)}</div>
-          <div style="text-align:center;margin:0.5rem 0 0.75rem">
-            <button type="button" class="btn ghost" id="copyPairingBtn" style="font-size:0.85rem;padding:0.4rem 0.9rem">salin kode</button>
+        body: `<div class="pairing-code-wrap">
+            <div class="pairing-code allow-select" id="pairingCodeValue">${escapeHtml(result.code)}</div>
+            <button type="button" class="copy" id="copyPairingBtn" aria-label="Salin kode">
+              <span data-text-end="Tersalin!" data-text-initial="Salin kode" class="tooltip"></span>
+              <span class="copy-icons">
+                <svg class="clipboard" viewBox="0 0 6.35 6.35" width="18" height="18" xmlns="http://www.w3.org/2000/svg">
+                  <path fill="currentColor" d="M2.43.265c-.3 0-.548.236-.573.53h-.328a.74.74 0 0 0-.735.734v3.822a.74.74 0 0 0 .735.734H4.82a.74.74 0 0 0 .735-.734V1.529a.74.74 0 0 0-.735-.735h-.328a.58.58 0 0 0-.573-.53zm0 .529h1.49c.032 0 .049.017.049.049v.431c0 .032-.017.049-.049.049H2.43c-.032 0-.05-.017-.05-.049V.843c0-.032.018-.05.05-.05zm-.901.53h.328c.026.292.274.528.573.528h1.49a.58.58 0 0 0 .573-.529h.328a.2.2 0 0 1 .206.206v3.822a.2.2 0 0 1-.206.205H1.53a.2.2 0 0 1-.206-.205V1.529a.2.2 0 0 1 .206-.206z"/>
+                </svg>
+                <svg class="checkmark" viewBox="0 0 24 24" width="16" height="16" xmlns="http://www.w3.org/2000/svg">
+                  <path fill="currentColor" d="M9.707 19.121a.997.997 0 0 1-1.414 0l-5.646-5.647a1.5 1.5 0 0 1 0-2.121l.707-.707a1.5 1.5 0 0 1 2.121 0L9 14.171l9.525-9.525a1.5 1.5 0 0 1 2.121 0l.707.707a1.5 1.5 0 0 1 0 2.121z"/>
+                </svg>
+              </span>
+            </button>
           </div>
           <p style="text-align:center;color:var(--muted);font-size:0.8rem;font-weight:500">
             kode hanya berlaku sebentar, segera masukkan di whatsapp
@@ -344,11 +384,10 @@
             const text = codeEl.textContent.trim();
             try {
               await navigator.clipboard.writeText(text);
-              btn.textContent = 'tersalin ✓';
+              btn.classList.add('copied');
               toast('Kode pairing disalin');
-              setTimeout(() => { btn.textContent = 'salin kode'; }, 1500);
+              setTimeout(() => btn.classList.remove('copied'), 1600);
             } catch {
-              // fallback: select text so user can copy manually
               const range = document.createRange();
               range.selectNodeContents(codeEl);
               const sel = window.getSelection();
@@ -772,6 +811,7 @@
         admin: 'Admin Group',
         botadmin: 'Bot Admin',
         owner: 'Owner Only',
+        premium: 'Premium',
       };
 
       const groups = {};
@@ -839,7 +879,7 @@
                 </div>`
               : '';
 
-          html += `<div class="card plugin-card" data-file="${escapeAttr(p.file)}" data-command="${escapeAttr(primary)}" data-defaults='${defaultPermsAttr}'>
+          html += `<div class="plugin-card" data-file="${escapeAttr(p.file)}" data-command="${escapeAttr(primary)}" data-defaults='${defaultPermsAttr}'>
             <div class="plugin-head">
               <div class="plugin-head-text">
                 <div class="plugin-name">${escapeHtml(baseName)}</div>
@@ -919,6 +959,8 @@
               await API.updatePluginResponses(sessionId, command, respBody);
             }
             toast('Saved · ' + file);
+            // refresh so custom commands & tags update immediately
+            await renderPluginCards(sessionId);
           } catch (e) {
             toast(e.message || 'Save failed');
           }
