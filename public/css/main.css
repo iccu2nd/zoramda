@@ -53,7 +53,11 @@ html[data-theme="dark"] {
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { scroll-behavior: smooth; }
+html {
+  scroll-behavior: smooth;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
 body {
   font-family: var(--font);
   background: var(--bg);
@@ -62,11 +66,81 @@ body {
   min-height: 100dvh;
   -webkit-font-smoothing: antialiased;
   transition: background 0.25s var(--ease), color 0.25s var(--ease);
+  /* Disable text selection / long-press blue highlight on UI */
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+/* Global: no selection highlight on interactive / static UI */
+button,
+a,
+label,
+span,
+p,
+h1, h2, h3, h4, h5, h6,
+li,
+div,
+svg,
+img,
+.side-link,
+.side-sublink,
+.side-parent,
+.config-tab,
+.switch,
+.switch-row,
+.status-pill,
+.chip,
+.card,
+.field > label {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+/* Hide selection color if browser still draws it */
+::selection {
+  background: transparent;
+  color: inherit;
+}
+::-moz-selection {
+  background: transparent;
+  color: inherit;
 }
 a { color: inherit; text-decoration: none; }
 button, input, select, textarea { font: inherit; color: inherit; }
 img { max-width: 100%; display: block; }
 .hidden { display: none !important; }
+
+/* Re-enable text selection only where needed (inputs / forms / editable) */
+input:not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+textarea,
+[contenteditable="true"],
+[contenteditable=""],
+.allow-select {
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  user-select: text !important;
+  -webkit-touch-callout: default;
+}
+/* Selection highlight inside form fields remains visible */
+input:not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"])::selection,
+textarea::selection,
+.allow-select::selection {
+  background: rgba(37, 99, 235, 0.35);
+  color: inherit;
+}
+input:not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"])::-moz-selection,
+textarea::-moz-selection,
+.allow-select::-moz-selection {
+  background: rgba(37, 99, 235, 0.35);
+  color: inherit;
+}
 
 /* ——— brand ——— */
 .brand {
