@@ -107,6 +107,15 @@ const API = {
     }),
   adminDeleteSession: (id) =>
     API.request('/api/admin/sessions/' + encodeURIComponent(id), { method: 'DELETE' }),
+
+  paymentPlans: () => API.request('/api/payment/plans'),
+  paymentMe: () => API.request('/api/payment/me'),
+  paymentCheckout: (plan) =>
+    API.request('/api/payment/checkout', { method: 'POST', body: JSON.stringify({ plan }) }),
+  paymentGet: (trxId) => API.request('/api/payment/' + encodeURIComponent(trxId)),
+  paymentCheck: (trxId) =>
+    API.request('/api/payment/' + encodeURIComponent(trxId) + '/check', { method: 'POST' }),
+  paymentHistory: () => API.request('/api/payment'),
 };
 
 window.API = API;

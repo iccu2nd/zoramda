@@ -28,6 +28,9 @@ function publicUser(user) {
     phone: user.phone || '',
     role: user.role,
     isAdmin: user.role === 'admin',
+    plan: user.plan || 'free',
+    planExpiresAt: user.planExpiresAt || null,
+    maxSessions: user.maxSessions ?? 1,
     name: user.name || '',
     apiKey: user.apiKey,
   }
@@ -108,8 +111,9 @@ router.post(
         passwordHash,
         apiKey,
         role: 'user',
+        plan: 'free',
         name: req.body.name || '',
-        maxSessions: config.session.maxPerUser,
+        maxSessions: 1,
       })
 
       const token = signToken(user)

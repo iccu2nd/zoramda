@@ -11,6 +11,7 @@ import authRoutes from './routes/auth.js'
 import createConfigRoutes from './routes/config.js'
 import createPluginRoutes from './routes/plugins.js'
 import createAdminRoutes from './routes/admin.js'
+import paymentRoutes from './routes/payment.js'
 
 /**
  * @param {import('../core/SessionManager.js').SessionManager} sessionManager
@@ -54,6 +55,7 @@ export function createServer(sessionManager) {
   app.use('/api/plugins', createPluginRoutes(sessionManager))
   app.use('/api/sessions', createSessionRoutes(sessionManager))
   app.use('/api/admin', createAdminRoutes(sessionManager))
+  app.use('/api/payment', paymentRoutes)
 
   // 404
   app.use((req, res) => {

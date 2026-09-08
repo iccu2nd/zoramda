@@ -1,7 +1,7 @@
 (function () {
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-  const PAGES = ['sessions', 'config', 'plugins', 'admin', 'account'];
+  const PAGES = ['sessions', 'config', 'plugins', 'admin', 'account', 'pricing'];
 
   let currentUser = null;
   let pollTimer = null;
@@ -225,6 +225,7 @@
     if (page === 'sessions') loadSessions();
     if (page === 'plugins') loadPlugins();
     if (page === 'account') loadAccount();
+    if (page === 'pricing') loadPricing();
     if (page === 'admin') loadAdmin();
   }
 
@@ -994,6 +995,188 @@
     } catch (e) {
       box.innerHTML = `<p style="color:var(--red)">${escapeHtml(e.message)}</p>`;
     }
+  }
+
+
+  /* ——— pricing / payment (QRIS via Sociabuzz, manual status check) ——— */
+  let activeCheckoutTrx = null;
+
+  function formatRp(n) {
+    return 'Rp' + Number(n || 0).toLocaleString('id-ID');
+  }
+
+  function statusLabel(s) {
+    const map = {
+      pending: 'Pending',
+      paid: 'Berhasil',
+      expired: 'Expired',
+      failed: 'Gagal',
+      unknown: 'Tidak diketahui',
+    };
+    return map[s] || s || '-';
+  }
+
+  function statusClass(s) {
+    if (s === 'paid') return 'pay-status ok';
+    if (s === 'pending') return 'pay-status wait';
+    if (s === 'expired' || s === 'failed') return 'pay-status bad';
+    return 'pay-status';
+  }
+
+  async function loadPricing() {
+    const root = $('#pricingRoot');
+    if (!root) return;
+    root.innerHTML = '<p style="color:var(--muted);font-weight:500">Memuat paket…</p>';
+    try {
+      const [plansRes, meRes] = await Promise.all([API.paymentPlans(), API.paymentMe()]);
+      const plans = plansRes.plans || [];
+      const me = meRes || {};
+      if (currentUser) {
+        currentUser.plan = me.plan || currentUser.plan;
+        currentUser.maxSessions = me.maxSessions;
+        currentUser.planExpiresAt = me.planExpiresAt;
+      }
+
+      let html = `<div class="pay-current">
+        <div><strong>Paket aktif:</strong> ${(me.plan || 'free').toUpperCase()}</div>
+        <div class="hint">Maks session: ${me.maxSessions ?? 1}${
+          me.planExpiresAt
+            ? ' · berakhir ' + new Date(me.planExpiresAt).toLocaleDateString('id-ID')
+            : ''
+        }</div>
+      </div>
+      <div class="pricing-grid dash-pricing">`;
+
+      for (const p of plans) {
+        const isCurrent = (me.plan || 'free') === p.id;
+        const canBuy = p.amount > 0 && !isCurrent;
+        html += `<div class="price-card ${isCurrent ? 'featured' : ''}">
+          ${isCurrent ? '<div class="price-badge">aktif</div>' : ''}
+          <div class="price-tier">${escapeHtml(p.name)}</div>
+          <div class="price-amount">${p.amount > 0 ? formatRp(p.amount) : 'Rp0'}<span>${
+            p.amount > 0 ? '/bulan' : ''
+          }</span></div>
+          <ul class="price-features">
+            ${(p.features || []).map((f) => `<li>${escapeHtml(f)}</li>`).join('')}
+            <li>${p.maxSessions} session</li>
+          </ul>
+          ${
+            canBuy
+              ? `<button type="button" class="btn" style="width:100%;justify-content:center" data-buy="${escapeAttr(
+                  p.id
+                )}">Beli — QRIS</button>`
+              : `<button type="button" class="btn btn-ghost" style="width:100%;justify-content:center" disabled>${
+                  isCurrent ? 'Paket aktif' : 'Gratis'
+                }</button>`
+          }
+        </div>`;
+      }
+      html += `</div><div id="checkoutPanel" class="checkout-panel hidden"></div>`;
+      root.innerHTML = html;
+
+      root.querySelectorAll('[data-buy]').forEach((btn) => {
+        btn.addEventListener('click', () => startCheckout(btn.dataset.buy, btn));
+      });
+
+      if (activeCheckoutTrx) {
+        renderCheckoutPanel(activeCheckoutTrx);
+      }
+    } catch (e) {
+      root.innerHTML = `<p style="color:var(--red)">${escapeHtml(e.message)}</p>`;
+    }
+  }
+
+  async function startCheckout(planId, btn) {
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Membuat QRIS…';
+    }
+    try {
+      const { payment } = await API.paymentCheckout(planId);
+      activeCheckoutTrx = payment;
+      renderCheckoutPanel(payment);
+      toast('QRIS siap — scan untuk bayar', 'success');
+    } catch (e) {
+      toast(e.message || 'Checkout gagal', 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Beli — QRIS';
+      }
+    }
+  }
+
+  function renderCheckoutPanel(payment) {
+    const panel = $('#checkoutPanel');
+    if (!panel || !payment) return;
+    panel.classList.remove('hidden');
+    const qr = payment.qrString
+      ? `<img class="qris-img" alt="QRIS" src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
+          payment.qrString
+        )}" />`
+      : `<p class="hint">Kode QR tidak tersedia. Coba checkout ulang.</p>`;
+    panel.innerHTML = `
+      <div class="checkout-card">
+        <h3>Pembayaran QRIS</h3>
+        <p class="hint">Order <code class="allow-select">${escapeHtml(payment.trxId)}</code> · ${escapeHtml(
+          (payment.plan || '').toUpperCase()
+        )} · ${formatRp(payment.totalAmount || payment.amount)}</p>
+        <div class="${statusClass(payment.status)}">${statusLabel(payment.status)}</div>
+        <div class="qris-wrap">${qr}</div>
+        ${
+          payment.qrString
+            ? `<p class="hint allow-select" style="word-break:break-all;font-size:0.75rem">${escapeHtml(
+                payment.qrString
+              )}</p>`
+            : ''
+        }
+        <p class="hint">Bayar dengan aplikasi e-wallet / mobile banking (QRIS). Setelah transfer, tekan tombol di bawah — status tidak dicek otomatis.</p>
+        <div class="toolbar" style="margin-top:0.75rem;gap:0.5rem;flex-wrap:wrap">
+          <button type="button" class="btn" id="checkPayBtn">Cek Status Pembayaran</button>
+          <button type="button" class="btn btn-ghost" id="closePayBtn">Tutup</button>
+        </div>
+        <p class="hint" id="payMsg" style="margin-top:0.5rem"></p>
+      </div>`;
+
+    $('#checkPayBtn')?.addEventListener('click', async () => {
+      const b = $('#checkPayBtn');
+      if (b) {
+        b.disabled = true;
+        b.textContent = 'Mengecek…';
+      }
+      try {
+        const res = await API.paymentCheck(payment.trxId);
+        activeCheckoutTrx = res.payment;
+        renderCheckoutPanel(res.payment);
+        const msg = $('#payMsg');
+        if (msg) msg.textContent = res.message || '';
+        if (res.payment?.status === 'paid') {
+          toast(res.message || 'Pembayaran berhasil', 'success');
+          try {
+            const me = await API.me();
+            if (me?.user) currentUser = me.user;
+          } catch {}
+          loadPricing();
+        } else if (res.payment?.status === 'pending') {
+          toast(res.message || 'Masih pending', 'info');
+        } else {
+          toast(res.message || statusLabel(res.payment?.status), 'warning');
+        }
+      } catch (e) {
+        toast(e.message || 'Gagal cek status', 'error');
+      } finally {
+        const b2 = $('#checkPayBtn');
+        if (b2) {
+          b2.disabled = false;
+          b2.textContent = 'Cek Status Pembayaran';
+        }
+      }
+    });
+    $('#closePayBtn')?.addEventListener('click', () => {
+      activeCheckoutTrx = null;
+      panel.classList.add('hidden');
+      panel.innerHTML = '';
+    });
   }
 
   /* ——— account ——— */

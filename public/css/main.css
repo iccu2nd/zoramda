@@ -1720,3 +1720,70 @@ code::-moz-selection,
     padding: 0.85rem 1rem;
   }
 }
+
+
+/* ——— dashboard pricing / checkout ——— */
+.pay-current {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.9rem 1rem;
+  margin-bottom: 1rem;
+  font-weight: 500;
+}
+.dash-pricing {
+  max-width: none;
+  margin-bottom: 1.25rem;
+}
+.checkout-panel {
+  margin-top: 0.5rem;
+}
+.checkout-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.15rem 1.2rem;
+  box-shadow: var(--shadow);
+  max-width: 420px;
+}
+.checkout-card h3 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-bottom: 0.35rem;
+}
+.qris-wrap {
+  display: flex;
+  justify-content: center;
+  margin: 0.85rem 0;
+  padding: 0.75rem;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+.qris-img {
+  width: 220px;
+  height: 220px;
+  display: block;
+}
+.pay-status {
+  display: inline-block;
+  margin-top: 0.35rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  background: var(--chip);
+  color: var(--muted);
+}
+.pay-status.wait {
+  background: color-mix(in srgb, var(--orange) 18%, transparent);
+  color: var(--orange);
+}
+.pay-status.ok {
+  background: color-mix(in srgb, var(--green) 18%, transparent);
+  color: var(--green);
+}
+.pay-status.bad {
+  background: color-mix(in srgb, var(--red) 16%, transparent);
+  color: var(--red);
+}

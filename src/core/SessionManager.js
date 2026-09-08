@@ -57,11 +57,26 @@ export class SessionManager {
    * Create a new session for a user
    */
   async createSession(userId, { name = '', pairingPhone } = {}) {
-    // Limit check (env-level, not per-session)
+    // Limit from user plan (DB), not only env
+    const User = (await import('../db/models/User.js')).default
+    const user = await User.findOne({ userId }).lean()
     const count = await Session.countDocuments({ userId, isActive: true })
-    const maxSessions = config.session.maxPerUser
+    let maxSessions = user?.maxSessions
+    if (maxSessions == null) maxSessions = config.session.maxPerUser
+    if (user?.role === 'admin') maxSessions = Math.max(maxSessions, config.session.maxPerUser)
+    // expired plan → fall back to free limit
+    if (
+      user?.plan &&
+      user.plan !== 'free' &&
+      user.planExpiresAt &&
+      new Date(user.planExpiresAt).getTime() < Date.now()
+    ) {
+      maxSessions = 1
+    }
     if (count >= maxSessions) {
-      const err = new Error(`Max sessions (${maxSessions}) reached`)
+      const err = new Error(
+        `Batas session paket kamu (${maxSessions}) sudah penuh. Upgrade di menu Pricing.`
+      )
       err.code = 'MAX_SESSIONS'
       throw err
     }
