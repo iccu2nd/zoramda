@@ -73,26 +73,12 @@ const sessionConfigSchema = new mongoose.Schema(
 
     /**
      * Per-plugin state for this session.
-     * Key = plugin relative file path (e.g. "main/ping.js")
-     * Value = { enabled: boolean, permissions: string[] }
+     * Key = plugin relative file path (e.g. "main/ping.js") — keys contain "."
+     * so this MUST be Mixed, not Map (Mongoose Map rejects dotted keys).
+     * Value = { enabled: boolean, permissions: string[], commands?: string[] }
      * permissions is AND-combined: all selected must pass.
      */
-    plugins: {
-      type: Map,
-      of: new mongoose.Schema(
-        {
-          enabled: { type: Boolean, default: true },
-          permissions: {
-            type: [String],
-            default: ['everyone'],
-          },
-          // Custom command aliases for this plugin in this session (empty = use plugin defaults)
-          commands: { type: [String], default: undefined },
-        },
-        { _id: false }
-      ),
-      default: {},
-    },
+    plugins: { type: mongoose.Schema.Types.Mixed, default: {} },
 
     extra: { type: mongoose.Schema.Types.Mixed, default: {} },
   },

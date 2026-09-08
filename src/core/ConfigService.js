@@ -379,28 +379,25 @@ class ConfigService {
   async updatePluginStates(sessionId, userId, states) {
     await safeGetOrCreate(sessionId, userId)
 
-    // IMPORTANT: plugin file keys contain dots (e.g. "main/help.js").
-    // Using $set with "plugins.main/help.js.commands" makes Mongo nest by dots
-    // and corrupts the Map. Always update the whole Map entry via document API.
+    // Plugin file keys contain dots (e.g. "main/help.js").
+    // Never use dotted $set paths like "plugins.main/help.js.commands"
+    // — Mongo would nest them. Replace the whole `plugins` object instead.
     const doc = await SessionConfig.findOne({ sessionId })
     if (!doc) return {}
 
-    if (!doc.plugins || typeof doc.plugins.get !== 'function') {
-      // convert plain object → Map if needed
-      const map = new Map()
-      const raw = doc.plugins
-      if (raw && typeof raw === 'object') {
-        for (const [k, v] of Object.entries(raw instanceof Map ? Object.fromEntries(raw) : raw)) {
-          map.set(k, v)
-        }
-      }
-      doc.plugins = map
+    // Normalize existing value to a plain object (legacy Map / nested corruption)
+    let plugins = {}
+    const raw = doc.plugins
+    if (raw instanceof Map) {
+      for (const [k, v] of raw.entries()) plugins[k] = v
+    } else if (raw && typeof raw === 'object') {
+      plugins = { ...raw }
     }
 
     let changed = false
     for (const [file, val] of Object.entries(states || {})) {
       if (!val || typeof val !== 'object') continue
-      const prev = doc.plugins.get(file)
+      const prev = plugins[file]
       const cur =
         prev && typeof prev === 'object'
           ? {
@@ -432,13 +429,14 @@ class ConfigService {
         }
         changed = true
       }
-      doc.plugins.set(file, cur)
+      plugins[file] = cur
     }
 
     if (!changed) {
       return this.getCached(sessionId).plugins
     }
 
+    doc.plugins = plugins
     doc.markModified('plugins')
     await doc.save()
 
