@@ -38,7 +38,7 @@ function normalizeEmail(email) {
 }
 
 function isValidEmail(email) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 120
+  return /^[^\s@]+@gmail\.com$/.test(email) && email.length <= 120
 }
 
 function normalizePhone(phone) {
@@ -74,7 +74,7 @@ router.post(
         })
       }
       if (!isValidEmail(email)) {
-        return res.status(400).json({ error: 'Masukkan alamat email yang valid.' })
+        return res.status(400).json({ error: 'Email harus menggunakan alamat @gmail.com.' })
       }
       if (!isValidPassword(password)) {
         return res.status(400).json({ error: 'Password minimal 6 karakter.' })

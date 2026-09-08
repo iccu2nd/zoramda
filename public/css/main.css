@@ -996,8 +996,6 @@ img { max-width: 100%; display: block; }
   font-weight: 700;
   color: var(--text);
   cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 2px;
 }
 .auth-link:hover { opacity: 0.85; }
 .auth-form h1 {

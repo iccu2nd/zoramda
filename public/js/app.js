@@ -144,6 +144,10 @@
       errEl.textContent = 'Lengkapi semua field yang wajib diisi.';
       return;
     }
+    if (!/^[^\s@]+@gmail\.com$/i.test(email)) {
+      errEl.textContent = 'Email harus menggunakan alamat @gmail.com.';
+      return;
+    }
     if (password !== confirmPassword) {
       errEl.textContent = 'Konfirmasi password tidak cocok.';
       return;
