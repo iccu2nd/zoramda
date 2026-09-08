@@ -186,17 +186,40 @@
   });
 
   /* ——— nav ——— */
+  function activatePage(page) {
+    $$('.side-link[data-page]').forEach((b) => b.classList.remove('active'));
+    $$('.side-sublink').forEach((b) => b.classList.remove('active'));
+    $('#navBotSettings')?.classList.remove('active');
+    PAGES.forEach((p) => $('#page-' + p).classList.toggle('hidden', p !== page));
+    if (page === 'config') loadConfig();
+    if (page === 'sessions') loadSessions();
+    if (page === 'plugins') loadPlugins();
+    if (page === 'account') loadAccount();
+    if (page === 'admin') loadAdmin();
+  }
+
   $$('.side-link[data-page]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      $$('.side-link[data-page]').forEach((b) => b.classList.remove('active'));
+      activatePage(btn.dataset.page);
       btn.classList.add('active');
-      const page = btn.dataset.page;
-      PAGES.forEach((p) => $('#page-' + p).classList.toggle('hidden', p !== page));
-      if (page === 'config') loadConfig();
-      if (page === 'sessions') loadSessions();
-      if (page === 'plugins') loadPlugins();
-      if (page === 'account') loadAccount();
-      if (page === 'admin') loadAdmin();
+      closeSidebar();
+    });
+  });
+
+  /* Bot Settings submenu: parent expands/collapses, children navigate to
+     the config page and pick a tab (config / message / system) */
+  $('#navBotSettings')?.addEventListener('click', () => {
+    const submenu = $('#submenuBotSettings');
+    const isOpen = submenu.classList.toggle('open');
+    $('#navBotSettings').classList.toggle('expanded', isOpen);
+  });
+
+  $$('.side-sublink[data-page]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      pendingConfigTab = btn.dataset.configTab || null;
+      activatePage(btn.dataset.page);
+      btn.classList.add('active');
+      $('#navBotSettings')?.classList.add('active');
       closeSidebar();
     });
   });
@@ -220,9 +243,9 @@
   /** Show Config / Plugins once user has at least one session (connect not required) */
   function updateConnectedNav(sessions) {
     const hasSession = (sessions || []).length > 0;
-    const navConfig = document.getElementById('navConfig');
+    const navBotSettingsGroup = document.getElementById('navBotSettingsGroup');
     const navPlugins = document.getElementById('navPlugins');
-    if (navConfig) navConfig.style.display = hasSession ? '' : 'none';
+    if (navBotSettingsGroup) navBotSettingsGroup.style.display = hasSession ? '' : 'none';
     if (navPlugins) navPlugins.style.display = hasSession ? '' : 'none';
 
     // If user is on config/plugins but no sessions left, bounce to sessions
@@ -231,6 +254,9 @@
       const onPlugins = !$('#page-plugins').classList.contains('hidden');
       if (onConfig || onPlugins) {
         $$('.side-link[data-page]').forEach((b) => b.classList.remove('active'));
+        $$('.side-sublink').forEach((b) => b.classList.remove('active'));
+        $('#navBotSettings')?.classList.remove('active', 'expanded');
+        $('#submenuBotSettings')?.classList.remove('open');
         const sessionsBtn = document.querySelector('.side-link[data-page="sessions"]');
         if (sessionsBtn) sessionsBtn.classList.add('active');
         PAGES.forEach((p) => $('#page-' + p).classList.toggle('hidden', p !== 'sessions'));
@@ -488,6 +514,7 @@
 
   /* ——— Manajemen Bot (per-session) ——— */
   let selectedConfigSession = null;
+  let pendingConfigTab = null;
   let selectedPluginSession = null;
 
   async function fillSessionSelect(selectEl, selectedId, connectedOnly = false) {
@@ -546,10 +573,9 @@
       box.innerHTML = `
         <p class="sub" style="margin-bottom:0.75rem">Settings berlaku langsung untuk session ini saja. Session lain tidak terpengaruh.</p>
         <div class="config-tabs">
-          <button type="button" class="config-tab active" data-tab="info">info bot</button>
-          <button type="button" class="config-tab" data-tab="pesan">pesan</button>
-          <button type="button" class="config-tab" data-tab="limit">limit &amp; premium</button>
-          <button type="button" class="config-tab" data-tab="perilaku">perilaku</button>
+          <button type="button" class="config-tab active" data-tab="info">config</button>
+          <button type="button" class="config-tab" data-tab="pesan">message</button>
+          <button type="button" class="config-tab" data-tab="system">system</button>
         </div>
 
         <div class="config-tab-panel" data-panel="info">
@@ -577,7 +603,8 @@
           <div class="field"><label>pesan khusus limit habis</label><textarea data-k="limitMessage">${escapeHtml(config.limitMessage || '')}</textarea></div>
         </div>
 
-        <div class="config-tab-panel" data-panel="limit" style="display:none">
+        <div class="config-tab-panel" data-panel="system" style="display:none">
+          <p class="sub" style="margin:0 0 0.5rem;font-weight:700;color:var(--text)">Sistem Limit</p>
           <div class="switch-row">
             <span>gunakan limit</span>
             <div class="switch ${config.useLimit ? 'on' : ''}" data-k="useLimit" data-bool></div>
@@ -591,9 +618,8 @@
             <div class="switch ${config.premiumUnlimited ? 'on' : ''}" data-k="premiumUnlimited" data-bool></div>
           </div>
           <div class="field"><label>limit default premium (jika tidak unlimited)</label><input type="number" min="0" data-k="premiumDefaultLimit" value="${escapeAttr(config.premiumDefaultLimit ?? 100)}"></div>
-        </div>
 
-        <div class="config-tab-panel" data-panel="perilaku" style="display:none">
+          <p class="sub" style="margin:1.1rem 0 0.5rem;font-weight:700;color:var(--text)">Perilaku Bot</p>
           <div class="switch-row">
             <span>mode publik</span>
             <div class="switch ${config.publicMode ? 'on' : ''}" data-k="publicMode" data-bool></div>
@@ -623,16 +649,19 @@
       box.querySelectorAll('.switch[data-bool]').forEach((sw) => {
         sw.addEventListener('click', () => sw.classList.toggle('on'));
       });
-      box.querySelectorAll('.config-tab').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          box.querySelectorAll('.config-tab').forEach((b) => b.classList.remove('active'));
-          btn.classList.add('active');
-          const target = btn.dataset.tab;
-          box.querySelectorAll('.config-tab-panel').forEach((panel) => {
-            panel.style.display = panel.dataset.panel === target ? '' : 'none';
-          });
+      function activateConfigTab(target) {
+        box.querySelectorAll('.config-tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === target));
+        box.querySelectorAll('.config-tab-panel').forEach((panel) => {
+          panel.style.display = panel.dataset.panel === target ? '' : 'none';
         });
+      }
+      box.querySelectorAll('.config-tab').forEach((btn) => {
+        btn.addEventListener('click', () => activateConfigTab(btn.dataset.tab));
       });
+      if (pendingConfigTab) {
+        activateConfigTab(pendingConfigTab);
+        pendingConfigTab = null;
+      }
     } catch (e) {
       box.innerHTML = `<p style="color:var(--red)">${escapeHtml(e.message)}</p>`;
     }
