@@ -516,6 +516,7 @@
   /* ——— Manajemen Bot (per-session) ——— */
   let selectedConfigSession = null;
   let pendingConfigTab = null;
+  let currentConfigTab = 'info';
   let selectedPluginSession = null;
 
   async function fillSessionSelect(selectEl, selectedId, connectedOnly = false) {
@@ -571,15 +572,18 @@
     box.innerHTML = '<p style="color:var(--muted);font-weight:500">memuat config...</p>';
     try {
       const { config } = await API.config(sessionId);
+      if (pendingConfigTab) {
+        currentConfigTab = pendingConfigTab;
+        pendingConfigTab = null;
+      }
+      const activeTab = currentConfigTab || 'info';
+      const titleMap = { info: 'config', pesan: 'message', system: 'system' };
+      const pageTitle = document.querySelector('#page-config .page-title');
+      if (pageTitle) pageTitle.textContent = titleMap[activeTab] || 'config';
       box.innerHTML = `
         <p class="sub" style="margin-bottom:0.75rem">Settings berlaku langsung untuk session ini saja. Session lain tidak terpengaruh.</p>
-        <div class="config-tabs">
-          <button type="button" class="config-tab active" data-tab="info">config</button>
-          <button type="button" class="config-tab" data-tab="pesan">message</button>
-          <button type="button" class="config-tab" data-tab="system">system</button>
-        </div>
 
-        <div class="config-tab-panel" data-panel="info">
+        <div class="config-tab-panel" data-panel="info" style="${activeTab === 'info' ? '' : 'display:none'}">
           <div class="field"><label>nama bot</label><input data-k="botName" value="${escapeAttr(config.botName || '')}"></div>
           <div class="field-row">
             <div class="field"><label>prefix</label><input data-k="prefix" value="${escapeAttr(config.prefix || '.')}"></div>
@@ -593,7 +597,7 @@
           <div class="field"><label>judul menu</label><input data-k="menuTitle" value="${escapeAttr(config.menuTitle || '')}"></div>
         </div>
 
-        <div class="config-tab-panel" data-panel="pesan" style="display:none">
+        <div class="config-tab-panel" data-panel="pesan" style="${activeTab === 'pesan' ? '' : 'display:none'}">
           <div class="field"><label>pesan welcome</label><textarea data-k="welcomeMessage">${escapeHtml(config.welcomeMessage || '')}</textarea></div>
           <div class="field"><label>pesan maintenance</label><textarea data-k="maintenanceMessage">${escapeHtml(config.maintenanceMessage || '')}</textarea></div>
           <div class="field"><label>pesan khusus owner</label><textarea data-k="ownerOnlyMessage">${escapeHtml(config.ownerOnlyMessage || '')}</textarea></div>
@@ -604,7 +608,7 @@
           <div class="field"><label>pesan khusus limit habis</label><textarea data-k="limitMessage">${escapeHtml(config.limitMessage || '')}</textarea></div>
         </div>
 
-        <div class="config-tab-panel" data-panel="system" style="display:none">
+        <div class="config-tab-panel" data-panel="system" style="${activeTab === 'system' ? '' : 'display:none'}">
           <p class="sub" style="margin:0 0 0.5rem;font-weight:700;color:var(--text)">Sistem Limit</p>
           <div class="switch-row">
             <span>gunakan limit</span>
@@ -665,19 +669,6 @@
           }
         });
       });
-      function activateConfigTab(target) {
-        box.querySelectorAll('.config-tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === target));
-        box.querySelectorAll('.config-tab-panel').forEach((panel) => {
-          panel.style.display = panel.dataset.panel === target ? '' : 'none';
-        });
-      }
-      box.querySelectorAll('.config-tab').forEach((btn) => {
-        btn.addEventListener('click', () => activateConfigTab(btn.dataset.tab));
-      });
-      if (pendingConfigTab) {
-        activateConfigTab(pendingConfigTab);
-        pendingConfigTab = null;
-      }
     } catch (e) {
       box.innerHTML = `<p style="color:var(--red)">${escapeHtml(e.message)}</p>`;
     }
