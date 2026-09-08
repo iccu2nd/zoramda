@@ -49,11 +49,31 @@ async function main() {
   process.on('SIGINT', () => shutdown('SIGINT'))
 
   process.on('uncaughtException', (err) => {
-    logger.fatal({ err: err.message, stack: err.stack }, 'Uncaught exception')
+    const msg = err?.message || String(err)
+    // Known Baileys/libsignal noise — session key desync, not fatal
+    if (
+      /Bad MAC|MessageCounterError|Failed to decrypt|Key used already|No session record/i.test(
+        msg
+      )
+    ) {
+      logger.debug({ err: msg }, 'Ignored baileys session noise')
+      return
+    }
+    logger.fatal({ err: msg, stack: err?.stack }, 'Uncaught exception')
   })
 
   process.on('unhandledRejection', (reason) => {
-    logger.error({ reason: String(reason) }, 'Unhandled rejection')
+    const msg =
+      reason instanceof Error ? reason.message : String(reason ?? '')
+    if (
+      /Bad MAC|MessageCounterError|Failed to decrypt|Key used already|No session record/i.test(
+        msg
+      )
+    ) {
+      logger.debug({ reason: msg }, 'Ignored baileys session noise')
+      return
+    }
+    logger.error({ reason: msg }, 'Unhandled rejection')
   })
 }
 

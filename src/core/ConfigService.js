@@ -353,17 +353,23 @@ class ConfigService {
    * Returns Set of plugin file paths that should run for this command.
    */
   resolveCommandFiles(sessionId, command, allPlugins) {
-    const cmd = String(command || '').toLowerCase()
+    const cmd = String(command || '')
+      .toLowerCase()
+      .trim()
+      .replace(/^\./, '')
     if (!cmd) return new Set()
     const cfg = this.getCached(sessionId)
     const matched = new Set()
 
     for (const p of allPlugins) {
       const state = cfg.plugins && cfg.plugins[p.file]
+      // disabled plugins never match
+      if (state && state.enabled === false) continue
       const custom =
         state && Array.isArray(state.commands) && state.commands.length
-          ? state.commands.map((c) => String(c).toLowerCase())
+          ? state.commands.map((c) => String(c).toLowerCase().trim().replace(/^\./, ''))
           : null
+      // custom set → use only custom; empty/undefined → plugin defaults
       const cmds = custom || p.commands || []
       if (cmds.includes(cmd)) matched.add(p.file)
     }
@@ -373,41 +379,76 @@ class ConfigService {
   async updatePluginStates(sessionId, userId, states) {
     await safeGetOrCreate(sessionId, userId)
 
-    const set = {}
+    // IMPORTANT: plugin file keys contain dots (e.g. "main/help.js").
+    // Using $set with "plugins.main/help.js.commands" makes Mongo nest by dots
+    // and corrupts the Map. Always update the whole Map entry via document API.
+    const doc = await SessionConfig.findOne({ sessionId })
+    if (!doc) return {}
+
+    if (!doc.plugins || typeof doc.plugins.get !== 'function') {
+      // convert plain object → Map if needed
+      const map = new Map()
+      const raw = doc.plugins
+      if (raw && typeof raw === 'object') {
+        for (const [k, v] of Object.entries(raw instanceof Map ? Object.fromEntries(raw) : raw)) {
+          map.set(k, v)
+        }
+      }
+      doc.plugins = map
+    }
+
+    let changed = false
     for (const [file, val] of Object.entries(states || {})) {
       if (!val || typeof val !== 'object') continue
+      const prev = doc.plugins.get(file)
+      const cur =
+        prev && typeof prev === 'object'
+          ? {
+              enabled: prev.enabled !== false,
+              permissions: Array.isArray(prev.permissions)
+                ? [...prev.permissions]
+                : ['everyone'],
+              commands: Array.isArray(prev.commands) ? [...prev.commands] : undefined,
+            }
+          : { enabled: true, permissions: ['everyone'], commands: undefined }
+
       if (val.enabled !== undefined) {
-        set[`plugins.${file}.enabled`] = Boolean(val.enabled)
+        cur.enabled = Boolean(val.enabled)
+        changed = true
       }
       if (val.permissions !== undefined || val.permission !== undefined) {
-        const list = normalizePermList(val.permissions ?? val.permission, ['everyone'])
-        set[`plugins.${file}.permissions`] = list
+        cur.permissions = normalizePermList(val.permissions ?? val.permission, ['everyone'])
+        changed = true
       }
       if (val.commands !== undefined) {
         if (val.commands === null || (Array.isArray(val.commands) && val.commands.length === 0)) {
-          // empty array / null → clear custom commands (revert to plugin defaults)
-          set[`plugins.${file}.commands`] = []
+          // empty → revert to plugin defaults
+          cur.commands = []
         } else if (Array.isArray(val.commands)) {
-          set[`plugins.${file}.commands`] = val.commands
-            .map((c) => String(c).toLowerCase().trim())
+          cur.commands = val.commands
+            .map((c) => String(c).toLowerCase().trim().replace(/^\./, ''))
             .filter(Boolean)
             .slice(0, 20)
         }
+        changed = true
       }
+      doc.plugins.set(file, cur)
     }
 
-    if (!Object.keys(set).length) {
+    if (!changed) {
       return this.getCached(sessionId).plugins
     }
 
-    const updated = await SessionConfig.findOneAndUpdate(
-      { sessionId },
-      { $set: set },
-      { new: true }
-    ).lean()
+    doc.markModified('plugins')
+    await doc.save()
 
-    const cfg = toCache(updated)
+    const lean = doc.toObject ? doc.toObject() : doc
+    const cfg = toCache(lean)
     this._cache.set(sessionId, cfg)
+    logger.info(
+      { sessionId, files: Object.keys(states || {}) },
+      'Plugin states updated'
+    )
     return cfg.plugins
   }
 

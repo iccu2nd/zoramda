@@ -98,9 +98,20 @@ export class MessageHandler {
       const allPlugins = this.pluginLoader.getAllPlugins()
       const matchedFiles = configService.resolveCommandFiles(sessionId, m.command, allPlugins)
       let handlers = allPlugins.filter((p) => matchedFiles.has(p.file))
-      // Fallback to global registry if no session mapping matched
+      // Fallback to global registry only when no session mapping matched
       if (handlers.length === 0) {
-        handlers = this.pluginLoader.getHandlers(m.command)
+        const global = this.pluginLoader.getHandlers(m.command) || []
+        handlers = global.filter((p) => {
+          const state = configService.getPluginState(
+            sessionId,
+            p.file,
+            p.permissions || ['everyone']
+          )
+          // skip disabled; if custom commands set, defaults no longer match via fallback
+          if (state.enabled === false) return false
+          if (state.commands && state.commands.length) return false
+          return true
+        })
       }
       if (handlers.length === 0) return
 

@@ -113,7 +113,15 @@ export class ConnectionManager {
         syncFullHistory: false,
         markOnlineOnConnect: false,
         generateHighQualityLinkPreview: false,
+        // Don't retry decrypt failures aggressively — reduces Bad MAC spam
         getMessage: async () => undefined,
+        shouldIgnoreJid: (jid) => jid === 'status@broadcast',
+        // Keep connection lean for multi-session stability
+        keepAliveIntervalMs: 30000,
+        connectTimeoutMs: 60000,
+        defaultQueryTimeoutMs: 60000,
+        emitOwnEvents: false,
+        fireInitQueries: true,
       })
 
       this.sock = sock
