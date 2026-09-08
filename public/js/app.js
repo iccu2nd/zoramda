@@ -545,62 +545,93 @@
       const { config } = await API.config(sessionId);
       box.innerHTML = `
         <p class="sub" style="margin-bottom:0.75rem">Settings berlaku langsung untuk session ini saja. Session lain tidak terpengaruh.</p>
-        <div class="field"><label>nama bot</label><input data-k="botName" value="${escapeAttr(config.botName || '')}"></div>
-        <div class="field-row">
-          <div class="field"><label>prefix</label><input data-k="prefix" value="${escapeAttr(config.prefix || '.')}"></div>
-          <div class="field"><label>nama owner</label><input data-k="ownerName" value="${escapeAttr(config.ownerName || '')}"></div>
+        <div class="config-tabs">
+          <button type="button" class="config-tab active" data-tab="info">info bot</button>
+          <button type="button" class="config-tab" data-tab="pesan">pesan</button>
+          <button type="button" class="config-tab" data-tab="limit">limit &amp; premium</button>
+          <button type="button" class="config-tab" data-tab="perilaku">perilaku</button>
         </div>
-        <div class="field"><label>nomor owner (pisah koma)</label><input data-k="ownerNumbers" value="${escapeAttr((config.ownerNumbers || []).join(','))}"></div>
-        <div class="field"><label>judul menu</label><input data-k="menuTitle" value="${escapeAttr(config.menuTitle || '')}"></div>
-        <div class="field"><label>pesan welcome</label><textarea data-k="welcomeMessage">${escapeHtml(config.welcomeMessage || '')}</textarea></div>
-        <div class="field"><label>pesan maintenance</label><textarea data-k="maintenanceMessage">${escapeHtml(config.maintenanceMessage || '')}</textarea></div>
-        <div class="field"><label>pesan khusus owner</label><textarea data-k="ownerOnlyMessage">${escapeHtml(config.ownerOnlyMessage || '')}</textarea></div>
-        <div class="field"><label>pesan khusus admin</label><textarea data-k="adminOnlyMessage">${escapeHtml(config.adminOnlyMessage || '')}</textarea></div>
-        <div class="field"><label>pesan khusus group</label><textarea data-k="groupOnlyMessage">${escapeHtml(config.groupOnlyMessage || '')}</textarea></div>
-        <div class="field"><label>pesan khusus private chat</label><textarea data-k="privateOnlyMessage">${escapeHtml(config.privateOnlyMessage || '')}</textarea></div>
-        <div class="field"><label>pesan khusus premium</label><textarea data-k="premiumOnlyMessage">${escapeHtml(config.premiumOnlyMessage || '')}</textarea></div>
-        <div class="field"><label>pesan khusus limit habis</label><textarea data-k="limitMessage">${escapeHtml(config.limitMessage || '')}</textarea></div>
-        <div class="switch-row">
-          <span>mode publik</span>
-          <div class="switch ${config.publicMode ? 'on' : ''}" data-k="publicMode" data-bool></div>
+
+        <div class="config-tab-panel" data-panel="info">
+          <div class="field"><label>nama bot</label><input data-k="botName" value="${escapeAttr(config.botName || '')}"></div>
+          <div class="field-row">
+            <div class="field"><label>prefix</label><input data-k="prefix" value="${escapeAttr(config.prefix || '.')}"></div>
+            <div class="field"><label>nama owner</label><input data-k="ownerName" value="${escapeAttr(config.ownerName || '')}"></div>
+          </div>
+          <div class="field"><label>nomor owner (pisah koma)</label><input data-k="ownerNumbers" value="${escapeAttr((config.ownerNumbers || []).join(','))}"></div>
+          <div class="field-row">
+            <div class="field"><label>pack name</label><input data-k="packName" value="${escapeAttr(config.packName || '')}"></div>
+            <div class="field"><label>author</label><input data-k="author" value="${escapeAttr(config.author || '')}"></div>
+          </div>
+          <div class="field"><label>judul menu</label><input data-k="menuTitle" value="${escapeAttr(config.menuTitle || '')}"></div>
         </div>
-        <div class="switch-row">
-          <span>maintenance</span>
-          <div class="switch ${config.maintenanceMode ? 'on' : ''}" data-k="maintenanceMode" data-bool></div>
+
+        <div class="config-tab-panel" data-panel="pesan" style="display:none">
+          <div class="field"><label>pesan welcome</label><textarea data-k="welcomeMessage">${escapeHtml(config.welcomeMessage || '')}</textarea></div>
+          <div class="field"><label>pesan maintenance</label><textarea data-k="maintenanceMessage">${escapeHtml(config.maintenanceMessage || '')}</textarea></div>
+          <div class="field"><label>pesan khusus owner</label><textarea data-k="ownerOnlyMessage">${escapeHtml(config.ownerOnlyMessage || '')}</textarea></div>
+          <div class="field"><label>pesan khusus admin</label><textarea data-k="adminOnlyMessage">${escapeHtml(config.adminOnlyMessage || '')}</textarea></div>
+          <div class="field"><label>pesan khusus group</label><textarea data-k="groupOnlyMessage">${escapeHtml(config.groupOnlyMessage || '')}</textarea></div>
+          <div class="field"><label>pesan khusus private chat</label><textarea data-k="privateOnlyMessage">${escapeHtml(config.privateOnlyMessage || '')}</textarea></div>
+          <div class="field"><label>pesan khusus premium</label><textarea data-k="premiumOnlyMessage">${escapeHtml(config.premiumOnlyMessage || '')}</textarea></div>
+          <div class="field"><label>pesan khusus limit habis</label><textarea data-k="limitMessage">${escapeHtml(config.limitMessage || '')}</textarea></div>
         </div>
-        <div class="switch-row">
-          <span>anti spam</span>
-          <div class="switch ${config.antiSpam ? 'on' : ''}" data-k="antiSpam" data-bool></div>
+
+        <div class="config-tab-panel" data-panel="limit" style="display:none">
+          <div class="switch-row">
+            <span>gunakan limit</span>
+            <div class="switch ${config.useLimit ? 'on' : ''}" data-k="useLimit" data-bool></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label>limit terpakai per perintah</label><input type="number" min="0" data-k="limitCost" value="${escapeAttr(config.limitCost ?? 1)}"></div>
+            <div class="field"><label>limit default user baru</label><input type="number" min="0" data-k="defaultLimit" value="${escapeAttr(config.defaultLimit ?? 10)}"></div>
+          </div>
+          <div class="switch-row">
+            <span>premium unlimited</span>
+            <div class="switch ${config.premiumUnlimited ? 'on' : ''}" data-k="premiumUnlimited" data-bool></div>
+          </div>
+          <div class="field"><label>limit default premium (jika tidak unlimited)</label><input type="number" min="0" data-k="premiumDefaultLimit" value="${escapeAttr(config.premiumDefaultLimit ?? 100)}"></div>
         </div>
-        <div class="switch-row">
-          <span>read message</span>
-          <div class="switch ${config.readMessages ? 'on' : ''}" data-k="readMessages" data-bool></div>
+
+        <div class="config-tab-panel" data-panel="perilaku" style="display:none">
+          <div class="switch-row">
+            <span>mode publik</span>
+            <div class="switch ${config.publicMode ? 'on' : ''}" data-k="publicMode" data-bool></div>
+          </div>
+          <div class="switch-row">
+            <span>maintenance</span>
+            <div class="switch ${config.maintenanceMode ? 'on' : ''}" data-k="maintenanceMode" data-bool></div>
+          </div>
+          <div class="switch-row">
+            <span>anti spam</span>
+            <div class="switch ${config.antiSpam ? 'on' : ''}" data-k="antiSpam" data-bool></div>
+          </div>
+          <div class="switch-row">
+            <span>read message</span>
+            <div class="switch ${config.readMessages ? 'on' : ''}" data-k="readMessages" data-bool></div>
+          </div>
+          <div class="switch-row">
+            <span>typing indicator</span>
+            <div class="switch ${config.sendTyping ? 'on' : ''}" data-k="sendTyping" data-bool></div>
+          </div>
+          <div class="switch-row">
+            <span>recording indicator</span>
+            <div class="switch ${config.sendRecording ? 'on' : ''}" data-k="sendRecording" data-bool></div>
+          </div>
         </div>
-        <div class="switch-row">
-          <span>typing indicator</span>
-          <div class="switch ${config.sendTyping ? 'on' : ''}" data-k="sendTyping" data-bool></div>
-        </div>
-        <div class="switch-row">
-          <span>recording indicator</span>
-          <div class="switch ${config.sendRecording ? 'on' : ''}" data-k="sendRecording" data-bool></div>
-        </div>
-        <p class="sub" style="margin:1.1rem 0 0.5rem;font-weight:700;color:var(--text)">Sistem Limit</p>
-        <div class="switch-row">
-          <span>gunakan limit</span>
-          <div class="switch ${config.useLimit ? 'on' : ''}" data-k="useLimit" data-bool></div>
-        </div>
-        <div class="field-row">
-          <div class="field"><label>limit terpakai per perintah</label><input type="number" min="0" data-k="limitCost" value="${escapeAttr(config.limitCost ?? 1)}"></div>
-          <div class="field"><label>limit default user baru</label><input type="number" min="0" data-k="defaultLimit" value="${escapeAttr(config.defaultLimit ?? 10)}"></div>
-        </div>
-        <div class="switch-row">
-          <span>premium unlimited</span>
-          <div class="switch ${config.premiumUnlimited ? 'on' : ''}" data-k="premiumUnlimited" data-bool></div>
-        </div>
-        <div class="field"><label>limit default premium (jika tidak unlimited)</label><input type="number" min="0" data-k="premiumDefaultLimit" value="${escapeAttr(config.premiumDefaultLimit ?? 100)}"></div>
       `;
       box.querySelectorAll('.switch[data-bool]').forEach((sw) => {
         sw.addEventListener('click', () => sw.classList.toggle('on'));
+      });
+      box.querySelectorAll('.config-tab').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          box.querySelectorAll('.config-tab').forEach((b) => b.classList.remove('active'));
+          btn.classList.add('active');
+          const target = btn.dataset.tab;
+          box.querySelectorAll('.config-tab-panel').forEach((panel) => {
+            panel.style.display = panel.dataset.panel === target ? '' : 'none';
+          });
+        });
       });
     } catch (e) {
       box.innerHTML = `<p style="color:var(--red)">${escapeHtml(e.message)}</p>`;

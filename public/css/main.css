@@ -378,6 +378,27 @@ img { max-width: 100%; display: block; }
 .side-link:hover { background: var(--chip); color: var(--text); }
 .side-link.active { background: var(--chip); color: var(--text); }
 .side-foot { margin-top: auto; padding-top: 1rem; border-top: 1px solid var(--border-soft); }
+
+.config-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1.1rem;
+}
+.config-tab {
+  padding: 0.45rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--muted);
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: background 0.2s var(--ease), color 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+.config-tab:hover { color: var(--text); }
+.config-tab.active { background: var(--text); color: var(--bg); border-color: var(--text); }
 .side-theme-row {
   display: flex;
   align-items: center;

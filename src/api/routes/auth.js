@@ -125,28 +125,33 @@ router.post(
 )
 
 /**
- * Login with username + password. Returns a session token — no apiKey
- * needed to use the dashboard.
+ * Login with username or email + password. Returns a session token — no
+ * apiKey needed to use the dashboard.
  */
 router.post(
   '/login',
   validateBody({
-    username: { type: 'string', required: true, maxLength: 32 },
+    username: { type: 'string', required: true, maxLength: 120 },
     password: { type: 'string', required: true, maxLength: 128 },
   }),
   async (req, res) => {
     try {
-      const username = normalizeUsername(req.body.username)
+      const raw = String(req.body.username || '').trim()
+      const isEmail = raw.includes('@')
       const password = String(req.body.password || '')
 
-      const user = await User.findOne({ username, isActive: true })
+      const query = isEmail
+        ? { email: normalizeEmail(raw), isActive: true }
+        : { username: normalizeUsername(raw), isActive: true }
+
+      const user = await User.findOne(query)
       if (!user) {
-        return res.status(401).json({ error: 'Username atau password salah' })
+        return res.status(401).json({ error: 'Username/email atau password salah' })
       }
 
       const ok = await verifyPassword(password, user.passwordHash)
       if (!ok) {
-        return res.status(401).json({ error: 'Username atau password salah' })
+        return res.status(401).json({ error: 'Username/email atau password salah' })
       }
 
       const token = signToken(user)

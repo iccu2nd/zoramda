@@ -12,6 +12,8 @@ let handler = async (m, { sessionId, botConfig, responses }) => {
     uptime: `${h}h ${min}m ${s}s`,
     sessionId: sessionId?.slice(0, 8) || '-',
     status: botConfig?.maintenanceMode ? 'Maintenance' : 'Online',
+    packName: botConfig?.packName || '-',
+    author: botConfig?.author || '-',
   })
 
   await m.reply(text)
@@ -23,14 +25,16 @@ handler.command = ['info']
 handler.responses = {
   infoText:
     '*{botName} Info*\n\n' +
-    '• Nama    : {botName}\n' +
-    '• Owner   : {ownerName}\n' +
-    '• Prefix  : {prefix}\n' +
-    '• Mode    : {mode}\n' +
-    '• Runtime : Node.js {nodeVersion}\n' +
-    '• Uptime  : {uptime}\n' +
-    '• Session : {sessionId}\n' +
-    '• Status  : {status}',
+    '• Nama     : {botName}\n' +
+    '• Owner    : {ownerName}\n' +
+    '• Pack     : {packName}\n' +
+    '• Author   : {author}\n' +
+    '• Prefix   : {prefix}\n' +
+    '• Mode     : {mode}\n' +
+    '• Runtime  : Node.js {nodeVersion}\n' +
+    '• Uptime   : {uptime}\n' +
+    '• Session  : {sessionId}\n' +
+    '• Status   : {status}',
 }
 
 export default handler

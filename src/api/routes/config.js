@@ -75,6 +75,8 @@ export default function createConfigRoutes(sessionManager) {
         { key: 'botName', type: 'string', label: 'Nama Bot', maxLength: 64 },
         { key: 'botNumber', type: 'string', label: 'Nomor Bot (display)', maxLength: 20 },
         { key: 'ownerName', type: 'string', label: 'Nama Owner', maxLength: 64 },
+        { key: 'packName', type: 'string', label: 'Pack Name', maxLength: 64 },
+        { key: 'author', type: 'string', label: 'Author', maxLength: 64 },
         {
           key: 'ownerNumbers',
           type: 'array',

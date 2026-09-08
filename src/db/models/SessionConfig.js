@@ -23,6 +23,8 @@ const sessionConfigSchema = new mongoose.Schema(
     botNumber: { type: String, default: null },
     ownerNumbers: { type: [String], default: [] },
     ownerName: { type: String, default: 'Owner' },
+    packName: { type: String, default: 'Botenv' },
+    author: { type: String, default: '' },
 
     prefix: { type: String, default: '.' },
     publicMode: { type: Boolean, default: true },

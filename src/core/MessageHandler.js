@@ -328,6 +328,8 @@ export class MessageHandler {
       botName: botCfg.botName,
       prefix: m.usedPrefix,
       ownerName: botCfg.ownerName,
+      packName: botCfg.packName,
+      author: botCfg.author,
     }
     const responses = {}
     for (const key of Object.keys(defaults)) {
