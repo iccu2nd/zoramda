@@ -11,6 +11,7 @@ const PERMISSIONS = [
   'admin',
   'botadmin',
   'owner',
+  'premium',
 ]
 
 const sessionConfigSchema = new mongoose.Schema(
@@ -37,6 +38,17 @@ const sessionConfigSchema = new mongoose.Schema(
       default: 'Halo! Ketik {prefix}menu untuk melihat perintah.',
     },
     ownerOnlyMessage: { type: String, default: 'Perintah ini hanya untuk owner.' },
+    adminOnlyMessage: { type: String, default: 'Perintah ini hanya untuk admin grup.' },
+    groupOnlyMessage: { type: String, default: 'Perintah ini hanya bisa dipakai di dalam grup.' },
+    privateOnlyMessage: {
+      type: String,
+      default: 'Perintah ini hanya bisa dipakai lewat chat pribadi.',
+    },
+    premiumOnlyMessage: { type: String, default: 'Perintah ini khusus untuk member premium.' },
+    limitMessage: {
+      type: String,
+      default: 'Limit kamu sudah habis. Tunggu limit reset atau upgrade ke premium.',
+    },
     maintenanceMode: { type: Boolean, default: false },
     maintenanceMessage: {
       type: String,
@@ -45,7 +57,17 @@ const sessionConfigSchema = new mongoose.Schema(
 
     maxSessionsPerUser: { type: Number, default: 5 },
     bannedUsers: { type: [String], default: [] },
+    premiumUsers: { type: [String], default: [] },
     pluginResponses: { type: mongoose.Schema.Types.Mixed, default: {} },
+
+    // Limit system — how many "uses" each WhatsApp user has for limited commands.
+    useLimit: { type: Boolean, default: false },
+    limitCost: { type: Number, default: 1 }, // how much limit is deducted per command use
+    defaultLimit: { type: Number, default: 10 }, // starting limit for a new (non-premium) user
+    premiumUnlimited: { type: Boolean, default: true }, // true = premium users bypass the limit entirely
+    premiumDefaultLimit: { type: Number, default: 100 }, // used only when premiumUnlimited is false
+    // Remaining limit balance per WhatsApp user, keyed by phone number digits only (no "@"/".")
+    userLimits: { type: mongoose.Schema.Types.Mixed, default: {} },
 
     /**
      * Per-plugin state for this session.

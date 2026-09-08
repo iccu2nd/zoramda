@@ -24,12 +24,24 @@ const DEFAULTS = {
   menuTitle: 'Botenv Menu',
   welcomeMessage: 'Halo! Ketik {prefix}menu untuk melihat perintah.',
   ownerOnlyMessage: 'Perintah ini hanya untuk owner.',
+  adminOnlyMessage: 'Perintah ini hanya untuk admin grup.',
+  groupOnlyMessage: 'Perintah ini hanya bisa dipakai di dalam grup.',
+  privateOnlyMessage: 'Perintah ini hanya bisa dipakai lewat chat pribadi.',
+  premiumOnlyMessage: 'Perintah ini khusus untuk member premium.',
+  limitMessage: 'Limit kamu sudah habis. Tunggu limit reset atau upgrade ke premium.',
   maintenanceMode: false,
   maintenanceMessage: 'Bot sedang maintenance. Coba lagi nanti.',
   maxSessionsPerUser: staticConfig.session?.maxPerUser || 5,
   bannedUsers: [],
+  premiumUsers: [],
   pluginResponses: {},
   plugins: {},
+  useLimit: false,
+  limitCost: 1,
+  defaultLimit: 10,
+  premiumUnlimited: true,
+  premiumDefaultLimit: 100,
+  userLimits: {},
   extra: {},
 }
 
@@ -48,9 +60,19 @@ const EDITABLE_FIELDS = [
   'menuTitle',
   'welcomeMessage',
   'ownerOnlyMessage',
+  'adminOnlyMessage',
+  'groupOnlyMessage',
+  'privateOnlyMessage',
+  'premiumOnlyMessage',
+  'limitMessage',
   'maintenanceMode',
   'maintenanceMessage',
   'maxSessionsPerUser',
+  'useLimit',
+  'limitCost',
+  'defaultLimit',
+  'premiumUnlimited',
+  'premiumDefaultLimit',
   'extra',
 ]
 
@@ -85,6 +107,15 @@ function cleanPartial(partial) {
   if (clean.maxSessionsPerUser !== undefined) {
     clean.maxSessionsPerUser = Math.max(1, parseInt(clean.maxSessionsPerUser, 10) || 5)
   }
+  if (clean.limitCost !== undefined) {
+    clean.limitCost = Math.max(0, parseInt(clean.limitCost, 10) || 0)
+  }
+  if (clean.defaultLimit !== undefined) {
+    clean.defaultLimit = Math.max(0, parseInt(clean.defaultLimit, 10) || 0)
+  }
+  if (clean.premiumDefaultLimit !== undefined) {
+    clean.premiumDefaultLimit = Math.max(0, parseInt(clean.premiumDefaultLimit, 10) || 0)
+  }
 
   for (const b of [
     'publicMode',
@@ -93,6 +124,8 @@ function cleanPartial(partial) {
     'readMessages',
     'sendTyping',
     'sendRecording',
+    'useLimit',
+    'premiumUnlimited',
   ]) {
     if (clean[b] !== undefined) clean[b] = Boolean(clean[b])
   }
@@ -146,6 +179,9 @@ function toCache(doc) {
   }
   if (!Array.isArray(next.ownerNumbers)) next.ownerNumbers = []
   next.bannedUsers = Array.isArray(doc.bannedUsers) ? doc.bannedUsers : []
+  next.premiumUsers = Array.isArray(doc.premiumUsers) ? doc.premiumUsers : []
+  next.userLimits =
+    doc.userLimits && typeof doc.userLimits === 'object' ? doc.userLimits : {}
   next.pluginResponses =
     doc.pluginResponses && typeof doc.pluginResponses === 'object' ? doc.pluginResponses : {}
   next.plugins = normalizePlugins(doc.plugins)
@@ -411,6 +447,100 @@ class ConfigService {
     const cfg = this.getCached(sessionId)
     const num = String(jid).split('@')[0].replace(/\D/g, '')
     return (cfg.ownerNumbers || []).some((o) => String(o).replace(/\D/g, '') === num)
+  }
+
+  async addPremium(sessionId, userId, jid) {
+    await safeGetOrCreate(sessionId, userId)
+    const updated = await SessionConfig.findOneAndUpdate(
+      { sessionId },
+      { $addToSet: { premiumUsers: jid } },
+      { new: true }
+    ).lean()
+    const cfg = toCache(updated)
+    this._cache.set(sessionId, cfg)
+    return cfg.premiumUsers
+  }
+
+  async removePremium(sessionId, userId, jid) {
+    const updated = await SessionConfig.findOneAndUpdate(
+      { sessionId },
+      { $pull: { premiumUsers: jid } },
+      { new: true }
+    ).lean()
+    const cfg = toCache(updated)
+    this._cache.set(sessionId, cfg)
+    return cfg.premiumUsers
+  }
+
+  getPremiumUsers(sessionId) {
+    return this.getCached(sessionId).premiumUsers || []
+  }
+
+  isPremium(sessionId, jid) {
+    if (!jid) return false
+    const num = String(jid).split('@')[0].replace(/\D/g, '')
+    return this.getPremiumUsers(sessionId).some(
+      (p) => String(p).split('@')[0].replace(/\D/g, '') === num
+    )
+  }
+
+  isLimitEnabled(sessionId) {
+    return !!this.getCached(sessionId).useLimit
+  }
+
+  /**
+   * Current remaining limit for a WhatsApp user, without consuming it.
+   * Falls back to the plan's starting balance if the user has none stored yet.
+   */
+  getUserLimit(sessionId, jid) {
+    if (!jid) return 0
+    const cfg = this.getCached(sessionId)
+    const key = String(jid).split('@')[0].replace(/\D/g, '')
+    const stored = cfg.userLimits ? cfg.userLimits[key] : undefined
+    if (stored !== undefined) return stored
+    return this.isPremium(sessionId, jid) ? cfg.premiumDefaultLimit : cfg.defaultLimit
+  }
+
+  /**
+   * Gate + spend limit for a command use.
+   * Owners and (by default) premium users are meant to be excluded by the
+   * caller before this runs — see MessageHandler for the exact policy.
+   * Returns { allowed, remaining, cost }.
+   */
+  async consumeLimit(sessionId, userId, jid) {
+    const cfg = this.getCached(sessionId)
+    const cost = Math.max(0, cfg.limitCost || 0)
+    const current = this.getUserLimit(sessionId, jid)
+
+    if (current < cost) {
+      return { allowed: false, remaining: current, cost }
+    }
+
+    const next = current - cost
+    const key = String(jid).split('@')[0].replace(/\D/g, '')
+    await safeGetOrCreate(sessionId, userId)
+    const updated = await SessionConfig.findOneAndUpdate(
+      { sessionId },
+      { $set: { [`userLimits.${key}`]: next } },
+      { new: true }
+    ).lean()
+    const updatedCfg = toCache(updated)
+    this._cache.set(sessionId, updatedCfg)
+    return { allowed: true, remaining: next, cost }
+  }
+
+  async setUserLimit(sessionId, userId, jid, amount) {
+    const key = String(jid).split('@')[0].replace(/\D/g, '')
+    const value = Math.max(0, parseInt(amount, 10) || 0)
+    await safeGetOrCreate(sessionId, userId)
+    const updated = await SessionConfig.findOneAndUpdate(
+      { sessionId },
+      { $set: { [`userLimits.${key}`]: value } },
+      { new: true }
+    ).lean()
+    const cfg = toCache(updated)
+    this._cache.set(sessionId, cfg)
+    return value
   }
 
   getPrefix(sessionId) {

@@ -22,6 +22,7 @@ const PERM_PRIVATE = 'private'
 const PERM_ADMIN = 'admin'
 const PERM_BOTADMIN = 'botadmin'
 const PERM_OWNER = 'owner'
+const PERM_PREMIUM = 'premium'
 
 export class MessageHandler {
   /**
@@ -205,7 +206,7 @@ export class MessageHandler {
   /**
    * Check a single permission flag.
    */
-  async _checkOnePermission(permission, m, sock, isOwner, groupMetaCache) {
+  async _checkOnePermission(permission, m, sock, isOwner, groupMetaCache, sessionId) {
     switch (permission) {
       case PERM_EVERYONE:
         return true
@@ -215,6 +216,8 @@ export class MessageHandler {
         return !m.isGroup
       case PERM_OWNER:
         return isOwner
+      case PERM_PREMIUM:
+        return isOwner || configService.isPremium(sessionId, m.sender)
       case PERM_ADMIN: {
         if (!m.isGroup) return false
         if (isOwner) return true
@@ -248,19 +251,41 @@ export class MessageHandler {
    * AND-combine all permissions in the list.
    * Example: ['admin', 'botadmin'] → user must be admin AND bot must be admin.
    * 'everyone' alone always passes; if mixed with others, others still apply.
+   * Returns { allowed, failed } — failed is the first permission that didn't pass.
    */
-  async _checkPermissions(permissions, m, sock, isOwner) {
+  async _checkPermissions(permissions, m, sock, isOwner, sessionId) {
     const list = Array.isArray(permissions) ? permissions : [permissions || 'everyone']
     // If only everyone (or empty), allow
     const effective = list.filter((p) => p && p !== PERM_EVERYONE)
-    if (effective.length === 0) return true
+    if (effective.length === 0) return { allowed: true }
 
     const cache = {}
     for (const perm of effective) {
-      const ok = await this._checkOnePermission(perm, m, sock, isOwner, cache)
-      if (!ok) return false
+      const ok = await this._checkOnePermission(perm, m, sock, isOwner, cache, sessionId)
+      if (!ok) return { allowed: false, failed: perm }
     }
-    return true
+    return { allowed: true }
+  }
+
+  /**
+   * Pick the custom denial message for whichever permission blocked the command.
+   */
+  _permissionMessage(failed, cfg) {
+    switch (failed) {
+      case PERM_OWNER:
+        return cfg.ownerOnlyMessage || 'Perintah ini hanya untuk owner.'
+      case PERM_ADMIN:
+      case PERM_BOTADMIN:
+        return cfg.adminOnlyMessage || 'Perintah ini hanya untuk admin grup.'
+      case PERM_GROUP:
+        return cfg.groupOnlyMessage || 'Perintah ini hanya bisa dipakai di dalam grup.'
+      case PERM_PRIVATE:
+        return cfg.privateOnlyMessage || 'Perintah ini hanya bisa dipakai lewat chat pribadi.'
+      case PERM_PREMIUM:
+        return cfg.premiumOnlyMessage || 'Perintah ini khusus untuk member premium.'
+      default:
+        return null
+    }
   }
 
   async _runPlugin(plugin, m, sock, sessionId, userId, latency, isOwner) {
@@ -276,16 +301,26 @@ export class MessageHandler {
     if (!state.enabled) return
 
     // Permission gate — ALL selected permissions must pass (AND)
-    const allowed = await this._checkPermissions(state.permissions, m, sock, isOwner)
-    if (!allowed) {
-      if (state.permissions.includes(PERM_OWNER) && state.permissions.length === 1) {
-        const cfg = configService.getCached(sessionId)
-        await m.reply(cfg.ownerOnlyMessage || 'Perintah ini hanya untuk owner.')
-      }
+    const permResult = await this._checkPermissions(state.permissions, m, sock, isOwner, sessionId)
+    const botCfg = configService.getCached(sessionId)
+    if (!permResult.allowed) {
+      const msg = this._permissionMessage(permResult.failed, botCfg)
+      if (msg) await m.reply(msg)
       return
     }
 
-    const botCfg = configService.getCached(sessionId)
+    // Limit gate — skip for owners; premium users bypass only if premiumUnlimited is on
+    if (configService.isLimitEnabled(sessionId) && !isOwner) {
+      const isPremiumUser = configService.isPremium(sessionId, m.sender)
+      const bypassLimit = isPremiumUser && botCfg.premiumUnlimited
+      if (!bypassLimit) {
+        const result = await configService.consumeLimit(sessionId, userId, m.sender)
+        if (!result.allowed) {
+          await m.reply(botCfg.limitMessage || 'Limit kamu sudah habis.')
+          return
+        }
+      }
+    }
 
     const defaults = plugin.handler.responses || {}
     const overrides = configService.getPluginResponses(sessionId, plugin.commands[0])
@@ -309,6 +344,7 @@ export class MessageHandler {
       sessionId,
       userId,
       isOwner,
+      isPremium: isOwner || configService.isPremium(sessionId, m.sender),
       plugins: this.pluginLoader,
       botConfig: botCfg,
       botName: botCfg.botName,
@@ -322,6 +358,12 @@ export class MessageHandler {
         unban: (jid) => configService.unbanUser(sessionId, userId, jid),
         isBanned: (jid) => configService.isBanned(sessionId, jid),
         getBannedUsers: () => configService.getBannedUsers(sessionId),
+        isPremium: (jid) => configService.isPremium(sessionId, jid),
+        addPremium: (jid) => configService.addPremium(sessionId, userId, jid),
+        removePremium: (jid) => configService.removePremium(sessionId, userId, jid),
+        getPremiumUsers: () => configService.getPremiumUsers(sessionId),
+        getUserLimit: (jid) => configService.getUserLimit(sessionId, jid),
+        setUserLimit: (jid, amount) => configService.setUserLimit(sessionId, userId, jid, amount),
       },
     }
 
