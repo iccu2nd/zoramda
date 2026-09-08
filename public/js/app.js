@@ -220,7 +220,15 @@
     $$('.side-link[data-page]').forEach((b) => b.classList.remove('active'));
     $$('.side-sublink').forEach((b) => b.classList.remove('active'));
     $('#navBotSettings')?.classList.remove('active');
-    PAGES.forEach((p) => $('#page-' + p).classList.toggle('hidden', p !== page));
+    const link = document.querySelector('.side-link[data-page="' + page + '"]');
+    if (link) link.classList.add('active');
+    if (page === 'config' || page === 'plugins') {
+      $('#navBotSettings')?.classList.add('active');
+    }
+    PAGES.forEach((p) => {
+      const el = $('#page-' + p);
+      if (el) el.classList.toggle('hidden', p !== page);
+    });
     if (page === 'config') loadConfig();
     if (page === 'sessions') loadSessions();
     if (page === 'plugins') loadPlugins();
@@ -1078,7 +1086,7 @@
         <p>Upgrade ke Pro untuk mengakses pengaturan bot.</p>
         <button type="button" class="btn" id="lockUpgradeBtn">Upgrade ke Pro</button>
       </div>`;
-    $('#lockUpgradeBtn')?.addEventListener('click', () => showPage('pricing'));
+    $('#lockUpgradeBtn')?.addEventListener('click', () => activatePage('pricing'));
   }
 
   function applyBotSettingsGate() {
@@ -1152,7 +1160,7 @@
           <button type="button" class="btn btn-sm" id="ovUpgradeBtn">Lihat Pricing</button>
         </div>
       </div>`;
-    $('#ovUpgradeBtn')?.addEventListener('click', () => showPage('pricing'));
+    $('#ovUpgradeBtn')?.addEventListener('click', () => activatePage('pricing'));
   }
 
   async function loadPricing() {
@@ -1207,7 +1215,7 @@
             try {
               sessionStorage.setItem('zb_active_trx', payment.trxId);
             } catch {}
-            showPage('payment');
+            activatePage('payment');
             toast('QRIS siap', 'success');
           } catch (e) {
             toast(e.message || 'Checkout gagal', 'error');
@@ -1262,7 +1270,7 @@
           <p>Belum ada transaksi aktif.</p>
           <button type="button" class="btn" id="goPricingBtn">Pilih paket</button>
         </div>`;
-      $('#goPricingBtn')?.addEventListener('click', () => showPage('pricing'));
+      $('#goPricingBtn')?.addEventListener('click', () => activatePage('pricing'));
       return;
     }
     root.innerHTML = '<p class="hint">Memuat transaksi…</p>';
@@ -1273,7 +1281,7 @@
     } catch (e) {
       root.innerHTML = `<p style="color:var(--red)">${escapeHtml(e.message)}</p>
         <button type="button" class="btn" id="goPricingBtn2">Pilih paket</button>`;
-      $('#goPricingBtn2')?.addEventListener('click', () => showPage('pricing'));
+      $('#goPricingBtn2')?.addEventListener('click', () => activatePage('pricing'));
     }
   }
 
@@ -1372,8 +1380,8 @@
       }
     });
 
-    $('#newPayBtn')?.addEventListener('click', () => showPage('pricing'));
-    $('#backPricingBtn')?.addEventListener('click', () => showPage('pricing'));
+    $('#newPayBtn')?.addEventListener('click', () => activatePage('pricing'));
+    $('#backPricingBtn')?.addEventListener('click', () => activatePage('pricing'));
   }
 
   /* ——— account ——— */
