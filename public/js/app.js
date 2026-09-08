@@ -327,12 +327,38 @@
       showModal({
         title: 'pairing code',
         sub: 'masukkan di whatsapp → perangkat tertaut → tautkan dengan nomor telepon',
-        body: `<div class="pairing-code">${escapeHtml(result.code)}</div>
+        body: `<div class="pairing-code allow-select" id="pairingCodeValue">${escapeHtml(result.code)}</div>
+          <div style="text-align:center;margin:0.5rem 0 0.75rem">
+            <button type="button" class="btn ghost" id="copyPairingBtn" style="font-size:0.85rem;padding:0.4rem 0.9rem">salin kode</button>
+          </div>
           <p style="text-align:center;color:var(--muted);font-size:0.8rem;font-weight:500">
             kode hanya berlaku sebentar, segera masukkan di whatsapp
           </p>`,
         actions: [{ label: 'tutup', ghost: true }],
       });
+      setTimeout(() => {
+        const btn = document.getElementById('copyPairingBtn');
+        const codeEl = document.getElementById('pairingCodeValue');
+        if (btn && codeEl) {
+          btn.addEventListener('click', async () => {
+            const text = codeEl.textContent.trim();
+            try {
+              await navigator.clipboard.writeText(text);
+              btn.textContent = 'tersalin ✓';
+              toast('Kode pairing disalin');
+              setTimeout(() => { btn.textContent = 'salin kode'; }, 1500);
+            } catch {
+              // fallback: select text so user can copy manually
+              const range = document.createRange();
+              range.selectNodeContents(codeEl);
+              const sel = window.getSelection();
+              sel.removeAllRanges();
+              sel.addRange(range);
+              toast('Seleksi kode — tekan salin');
+            }
+          });
+        }
+      }, 0);
     } else {
       showModal({
         title: 'pairing code gagal',

@@ -116,9 +116,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 img { max-width: 100%; display: block; }
 .hidden { display: none !important; }
 
-/* Re-enable text selection only where needed (inputs / forms / editable) */
+/* Re-enable text selection only where needed (inputs / forms / codes / editable) */
 input:not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
 textarea,
+code,
+.pairing-code,
 [contenteditable="true"],
 [contenteditable=""],
 .allow-select {
@@ -128,15 +130,19 @@ textarea,
   user-select: text !important;
   -webkit-touch-callout: default;
 }
-/* Selection highlight inside form fields remains visible */
+/* Selection highlight inside form fields / codes remains visible */
 input:not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"])::selection,
 textarea::selection,
+code::selection,
+.pairing-code::selection,
 .allow-select::selection {
   background: rgba(37, 99, 235, 0.35);
   color: inherit;
 }
 input:not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"])::-moz-selection,
 textarea::-moz-selection,
+code::-moz-selection,
+.pairing-code::-moz-selection,
 .allow-select::-moz-selection {
   background: rgba(37, 99, 235, 0.35);
   color: inherit;
@@ -713,6 +719,21 @@ textarea::-moz-selection,
   background: var(--chip);
   border-radius: 12px;
   margin: 0.75rem 0;
+  /* pairing code must be selectable / copyable */
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  user-select: text !important;
+  -webkit-touch-callout: default;
+  cursor: text;
+}
+.pairing-code::selection {
+  background: rgba(37, 99, 235, 0.35);
+  color: inherit;
+}
+.pairing-code::-moz-selection {
+  background: rgba(37, 99, 235, 0.35);
+  color: inherit;
 }
 
 .pairing-spinner {
