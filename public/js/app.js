@@ -1158,17 +1158,18 @@
 
   function payStatusIcon(s) {
     if (s === 'paid') {
-      return `<span class="pay-anim ok" aria-hidden="true">
-        <svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" fill="none"/><path fill="none" d="M14 27l8 8 16-16"/></svg>
+      return `<span class="pay-badge ok" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
       </span>`;
     }
     if (s === 'pending') {
-      return `<span class="pay-anim wait" aria-hidden="true">
-        <svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" fill="none"/><path fill="none" d="M16 16l20 20M36 16L16 36"/></svg>
+      return `<span class="pay-badge wait" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
       </span>`;
     }
-    return `<span class="pay-anim bad" aria-hidden="true">
-      <svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" fill="none"/><path fill="none" d="M16 16l20 20M36 16L16 36"/></svg>
+    // expired / failed
+    return `<span class="pay-badge bad" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
     </span>`;
   }
 
@@ -1403,11 +1404,13 @@
     if (!root || !payment) return;
     const canPay = payment.status === 'pending';
     const qrBlock = payment.qrString
-      ? `<div class="qris-wrap"><img class="qris-img" id="qrisImg" alt="QRIS" src="https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(
-          payment.qrString
-        )}"/></div>
-         <div class="toolbar" style="justify-content:center;gap:0.5rem;margin-bottom:0.75rem">
-           <a class="btn btn-sm btn-ghost" id="dlQris" href="https://api.qrserver.com/v1/create-qr-code/?size=512x512&data=${encodeURIComponent(
+      ? `<div class="qris-box">
+           <img class="qris-img" id="qrisImg" alt="QRIS" width="300" height="300" src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=8&data=${encodeURIComponent(
+             payment.qrString
+           )}"/>
+         </div>
+         <div class="qris-actions">
+           <a class="btn btn-sm btn-ghost" id="dlQris" href="https://api.qrserver.com/v1/create-qr-code/?size=512x512&margin=8&data=${encodeURIComponent(
              payment.qrString
            )}" download="qris-${escapeAttr(payment.trxId)}.png" target="_blank" rel="noopener">Download QRIS</a>
          </div>`

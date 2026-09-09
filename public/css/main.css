@@ -2265,3 +2265,111 @@ code::-moz-selection,
   color: #128C7E;
 }
 .upgrade-channel a svg { width: 18px; height: 18px; }
+
+
+/* ——— payment page polish ——— */
+.pay-page-card {
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 1.25rem 1.15rem 1.35rem;
+  border: 1px solid var(--border);
+  box-shadow: none;
+}
+.pay-status-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--border);
+}
+.pay-status-text {
+  font-weight: 800;
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+}
+.pay-badge {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.pay-badge svg {
+  width: 20px;
+  height: 20px;
+}
+.pay-badge.ok {
+  background: color-mix(in srgb, var(--green) 16%, transparent);
+  color: var(--green);
+}
+.pay-badge.wait {
+  background: color-mix(in srgb, var(--orange, #e8a317) 16%, transparent);
+  color: var(--orange, #c4841d);
+}
+.pay-badge.bad {
+  background: color-mix(in srgb, var(--red) 14%, transparent);
+  color: var(--red);
+}
+.pay-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem 1rem;
+  margin-bottom: 0.85rem;
+  font-size: 0.88rem;
+}
+.pay-meta .hint {
+  display: block;
+  margin-bottom: 0.15rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.pay-countdown {
+  font-weight: 700;
+  font-size: 0.95rem;
+  margin: 0 0 1rem;
+  text-align: center;
+}
+.qris-box {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 0 auto 0.85rem;
+  padding: 0.85rem;
+  background: #fff;
+  border-radius: 14px;
+  width: fit-content;
+  max-width: 100%;
+}
+.qris-img {
+  width: min(300px, 78vw);
+  height: auto;
+  aspect-ratio: 1;
+  display: block;
+  border: none;
+  outline: none;
+  box-shadow: none;
+  image-rendering: pixelated;
+}
+.qris-actions {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 0.9rem;
+}
+.qris-actions .btn {
+  border-radius: 999px;
+}
+#paymentRoot .toolbar {
+  justify-content: stretch;
+}
+#paymentRoot .toolbar .btn {
+  flex: 1;
+  justify-content: center;
+}
+@media (max-width: 400px) {
+  .pay-meta { grid-template-columns: 1fr; }
+  .qris-img { width: min(280px, 85vw); }
+}
