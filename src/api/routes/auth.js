@@ -137,8 +137,17 @@ router.post(
         baseUrl: resolveBaseUrl(req),
       })
 
-      const token = signToken(user)
-      res.status(201).json({ token, user: publicUser(user), emailSent })
+      // Jangan kirim JWT sebelum email diverifikasi.
+      res.status(201).json({
+        ok: true,
+        emailSent,
+        email: user.email,
+        username: user.username,
+        message: emailSent
+          ? 'Akun berhasil dibuat. Cek email Gmail kamu untuk tautan verifikasi sebelum masuk.'
+          : 'Akun berhasil dibuat. Email verifikasi gagal dikirim — coba kirim ulang dari halaman login.',
+        requiresVerification: true,
+      })
     } catch (err) {
       if (err.code === 11000) {
         const field = err.keyValue ? Object.keys(err.keyValue)[0] : null
@@ -148,16 +157,13 @@ router.post(
         if (field === 'email') {
           return res.status(409).json({ error: 'Email sudah terdaftar.' })
         }
-        // Collision on a field other than username/email (e.g. a stale
-        // unique index left over from an older schema version — phone is
-        // the usual suspect since many users share an empty '' value).
         logger.error(
           { field, keyValue: err.keyValue },
           'Register duplicate key on unexpected field'
         )
         return res.status(409).json({
           error: field
-            ? `Gagal mendaftar: field '${field}' bentrok dengan data lain. Kemungkinan ada index unik lama di database pada field ini — hubungi admin untuk cek.`
+            ? `Gagal mendaftar: field '${field}' bentrok. Kemungkinan index unik lama di DB — hubungi admin.`
             : 'Gagal mendaftar karena konflik data. Coba lagi.',
         })
       }
@@ -198,6 +204,15 @@ router.post(
         return res.status(401).json({ error: 'Username/email atau password salah' })
       }
 
+      if (!user.emailVerified) {
+        return res.status(403).json({
+          error: 'Email belum diverifikasi. Cek inbox Gmail kamu dan klik tautan verifikasi.',
+          code: 'EMAIL_NOT_VERIFIED',
+          email: user.email || '',
+          requiresVerification: true,
+        })
+      }
+
       const token = signToken(user)
       res.json({ token, user: publicUser(user) })
     } catch (err) {
@@ -235,11 +250,13 @@ router.post(
       const user = await User.create({
         userId,
         username,
+        email: `admin+${userId.slice(0, 8)}@local.invalid`,
         passwordHash,
         apiKey,
         role,
         name: req.body.name || '',
         maxSessions: config.session.maxPerUser,
+        emailVerified: true,
       })
 
       res.status(201).json(publicUser(user))

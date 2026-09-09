@@ -51,5 +51,6 @@ handler.help = ['stats']
 handler.tags = ['admin']
 handler.command = ['stats']
 handler.permission = 'admin'
+handler.heavy = true
 
 export default handler

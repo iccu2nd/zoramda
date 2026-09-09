@@ -18,11 +18,12 @@ export async function connectMongo() {
   connectionPromise = mongoose
     .connect(config.mongo.uri, {
       dbName: config.mongo.dbName,
-      maxPoolSize: 50,
-      minPoolSize: 5,
-      serverSelectionTimeoutMS: 10000,
+      maxPoolSize: parseInt(process.env.MONGO_MAX_POOL || '25', 10) || 25,
+      minPoolSize: parseInt(process.env.MONGO_MIN_POOL || '2', 10) || 2,
+      maxIdleTimeMS: 30000,
+      serverSelectionTimeoutMS: 8000,
       socketTimeoutMS: 45000,
-      connectTimeoutMS: 10000,
+      connectTimeoutMS: 8000,
       retryWrites: true,
       retryReads: true,
     })

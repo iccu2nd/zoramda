@@ -58,6 +58,14 @@ export async function authenticate(req, res, next) {
       if (payload?.userId) {
         const user = await User.findOne({ userId: payload.userId, isActive: true }).lean()
         if (user) {
+          if (!user.emailVerified && user.role !== 'admin') {
+            return res.status(403).json({
+              error: 'Email belum diverifikasi. Verifikasi email dulu sebelum menggunakan dashboard.',
+              code: 'EMAIL_NOT_VERIFIED',
+              email: user.email || '',
+              requiresVerification: true,
+            })
+          }
           req.user = attachUser(user)
           return next()
         }
@@ -68,6 +76,14 @@ export async function authenticate(req, res, next) {
     if (apiKey) {
       const user = await User.findOne({ apiKey, isActive: true }).lean()
       if (!user) return res.status(401).json({ error: 'Invalid API key' })
+      if (!user.emailVerified && user.role !== 'admin') {
+        return res.status(403).json({
+          error: 'Email belum diverifikasi. Verifikasi email dulu sebelum menggunakan API.',
+          code: 'EMAIL_NOT_VERIFIED',
+          email: user.email || '',
+          requiresVerification: true,
+        })
+      }
       req.user = attachUser(user)
       return next()
     }

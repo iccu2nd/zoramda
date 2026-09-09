@@ -62,5 +62,6 @@ handler.help = ['group open', 'group close', 'group name <teks>', 'group desc <t
 handler.tags = ['admin']
 handler.command = ['group']
 handler.permission = ['admin', 'botadmin']
+handler.heavy = true
 
 export default handler

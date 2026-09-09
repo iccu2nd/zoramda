@@ -24,6 +24,11 @@ import {
 } from '../utils/helpers.js'
 import LatencyTracker from './LatencyTracker.js'
 import configService from './ConfigService.js'
+import {
+  heavyQueue,
+  tryAcquireSessionSlot,
+  releaseSessionSlot,
+} from './JobQueue.js'
 
 const PERM_EVERYONE = 'everyone'
 const PERM_GROUP = 'group'
@@ -41,8 +46,11 @@ const GROUP_META_TTL_MS = 3 * 60 * 1000
 const antiSpamMap = new Map()
 const ANTI_SPAM_MAX_ENTRIES = 20000
 
+let _lastAntiSpamPrune = 0
 function pruneAntiSpam(now) {
-  if (antiSpamMap.size < ANTI_SPAM_MAX_ENTRIES) return
+  // Only prune periodically or when oversized — avoid O(n) every command
+  if (antiSpamMap.size < ANTI_SPAM_MAX_ENTRIES && now - _lastAntiSpamPrune < 30000) return
+  _lastAntiSpamPrune = now
   for (const [k, t] of antiSpamMap) {
     if (now - t > 60000) antiSpamMap.delete(k)
   }
@@ -89,6 +97,9 @@ export class MessageHandler {
   async _processOne(sessionId, userId, sock, raw) {
     if (!raw?.message || raw.key?.fromMe) return
     if (raw.key?.remoteJid === 'status@broadcast') return
+
+    // Per-session concurrency cap — drop excess under flood (owner still allowed later)
+    if (!tryAcquireSessionSlot(sessionId)) return
 
     const latency = new LatencyTracker(raw.key?.id, sessionId)
 
@@ -143,28 +154,33 @@ export class MessageHandler {
       if (!isOwner && configService.isBanned(sessionId, m.senderPn || m.sender)) return
       if (cfg.publicMode === false && !isOwner) return
 
-      // Resolve plugins (custom commands + defaults)
-      const allPlugins = this.pluginLoader.getAllPlugins()
-      const matchedFiles = configService.resolveCommandFiles(sessionId, m.command, allPlugins)
-      let handlers = allPlugins.filter((p) => matchedFiles.has(p.file))
-      if (handlers.length === 0) {
-        const global = this.pluginLoader.getHandlers(m.command) || []
-        handlers = global.filter((p) => {
+      // Resolve plugins: try global command map first (O(1)), then custom overrides
+      let handlers = this.pluginLoader.getHandlers(m.command)
+      if (handlers.length) {
+        handlers = handlers.filter((p) => {
           const state = configService.getPluginState(
             sessionId,
             p.file,
             p.permissions || ['everyone']
           )
           if (state.enabled === false) return false
+          // Custom command remap claimed this file for another name
           if (state.commands && state.commands.length) return false
           return true
         })
+      }
+      if (handlers.length === 0) {
+        const allPlugins = this.pluginLoader.getAllPlugins()
+        const matchedFiles = configService.resolveCommandFiles(sessionId, m.command, allPlugins)
+        if (matchedFiles.size) {
+          handlers = allPlugins.filter((p) => matchedFiles.has(p.file))
+        }
       }
       if (handlers.length === 0) return
 
       latency.mark('plugin_started')
 
-      // Light plugins run in parallel; heavy plugins also parallel but isolated via catch
+      // Parallel plugin execution — each isolated; heavy marked plugins detach
       await Promise.all(
         handlers.map((plugin) =>
           this._runPlugin(plugin, m, sock, sessionId, userId, latency, isOwner, cfg).catch(
@@ -178,6 +194,7 @@ export class MessageHandler {
         )
       )
     } finally {
+      releaseSessionSlot(sessionId)
       latency.finish()
     }
   }
@@ -319,10 +336,32 @@ export class MessageHandler {
     const effective = list.filter((p) => p && p !== PERM_EVERYONE)
     if (effective.length === 0) return { allowed: true }
 
-    const metaBag = {}
+    // Sync-only perms first (no I/O) — fail fast without waiting group metadata
+    const needsMeta = []
     for (const perm of effective) {
-      const ok = await this._checkOnePermission(perm, m, sock, isOwner, metaBag, sessionId)
-      if (!ok) return { allowed: false, failed: perm }
+      if (perm === PERM_ADMIN || perm === PERM_BOTADMIN) {
+        needsMeta.push(perm)
+        continue
+      }
+      if (perm === PERM_GROUP && !m.isGroup) return { allowed: false, failed: perm }
+      if (perm === PERM_PRIVATE && m.isGroup) return { allowed: false, failed: perm }
+      if (perm === PERM_OWNER && !isOwner) return { allowed: false, failed: perm }
+      if (perm === PERM_PREMIUM) {
+        if (!isOwner && !configService.isPremium(sessionId, m.senderPn || m.sender)) {
+          return { allowed: false, failed: perm }
+        }
+      }
+    }
+
+    if (needsMeta.length === 0) return { allowed: true }
+
+    const metaBag = {}
+    // Parallel group-meta checks (admin + botadmin share one fetch via metaBag)
+    const results = await Promise.all(
+      needsMeta.map((perm) => this._checkOnePermission(perm, m, sock, isOwner, metaBag, sessionId))
+    )
+    for (let i = 0; i < needsMeta.length; i++) {
+      if (!results[i]) return { allowed: false, failed: needsMeta[i] }
     }
     return { allowed: true }
   }
@@ -423,19 +462,18 @@ export class MessageHandler {
 
     latency.mark('plugin_exec')
 
-    // Heavy plugins: run detached so they never stall sibling light handlers
-    // on the same message (rare multi-match). Still awaited at Promise.all level
-    // only if not marked heavy.
+    // Heavy plugins: bounded global queue + non-blocking for light siblings
     if (plugin.handler?.heavy) {
-      setImmediate(() => {
-        Promise.resolve(plugin.handler(m, ctx))
-          .then(() => latency.mark('plugin_finished'))
-          .catch((err) => {
-            logger.error(
-              { sessionId, file: plugin.file, err: err?.message },
-              'Heavy plugin error'
-            )
-          })
+      heavyQueue.push(async () => {
+        try {
+          await plugin.handler(m, ctx)
+          latency.mark('plugin_finished')
+        } catch (err) {
+          logger.error(
+            { sessionId, file: plugin.file, err: err?.message },
+            'Heavy plugin error'
+          )
+        }
       })
       return
     }

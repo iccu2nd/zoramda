@@ -108,15 +108,17 @@ export class ConnectionManager {
     try {
       await this.setStatus(STATES.CONNECTING)
 
-      // Warm this user's bot config in the background so it's cached before
-      // the first message arrives (message hot path never awaits the DB).
+      // Warm config in background — message path never awaits DB
       if (this.userId) configService.warm(this.sessionId, this.userId).catch(() => {})
 
-      const { state, saveCreds, clearAuth } = await useMongoAuthState(this.sessionId)
+      // Parallel: auth state + WA version (independent I/O)
+      const [authBundle, version] = await Promise.all([
+        useMongoAuthState(this.sessionId),
+        getWaVersion(),
+      ])
+      const { state, saveCreds, clearAuth } = authBundle
       this.saveCreds = saveCreds
       this.clearAuth = clearAuth
-
-      const version = await getWaVersion()
 
       const sock = makeWASocket({
         version,
@@ -132,13 +134,11 @@ export class ConnectionManager {
         generateHighQualityLinkPreview: false,
         getMessage: async () => undefined,
         shouldIgnoreJid: (jid) => jid === 'status@broadcast',
-        // Lean multi-session socket
-        keepAliveIntervalMs: 25000,
-        connectTimeoutMs: 45000,
-        defaultQueryTimeoutMs: 45000,
+        keepAliveIntervalMs: 30000,
+        connectTimeoutMs: 40000,
+        defaultQueryTimeoutMs: 40000,
         emitOwnEvents: false,
-        fireInitQueries: true,
-        // Reduce background sync load that steals event-loop time
+        fireInitQueries: false,
         shouldSyncHistoryMessage: () => false,
         transactionOpts: { maxCommitRetries: 2, delayBetweenTriesMs: 100 },
       })

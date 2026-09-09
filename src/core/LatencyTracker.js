@@ -25,6 +25,11 @@ export class LatencyTracker {
 
   finish() {
     const total = performance.now() - this.start
+    // Fast path: skip detailed breakdown when under threshold in production
+    if (total < config.latencyThreshold && config.isProd) {
+      return { total_latency: Math.round(total) }
+    }
+
     const order = [
       'message_received',
       'handler_started',
@@ -49,14 +54,10 @@ export class LatencyTracker {
 
     if (total >= config.latencyThreshold) {
       logger.warn(
-        {
-          sessionId: this.sessionId,
-          messageId: this.messageId,
-          latency: points,
-        },
+        { sessionId: this.sessionId, messageId: this.messageId, latency: points },
         'High latency detected'
       )
-    } else if (config.env !== 'production') {
+    } else if (!config.isProd) {
       logger.debug({ sessionId: this.sessionId, latency: points }, 'Message latency')
     }
 

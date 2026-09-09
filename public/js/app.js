@@ -85,9 +85,10 @@
     try {
       currentUser = await API.me();
       return true;
-    } catch {
+    } catch (e) {
       API.clearToken();
       if (API.clearAdminKey) API.clearAdminKey();
+      currentUser = null;
       return false;
     }
   }
@@ -274,7 +275,28 @@
       toast('Berhasil masuk');
       showApp();
     } catch (e2) {
-      errEl.textContent = e2.message || 'Gagal masuk.';
+      if (e2.status === 403 && (e2.data?.code === 'EMAIL_NOT_VERIFIED' || e2.data?.requiresVerification)) {
+        const email = e2.data?.email || '';
+        errEl.innerHTML =
+          (e2.message || 'Email belum diverifikasi.') +
+          (email
+            ? ` <button type="button" class="btn btn-sm btn-ghost" id="loginResendBtn" style="margin-left:0.35rem;display:inline-flex;vertical-align:middle">Kirim ulang verifikasi</button>`
+            : '');
+        $('#loginResendBtn')?.addEventListener('click', async () => {
+          const btn = $('#loginResendBtn');
+          if (btn) btn.disabled = true;
+          try {
+            const res = await API.resendVerification({ email });
+            toast(res.message || 'Tautan verifikasi dikirim. Cek inbox Gmail.', 'success');
+          } catch (err) {
+            toast(err.message || 'Gagal kirim ulang.', 'error');
+          } finally {
+            if (btn) btn.disabled = false;
+          }
+        });
+      } else {
+        errEl.textContent = e2.message || 'Gagal masuk.';
+      }
     } finally {
       $('#loginBtn').disabled = false;
     }
@@ -309,20 +331,28 @@
 
     $('#registerBtn').disabled = true;
     try {
-      const { token, user, emailSent } = await API.register({
+      const res = await API.register({
         username,
         email,
         password,
         confirmPassword,
         phone,
       });
-      API.setToken(token);
-      currentUser = user;
-      toast(emailSent
-        ? 'Akun berhasil dibuat. Cek email untuk verifikasi.'
-        : 'Akun berhasil dibuat.');
-      showApp();
+      // Tidak set token — user harus verifikasi email dulu.
+      API.clearToken();
+      currentUser = null;
+      toast(res.message || 'Akun dibuat. Cek email untuk verifikasi.', 'success');
+      showAuthForm('login');
+      if ($('#loginUsername')) $('#loginUsername').value = username;
+      if (errEl) {
+        errEl.style.color = 'var(--green, #16a34a)';
+        errEl.textContent =
+          res.emailSent !== false
+            ? 'Registrasi berhasil. Buka inbox Gmail dan klik tautan verifikasi, lalu masuk di sini.'
+            : 'Registrasi berhasil, tapi email gagal terkirim. Gunakan tombol kirim ulang setelah mencoba login.';
+      }
     } catch (e2) {
+      errEl.style.color = '';
       errEl.textContent = e2.message || 'Pendaftaran gagal.';
     } finally {
       $('#registerBtn').disabled = false;

@@ -42,15 +42,21 @@ export class SessionManager {
 
     logger.info({ count: active.length }, 'Restoring sessions')
 
-    // Stagger starts slightly to avoid thundering herd, but do not block
-    for (let i = 0; i < active.length; i++) {
-      const s = active[i]
-      setTimeout(() => {
-        this._startConnection(s.sessionId, { userId: s.userId }).catch((err) => {
+    // Parallel restore with concurrency limit — faster boot, no thundering herd
+    const CONCURRENCY = 5
+    let idx = 0
+    const runNext = async () => {
+      while (idx < active.length) {
+        const s = active[idx++]
+        try {
+          await this._startConnection(s.sessionId, { userId: s.userId })
+        } catch (err) {
           logger.error({ sessionId: s.sessionId, err: err.message }, 'Restore start failed')
-        })
-      }, i * 150)
+        }
+      }
     }
+    const workers = Array.from({ length: Math.min(CONCURRENCY, active.length) }, () => runNext())
+    await Promise.all(workers)
   }
 
   /**

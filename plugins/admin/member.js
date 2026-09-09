@@ -58,5 +58,6 @@ handler.help = ['kick <@user>', 'promote <@user>', 'demote <@user>']
 handler.tags = ['admin']
 handler.command = ['kick', 'promote', 'demote']
 handler.permission = ['admin', 'botadmin']
+handler.heavy = true
 
 export default handler

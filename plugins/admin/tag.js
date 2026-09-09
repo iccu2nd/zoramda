@@ -39,5 +39,6 @@ handler.help = ['tagall [pesan]', 'hidetag [pesan]']
 handler.tags = ['admin']
 handler.command = ['tagall', 'hidetag']
 handler.permission = 'admin'
+handler.heavy = true
 
 export default handler

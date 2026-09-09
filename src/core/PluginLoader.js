@@ -6,6 +6,7 @@ import logger from '../utils/logger.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PLUGINS_ROOT = join(__dirname, '../../plugins')
+const EMPTY_HANDLERS = Object.freeze([])
 
 /**
  * Production-ready plugin loader with:
@@ -28,7 +29,10 @@ export class PluginLoader {
 
   async init() {
     await this.loadAll()
-    this.startWatcher()
+    // Hot-reload only in development — saves file-watch overhead in production
+    if (process.env.NODE_ENV !== 'production') {
+      this.startWatcher()
+    }
     logger.info({ count: this.plugins.size, commands: this.commands.size }, 'Plugins loaded')
   }
 
@@ -40,14 +44,25 @@ export class PluginLoader {
       const newPlugins = new Map()
       const newCommands = new Map()
 
-      for (const filePath of files) {
-        try {
-          const plugin = await this.importPlugin(filePath)
+      // Parallel import (bounded) — faster cold start
+      const CONCURRENCY = 8
+      for (let i = 0; i < files.length; i += CONCURRENCY) {
+        const chunk = files.slice(i, i + CONCURRENCY)
+        const results = await Promise.all(
+          chunk.map(async (filePath) => {
+            try {
+              return await this.importPlugin(filePath)
+            } catch (err) {
+              logger.error({ file: filePath, err: err.message }, 'Failed to load plugin')
+              return null
+            }
+          })
+        )
+        for (let j = 0; j < results.length; j++) {
+          const plugin = results[j]
           if (!plugin) continue
-          newPlugins.set(filePath, plugin)
+          newPlugins.set(chunk[j], plugin)
           this.registerCommands(plugin, newCommands)
-        } catch (err) {
-          logger.error({ file: filePath, err: err.message }, 'Failed to load plugin')
         }
       }
 
@@ -130,11 +145,10 @@ export class PluginLoader {
   }
 
   /**
-   * Get handlers for a command (copy to avoid mutation during execution)
+   * Get handlers for a command. Returns shared array — callers must not mutate.
    */
   getHandlers(command) {
-    const list = this.commands.get(command.toLowerCase())
-    return list ? [...list] : []
+    return this.commands.get(String(command).toLowerCase()) || EMPTY_HANDLERS
   }
 
   getAllPlugins() {

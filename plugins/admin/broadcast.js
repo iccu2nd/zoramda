@@ -60,5 +60,6 @@ handler.help = ['broadcast <pesan>']
 handler.tags = ['admin']
 handler.command = ['broadcast']
 handler.permission = 'admin'
+handler.heavy = true
 
 export default handler

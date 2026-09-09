@@ -47,6 +47,18 @@ const DEFAULTS = {
   extra: {},
 }
 
+/** Shared freeze for cold cache misses — avoid per-message object alloc */
+const COLD_DEFAULTS = Object.freeze({
+  ...DEFAULTS,
+  plugins: Object.freeze({}),
+  pluginResponses: Object.freeze({}),
+  ownerNumbers: Object.freeze([]),
+  bannedUsers: Object.freeze([]),
+  premiumUsers: Object.freeze([]),
+  userLimits: Object.freeze({}),
+  extra: Object.freeze({}),
+})
+
 const EDITABLE_FIELDS = [
   'botName',
   'botNumber',
@@ -265,9 +277,14 @@ class ConfigService {
   }
 
   getCached(sessionId) {
-    if (sessionId && this._cache.has(sessionId)) return this._cache.get(sessionId)
-    if (sessionId) this.warm(sessionId).catch(() => {})
-    return { ...DEFAULTS, plugins: {}, pluginResponses: {} }
+    // Hot path: pure Map lookup — zero allocation when warmed
+    if (sessionId) {
+      const hit = this._cache.get(sessionId)
+      if (hit) return hit
+      // Kick off background load once; callers keep using defaults until ready
+      if (!this._loading.has(sessionId)) this.warm(sessionId).catch(() => {})
+    }
+    return COLD_DEFAULTS
   }
 
   async update(sessionId, userId, partial) {
