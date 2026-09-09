@@ -17,6 +17,7 @@ import logger from '../utils/logger.js'
 import config from '../config/index.js'
 import configService from './ConfigService.js'
 import { serializeError } from '../utils/helpers.js'
+import { attachMessageWrappers } from './messageWrappers.js'
 
 const baileysLogger = pino({ level: 'silent' })
 
@@ -142,6 +143,10 @@ export class ConnectionManager {
         shouldSyncHistoryMessage: () => false,
         transactionOpts: { maxCommitRetries: 2, delayBetweenTriesMs: 100 },
       })
+
+      // sendSticker / sendAudio / sendAlbum / sendButton wrappers — dipasang
+      // sekali di sini supaya semua plugin bisa langsung pakai lewat ctx.conn
+      attachMessageWrappers(sock)
 
       this.sock = sock
       this._attachEvents(sock)

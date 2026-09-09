@@ -15,7 +15,7 @@ ENV HOST=0.0.0.0
 
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 botenv && \
-    apk add --no-cache wget
+    apk add --no-cache wget ffmpeg
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY --chown=botenv:nodejs package.json ./

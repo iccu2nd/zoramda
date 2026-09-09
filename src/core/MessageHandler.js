@@ -268,6 +268,11 @@ export class MessageHandler {
       }
     }
 
+    // m.react('👍') — reaksi cepat ke pesan yang sedang diproses
+    const react = async (emoji) => {
+      return await sock.sendMessage(jid, { react: { text: emoji || '', key: raw.key } })
+    }
+
     return {
       raw,
       key: raw.key,
@@ -288,6 +293,7 @@ export class MessageHandler {
       pushName: raw.pushName || '',
       timestamp: raw.messageTimestamp,
       reply,
+      react,
     }
   }
 
