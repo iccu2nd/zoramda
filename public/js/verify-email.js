@@ -15,8 +15,15 @@
     $('#verifyDesc').textContent = desc;
   }
 
-  function renderLoginCta() {
-    $('#verifyExtra').innerHTML = `<a class="btn btn-block" href="/login">Masuk ke akun</a>`;
+  function renderLoginCta(email) {
+    const emailHtml = email
+      ? `<p class="verify-success-email allow-select">${String(email).replace(/</g, '&lt;')}</p>`
+      : '';
+    $('#verifyExtra').innerHTML = `
+      ${emailHtml}
+      <a class="btn btn-block" href="/login">Silakan login</a>
+      <p class="verify-note" style="margin-top:0.9rem">Akun sudah aktif. Kamu bisa masuk ke dashboard sekarang.</p>
+    `;
   }
 
   function renderResendForm(prefillEmail) {
@@ -74,15 +81,15 @@
       if (res.alreadyVerified) {
         setState('success', {
           title: 'Email sudah terverifikasi',
-          desc: 'Akun kamu sudah aktif sepenuhnya. Silakan masuk untuk melanjutkan.',
+          desc: 'Akun kamu sudah aktif sepenuhnya. Silakan login untuk melanjutkan.',
         });
       } else {
         setState('success', {
-          title: 'Email berhasil diverifikasi!',
-          desc: 'Akun kamu sekarang aktif sepenuhnya. Silakan masuk untuk melanjutkan.',
+          title: 'Akun berhasil diverifikasi',
+          desc: 'Email terverifikasi. Akun aktif — silakan login ke dashboard.',
         });
       }
-      renderLoginCta();
+      renderLoginCta(res.email);
     } catch (e) {
       const data = e.data || {};
       if (data.expired) {

@@ -232,10 +232,30 @@
 
   function showAuthForm(which) {
     const login = which === 'login';
+    const register = which === 'register';
+    const emailSent = which === 'emailSent';
     $('#loginForm')?.classList.toggle('hidden', !login);
-    $('#registerForm')?.classList.toggle('hidden', login);
+    $('#registerForm')?.classList.toggle('hidden', !register);
+    $('#emailSentPanel')?.classList.toggle('hidden', !emailSent);
     $('#loginError') && ($('#loginError').textContent = '');
     $('#registerError') && ($('#registerError').textContent = '');
+    const msg = $('#emailSentMsg');
+    if (msg) msg.textContent = '';
+  }
+
+  function showEmailSentPanel({ email, emailSent }) {
+    showAuthForm('emailSent');
+    const title = $('#emailSentTitle');
+    const desc = $('#emailSentDesc');
+    const addr = $('#emailSentAddress');
+    if (title) title.textContent = emailSent !== false ? 'Email verifikasi terkirim' : 'Akun berhasil dibuat';
+    if (desc) {
+      desc.textContent =
+        emailSent !== false
+          ? 'Kami sudah mengirim tautan verifikasi ke email di bawah. Buka inbox Gmail, klik tautan, lalu masuk di sini.'
+          : 'Akun sudah dibuat, tapi pengiriman email gagal. Coba kirim ulang di bawah, atau cek folder spam.';
+    }
+    if (addr) addr.textContent = email || '';
   }
 
 
@@ -256,6 +276,28 @@
 
   $('#showRegister')?.addEventListener('click', () => showAuthForm('register'));
   $('#showLogin')?.addEventListener('click', () => showAuthForm('login'));
+  $('#emailSentLoginBtn')?.addEventListener('click', () => showAuthForm('login'));
+  $('#emailSentResendBtn')?.addEventListener('click', async () => {
+    const email = ($('#emailSentAddress')?.textContent || '').trim();
+    const msg = $('#emailSentMsg');
+    if (!email) {
+      if (msg) msg.textContent = 'Email tidak ditemukan.';
+      return;
+    }
+    const btn = $('#emailSentResendBtn');
+    if (btn) btn.disabled = true;
+    if (msg) msg.textContent = 'Mengirim…';
+    try {
+      const res = await API.resendVerification({ email });
+      if (msg) msg.textContent = res.message || 'Tautan verifikasi baru dikirim. Cek inbox Gmail.';
+      toast('Email verifikasi dikirim ulang', 'success');
+    } catch (e) {
+      if (msg) msg.textContent = e.message || 'Gagal mengirim ulang.';
+      toast(e.message || 'Gagal kirim ulang', 'error');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  });
 
   $('#loginForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -341,16 +383,14 @@
       // Tidak set token — user harus verifikasi email dulu.
       API.clearToken();
       currentUser = null;
-      toast(res.message || 'Akun dibuat. Cek email untuk verifikasi.', 'success');
-      showAuthForm('login');
       if ($('#loginUsername')) $('#loginUsername').value = username;
-      if (errEl) {
-        errEl.style.color = 'var(--green, #16a34a)';
-        errEl.textContent =
-          res.emailSent !== false
-            ? 'Registrasi berhasil. Buka inbox Gmail dan klik tautan verifikasi, lalu masuk di sini.'
-            : 'Registrasi berhasil, tapi email gagal terkirim. Gunakan tombol kirim ulang setelah mencoba login.';
-      }
+      showEmailSentPanel({ email: res.email || email, emailSent: res.emailSent });
+      toast(
+        res.emailSent !== false
+          ? 'Email verifikasi terkirim. Cek inbox Gmail.'
+          : 'Akun dibuat. Kirim ulang email verifikasi.',
+        res.emailSent !== false ? 'success' : 'warning'
+      );
     } catch (e2) {
       errEl.style.color = '';
       errEl.textContent = e2.message || 'Pendaftaran gagal.';
@@ -1506,20 +1546,62 @@
     }
   }
 
+  async function downloadQrisImage(imgEl, filename) {
+    const name = filename || 'qris-botenv.png';
+    const saveBlob = (blob) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+    };
+    // Prefer canvas from displayed image (no navigate to qrserver)
+    try {
+      if (imgEl && imgEl.complete && imgEl.naturalWidth) {
+        const canvas = document.createElement('canvas');
+        canvas.width = imgEl.naturalWidth;
+        canvas.height = imgEl.naturalHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(imgEl, 0, 0);
+        const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+        if (blob) {
+          saveBlob(blob);
+          return true;
+        }
+      }
+    } catch (_) {}
+    // Fallback: fetch image URL as blob
+    try {
+      const src = imgEl?.src;
+      if (!src) return false;
+      const res = await fetch(src, { mode: 'cors' });
+      const blob = await res.blob();
+      saveBlob(blob);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   function renderPaymentPage(payment) {
     const root = $('#paymentRoot');
     if (!root || !payment) return;
     const canPay = payment.status === 'pending';
+    const qrUrl = payment.qrString
+      ? `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=10&data=${encodeURIComponent(payment.qrString)}`
+      : '';
     const qrBlock = payment.qrString
       ? `<div class="qris-box">
-           <img class="qris-img" id="qrisImg" alt="QRIS" width="300" height="300" src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=8&data=${encodeURIComponent(
-             payment.qrString
-           )}"/>
+           <img class="qris-img" id="qrisImg" alt="QRIS" width="300" height="300" crossorigin="anonymous" src="${qrUrl}"/>
          </div>
          <div class="qris-actions">
-           <a class="btn btn-sm btn-ghost" id="dlQris" href="https://api.qrserver.com/v1/create-qr-code/?size=512x512&margin=8&data=${encodeURIComponent(
-             payment.qrString
-           )}" download="qris-${escapeAttr(payment.trxId)}.png" target="_blank" rel="noopener">Download QRIS</a>
+           <button type="button" class="btn btn-sm btn-ghost" id="dlQris">Download QRIS</button>
          </div>`
       : `<p class="hint">QRIS tidak tersedia. Buat pembayaran baru.</p>`;
 
@@ -1535,20 +1617,23 @@
           </div>
         </div>
         <div class="pay-meta">
-          <div><span class="hint">ID transaksi</span><br/><code class="allow-select">${escapeHtml(
-            payment.trxId
-          )}</code></div>
-          <div><span class="hint">Nominal</span><br/><strong>${formatRp(
-            payment.totalAmount || payment.amount
-          )}</strong></div>
-          <div><span class="hint">Expired</span><br/><strong>${formatWib(
-            payment.expiredAt
-          )}</strong></div>
+          <div class="pay-meta-row">
+            <span class="pay-meta-label">ID transaksi</span>
+            <code class="pay-meta-value allow-select">${escapeHtml(payment.trxId)}</code>
+          </div>
+          <div class="pay-meta-row">
+            <span class="pay-meta-label">Nominal</span>
+            <strong class="pay-meta-value">${formatRp(payment.totalAmount || payment.amount)}</strong>
+          </div>
+          <div class="pay-meta-row">
+            <span class="pay-meta-label">Berlaku hingga</span>
+            <strong class="pay-meta-value">${formatWib(payment.expiredAt)}</strong>
+          </div>
         </div>
         ${canPay ? `<div class="pay-countdown" id="payCountdown">Berakhir dalam --:--</div>` : ''}
         ${canPay ? qrBlock : ''}
-        <p class="hint">Pembayaran hanya QRIS. Status tidak dicek otomatis — tekan tombol di bawah setelah bayar.</p>
-        <div class="toolbar" style="gap:0.5rem;flex-wrap:wrap;margin-top:0.75rem">
+        <p class="pay-note">Bayar hanya via QRIS. Setelah transfer, tekan <strong>Cek Status</strong> — status tidak dicek otomatis.</p>
+        <div class="toolbar" style="gap:0.5rem;flex-wrap:wrap;margin-top:0.15rem">
           ${
             canPay
               ? `<button type="button" class="btn" id="checkPayBtn">Cek Status</button>`
@@ -1561,12 +1646,41 @@
           }
           <button type="button" class="btn btn-ghost" id="backPricingBtn">Kembali ke Pricing</button>
         </div>
-        <p class="hint" id="payMsg" style="margin-top:0.6rem"></p>
+        <p class="hint" id="payMsg" style="margin-top:0.6rem;text-align:center"></p>
       </div>`;
 
     if (canPay && payment.expiredAt) {
       startPayCountdown(payment.expiredAt, $('#payCountdown'));
     }
+
+    $('#dlQris')?.addEventListener('click', async () => {
+      const btn = $('#dlQris');
+      const img = $('#qrisImg');
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Menyimpan…';
+      }
+      try {
+        // Wait for image if still loading
+        if (img && !img.complete) {
+          await new Promise((resolve) => {
+            img.onload = () => resolve();
+            img.onerror = () => resolve();
+            setTimeout(resolve, 4000);
+          });
+        }
+        const ok = await downloadQrisImage(img, `qris-${payment.trxId}.png`);
+        if (ok) toast('QRIS disimpan ke Downloads / Galeri', 'success');
+        else toast('Gagal menyimpan. Tahan gambar QR lalu pilih Simpan.', 'error');
+      } catch (e) {
+        toast(e.message || 'Gagal download QRIS', 'error');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'Download QRIS';
+        }
+      }
+    });
 
     $('#checkPayBtn')?.addEventListener('click', async () => {
       const b = $('#checkPayBtn');

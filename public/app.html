@@ -55,6 +55,19 @@
           <p class="auth-switch">Belum punya akun? <button type="button" class="auth-link" id="showRegister">Daftar</button></p>
         </form>
 
+        <!-- Email sent success panel -->
+        <div id="emailSentPanel" class="auth-form auth-success-panel hidden">
+          <div class="auth-success-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m8.5 12.5 2.5 2.5 4.5-5"/></svg>
+          </div>
+          <h1 id="emailSentTitle">Cek email kamu</h1>
+          <p class="sub" id="emailSentDesc">Kami sudah mengirim tautan verifikasi. Buka inbox Gmail, klik tautan, lalu kembali ke sini untuk masuk.</p>
+          <p class="auth-success-email allow-select" id="emailSentAddress"></p>
+          <button class="btn btn-block" type="button" id="emailSentLoginBtn">Ke halaman masuk</button>
+          <p class="auth-switch">Belum terima email? <button type="button" class="auth-link" id="emailSentResendBtn">Kirim ulang</button></p>
+          <p class="hint" id="emailSentMsg" style="margin-top:0.75rem;text-align:center"></p>
+        </div>
+
         <!-- Create account -->
         <form id="registerForm" class="auth-form hidden">
           <h1>Daftar</h1>

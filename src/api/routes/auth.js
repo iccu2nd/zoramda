@@ -62,7 +62,12 @@ function normalizePhone(phone) {
  */
 router.post(
   '/register',
-  rateLimit({ windowMs: 60 * 60_000, max: 8, message: 'Terlalu banyak percobaan daftar. Coba lagi nanti.' }),
+  rateLimit({
+    name: 'register',
+    windowMs: 60 * 60_000,
+    max: 20,
+    message: 'Terlalu banyak percobaan daftar dari IP ini. Coba lagi dalam 1 jam.',
+  }),
   validateBody({
     username: { type: 'string', required: true, maxLength: 32 },
     email: { type: 'string', required: true, maxLength: 120 },
@@ -179,7 +184,12 @@ router.post(
  */
 router.post(
   '/login',
-  rateLimit({ windowMs: 15 * 60_000, max: 15, message: 'Terlalu banyak percobaan masuk. Coba lagi nanti.' }),
+  rateLimit({
+    name: 'login',
+    windowMs: 15 * 60_000,
+    max: 40,
+    message: 'Terlalu banyak percobaan masuk. Coba lagi dalam beberapa menit.',
+  }),
   validateBody({
     username: { type: 'string', required: true, maxLength: 120 },
     password: { type: 'string', required: true, maxLength: 128 },
@@ -308,7 +318,15 @@ router.post('/apikey/rotate', authenticate, async (req, res) => {
  * Verify an email address using the token sent by email. Public route —
  * hit directly by the link/button in the verification email.
  */
-router.get('/verify-email', rateLimit({ windowMs: 15 * 60_000, max: 30 }), async (req, res) => {
+router.get(
+  '/verify-email',
+  rateLimit({
+    name: 'verify-email',
+    windowMs: 15 * 60_000,
+    max: 60,
+    message: 'Terlalu banyak permintaan verifikasi. Coba lagi sebentar.',
+  }),
+  async (req, res) => {
   try {
     const token = String(req.query.token || '').trim()
     if (!token) {
@@ -346,7 +364,15 @@ router.get('/verify-email', rateLimit({ windowMs: 15 * 60_000, max: 30 }), async
  * Resend the verification email. Accepts an email in body for the public
  * "expired link" flow, or falls back to the authenticated user.
  */
-router.post('/resend-verification', rateLimit({ windowMs: 60 * 60_000, max: 6 }), async (req, res) => {
+router.post(
+  '/resend-verification',
+  rateLimit({
+    name: 'resend-verification',
+    windowMs: 60 * 60_000,
+    max: 12,
+    message: 'Terlalu banyak kirim ulang email. Coba lagi nanti.',
+  }),
+  async (req, res) => {
   try {
     const bodyEmail = normalizeEmail(req.body?.email)
     let user = null
