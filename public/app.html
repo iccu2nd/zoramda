@@ -265,41 +265,58 @@
   <!-- upgrade promo modal (free users) -->
   <div class="upgrade-overlay hidden" id="upgradeOverlay" role="dialog" aria-modal="true">
     <div class="upgrade-modal">
-      <button type="button" class="upgrade-close" id="upgradeClose" aria-label="Tutup">×</button>
+      <button type="button" class="upgrade-close" id="upgradeClose" aria-label="Tutup">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
       <div class="upgrade-head">
         <div class="upgrade-crown" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm0 2h14v2H5v-2z"/></svg>
         </div>
         <h2>Upgrade ke Pro</h2>
-        <p>Buka Bot Settings &amp; kustomisasi penuh.</p>
+        <p>Buka semua fitur bot &amp; kustomisasi penuh.</p>
       </div>
       <div class="upgrade-body">
         <ul class="upgrade-benefits">
-          <li><span class="ub-check">✓</span> <strong>Bot Settings</strong> — config, message, system, plugins.</li>
-          <li><span class="ub-check">✓</span> <strong>Multi session</strong> — jalankan beberapa nomor sekaligus.</li>
-          <li><span class="ub-check">✓</span> <strong>Prioritas</strong> — dukungan lebih cepat.</li>
+          <li>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg>
+            <span><strong>Bot Settings</strong> — config, message, system, plugins.</span>
+          </li>
+          <li>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg>
+            <span><strong>Multi session</strong> — jalankan beberapa nomor sekaligus.</span>
+          </li>
+          <li>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg>
+            <span><strong>Prioritas dukungan</strong> — bantuan lebih cepat.</span>
+          </li>
         </ul>
         <div class="upgrade-plans">
+          <button type="button" class="upgrade-plan selected" data-plan="pro">
+            <div>
+              <div class="upgrade-plan-name">Pro</div>
+              <div class="upgrade-plan-meta">5 session · Bot Settings · 30 hari</div>
+            </div>
+            <div class="upgrade-plan-price">Rp5.000<span>/30 hari</span></div>
+          </button>
           <button type="button" class="upgrade-plan" data-plan="business">
             <div>
-              <strong>Business</strong>
-              <span class="up-sub">15 session · semua fitur · 30 hari</span>
+              <div class="upgrade-plan-name">Business</div>
+              <div class="upgrade-plan-meta">15 session · semua fitur · 30 hari</div>
             </div>
-            <div class="up-price">Rp15.000<span>/30 hari</span></div>
-          </button>
-          <button type="button" class="upgrade-plan" data-plan="pro">
-            <div>
-              <strong>Pro</strong>
-              <span class="up-sub">5 session · Bot Settings · 30 hari</span>
-            </div>
-            <div class="up-price">Rp5.000<span>/30 hari</span></div>
+            <div class="upgrade-plan-price">Rp15.000<span>/30 hari</span></div>
           </button>
         </div>
-        <button type="button" class="btn upgrade-cta" id="upgradeCta">⚡ Upgrade Sekarang</button>
-        <a class="upgrade-channel" href="https://whatsapp.com/channel/0029VbC7SGt65yDCUxYwUS3U" target="_blank" rel="noopener">
-          Ikuti saluran WhatsApp kami
-        </a>
-        <button type="button" class="upgrade-later" id="upgradeLater">Nanti saja</button>
+        <div class="upgrade-actions">
+          <button type="button" class="btn" id="upgradeCta">⚡ Upgrade Sekarang</button>
+          <button type="button" class="upgrade-later" id="upgradeLater">Nanti saja</button>
+        </div>
+        <div class="upgrade-channel">
+          <p>Ikuti saluran resmi untuk update &amp; tips</p>
+          <a href="https://whatsapp.com/channel/0029VbC7SGt65yDCUxYwUS3U" target="_blank" rel="noopener noreferrer">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.5 2 2 6.3 2 11.6c0 2 .6 3.9 1.7 5.5L2 22l5.1-1.6c1.5.8 3.2 1.2 4.9 1.2 5.5 0 10-4.3 10-9.6S17.5 2 12 2zm5.7 13.7c-.2.7-1.3 1.2-1.8 1.3-.5.1-1 .2-3.5-.7-3-1.2-4.9-4.3-5-4.5-.1-.2-1-1.3-1-2.5s.6-1.8.9-2c.2-.2.5-.3.7-.3h.5c.2 0 .4 0 .5.4.2.7.6 1.8.7 1.9.1.2.1.3 0 .5l-.3.5c-.1.2-.3.3-.5.5-.2.1-.4.3-.2.6.2.3.9 1.5 1.9 2.4 1.3 1.1 2.4 1.5 2.7 1.6.3.1.5.1.7-.1.2-.2.7-.8.9-1.1.2-.3.4-.2.6-.1.2.1 1.6.8 1.9.9.3.1.5.2.5.3 0 .1 0 .7-.3 1.4z"/></svg>
+            Follow saluran WhatsApp
+          </a>
+        </div>
       </div>
     </div>
   </div>

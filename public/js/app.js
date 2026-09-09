@@ -1182,9 +1182,9 @@
         </div>
         <h3>Bot Settings terkunci</h3>
         <p>Upgrade ke Pro untuk mengakses pengaturan bot.</p>
-        <button type="button" class="btn" id="lockUpgradeBtn">Upgrade ke Pro</button>
+        <button type="button" class="btn lock-upgrade-btn">Upgrade ke Pro</button>
       </div>`;
-    el.querySelector('#lockUpgradeBtn')?.addEventListener('click', () => { openUpgradeModal(); });
+    el.querySelector('.lock-upgrade-btn')?.addEventListener('click', () => openUpgradeModal());
   }
 
   function renderLockedConfigPreview() {
