@@ -1493,7 +1493,7 @@
         <div class="toolbar" style="gap:0.5rem;flex-wrap:wrap;margin-top:0.75rem">
           ${
             canPay
-              ? `<button type="button" class="btn" id="checkPayBtn">Cek Status Pembayaran</button>`
+              ? `<button type="button" class="btn" id="checkPayBtn">Cek Status</button>`
               : ''
           }
           ${
@@ -1545,7 +1545,7 @@
         const b2 = $('#checkPayBtn');
         if (b2) {
           b2.disabled = false;
-          b2.textContent = 'Cek Status Pembayaran';
+          b2.textContent = 'Cek Status';
         }
       }
     });
@@ -1559,12 +1559,21 @@
 
   async function loadAccount() {
     const box = $('#accountBox');
+    if (!box) return;
     box.innerHTML = '<p style="color:var(--muted);font-weight:500">memuat...</p>';
     try {
-      const user = await API.me();
-      currentUser = user;
-      apiKeyVisible = false;
-      renderAccount(user);
+      const raw = await API.me();
+      const user = raw?.user || raw;
+      if (currentUser) Object.assign(currentUser, user);
+      else currentUser = user;
+      try {
+        const me = await API.paymentMe();
+        currentUser.plan = me.plan || currentUser.plan;
+        currentUser.planExpiresAt = me.planExpiresAt;
+        currentUser.maxSessions = me.maxSessions;
+        currentUser.features = me.features || currentUser.features;
+      } catch {}
+      renderAccount(currentUser);
     } catch (e) {
       box.innerHTML = `<p style="color:var(--red)">${escapeHtml(e.message)}</p>`;
     }
@@ -1572,59 +1581,29 @@
 
   function renderAccount(user) {
     const box = $('#accountBox');
-    const masked = user.apiKey ? user.apiKey.slice(0, 6) + '••••••••••••••••••' : '-';
+    if (!box) return;
+    const plan = (user.plan || 'free').toUpperCase();
+    const exp = user.planExpiresAt
+      ? new Date(user.planExpiresAt).toLocaleDateString('id-ID', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+        })
+      : '—';
+    const maxS = user.maxSessions ?? 1;
     box.innerHTML = `
       <div class="field"><label>username</label><input value="${escapeAttr(user.username || '')}" disabled></div>
+      <div class="field"><label>email</label><input value="${escapeAttr(user.email || '-')}" disabled></div>
       <div class="field"><label>nama</label><input value="${escapeAttr(user.name || '-')}" disabled></div>
-      <div class="field"><label>role</label><input value="${escapeAttr(user.role || 'user')}" disabled></div>
-      <div class="field">
-        <label>api key <span class="hint">(untuk akses programatik — header <code>x-api-key</code>)</span></label>
-        <div class="apikey-row">
-          <input id="apiKeyField" value="${escapeAttr(apiKeyVisible ? user.apiKey : masked)}" disabled>
-          <button class="btn btn-sm btn-ghost" id="toggleApiKey" type="button">${apiKeyVisible ? 'sembunyikan' : 'lihat'}</button>
-          <button class="btn btn-sm btn-ghost" id="copyApiKey" type="button">salin</button>
-        </div>
-      </div>
-      <div class="toolbar" style="margin-top:0.5rem">
-        <button class="btn btn-sm" id="rotateApiKey" type="button">buat api key baru</button>
+      <div class="field"><label>role</label><input value="${escapeAttr(user.isAdmin ? 'admin' : 'user')}" disabled></div>
+      <div class="field"><label>plan</label><input value="${escapeAttr(plan)}" disabled></div>
+      <div class="field"><label>masa berlaku plan</label><input value="${escapeAttr(exp)}" disabled></div>
+      <div class="field"><label>maks session</label><input value="${escapeAttr(String(maxS))}" disabled></div>
+      <div class="toolbar" style="margin-top:0.75rem;gap:0.5rem;flex-wrap:wrap">
+        <button class="btn btn-sm" id="accountUpgradeBtn" type="button">Upgrade plan</button>
       </div>
     `;
-
-    $('#toggleApiKey').addEventListener('click', () => {
-      apiKeyVisible = !apiKeyVisible;
-      renderAccount(currentUser);
-    });
-    $('#copyApiKey').addEventListener('click', async () => {
-      try {
-        await navigator.clipboard.writeText(currentUser.apiKey);
-        toast('api key disalin');
-      } catch {
-        toast('gagal menyalin');
-      }
-    });
-    $('#rotateApiKey').addEventListener('click', () => {
-      showModal({
-        title: 'buat api key baru?',
-        sub: 'api key lama langsung tidak berlaku.',
-        actions: [
-          { label: 'batal', ghost: true },
-          {
-            label: 'buat baru',
-            onClick: async () => {
-              try {
-                const { apiKey } = await API.rotateApiKey();
-                currentUser.apiKey = apiKey;
-                apiKeyVisible = true;
-                renderAccount(currentUser);
-                toast('api key baru dibuat');
-              } catch (e) {
-                toast(e.message || 'gagal');
-              }
-            },
-          },
-        ],
-      });
-    });
+    $('#accountUpgradeBtn')?.addEventListener('click', () => activatePage('pricing'));
   }
 
   function escapeHtml(s) {

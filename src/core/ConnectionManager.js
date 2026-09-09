@@ -269,10 +269,13 @@ export class ConnectionManager {
     }
 
     const onMessagesUpsert = (m) => {
-      if (!this.messageHandler) return
+      if (!this.messageHandler || this.isStopping || this.sock !== sock) return
       // Must not await — keeps Baileys event loop free for decrypt/send
       this.messageHandler.handle(this.sessionId, this.userId, sock, m).catch((err) => {
-        logger.error({ sessionId: this.sessionId, err: err?.message }, 'Message handler error')
+        const msg = err?.message || String(err)
+        // suppress routine disconnect noise
+        if (/Connection Closed|Timed Out|not-authorized/i.test(msg)) return
+        logger.error({ sessionId: this.sessionId, err: msg }, 'Message handler error')
       })
     }
 

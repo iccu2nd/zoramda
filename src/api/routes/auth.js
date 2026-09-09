@@ -35,7 +35,6 @@ function publicUser(user) {
     maxSessions: user.role === 'admin' ? user.maxSessions ?? 15 : effective.maxSessions,
     features: effective.features || {},
     name: user.name || '',
-    apiKey: user.apiKey,
   }
 }
 
