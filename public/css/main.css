@@ -1910,10 +1910,11 @@ code::-moz-selection,
   inset: 0;
   z-index: 5;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
-  padding: 2.5rem 1rem 1rem;
-  background: color-mix(in srgb, var(--bg) 35%, transparent);
+  padding: 1.25rem 1rem;
+  background: color-mix(in srgb, var(--bg) 28%, transparent);
+  min-height: 280px;
 }
 .feature-lock-overlay.hidden { display: none; }
 .lock-card {
@@ -1935,3 +1936,177 @@ code::-moz-selection,
 .lock-icon svg { width: 100%; height: 100%; }
 .lock-card h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: 0.3rem; }
 .lock-card p { color: var(--muted); font-weight: 500; margin-bottom: 1rem; font-size: 0.9rem; line-height: 1.4; }
+
+
+/* upgrade promo modal */
+.upgrade-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(15, 18, 25, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+.upgrade-overlay.hidden { display: none; }
+.upgrade-modal {
+  position: relative;
+  width: 100%;
+  max-width: 400px;
+  background: var(--card);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.22);
+  animation: up-pop 0.28s ease;
+}
+@keyframes up-pop {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+.upgrade-close {
+  position: absolute;
+  top: 0.65rem;
+  right: 0.65rem;
+  z-index: 2;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.18);
+  color: #fff;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.upgrade-head {
+  background: #141414;
+  color: #fff;
+  text-align: center;
+  padding: 1.5rem 1.25rem 1.25rem;
+}
+.upgrade-crown {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 0.65rem;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.upgrade-crown svg { width: 24px; height: 24px; color: #fff; }
+.upgrade-head h2 {
+  font-size: 1.25rem;
+  font-weight: 800;
+  margin: 0 0 0.3rem;
+}
+.upgrade-head p {
+  margin: 0;
+  font-size: 0.88rem;
+  opacity: 0.8;
+  font-weight: 500;
+}
+.upgrade-body { padding: 1.1rem 1.15rem 1.15rem; }
+.upgrade-benefits {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+}
+.upgrade-benefits li {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  font-size: 0.88rem;
+  font-weight: 500;
+  margin-bottom: 0.55rem;
+  line-height: 1.35;
+  color: var(--text);
+}
+.ub-check {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--green) 22%, transparent);
+  color: var(--green);
+  font-size: 0.7rem;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.1rem;
+}
+.upgrade-plans {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.9rem;
+}
+.upgrade-plan {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  text-align: left;
+  width: 100%;
+  padding: 0.75rem 0.85rem;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  cursor: pointer;
+  color: var(--text);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.upgrade-plan.selected {
+  border-color: var(--text);
+  background: var(--card);
+}
+.upgrade-plan strong { display: block; font-size: 0.95rem; }
+.up-sub {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-weight: 500;
+  margin-top: 0.15rem;
+}
+.up-price {
+  font-weight: 800;
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+.up-price span {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-align: right;
+}
+.upgrade-cta {
+  width: 100%;
+  justify-content: center;
+  margin-bottom: 0.65rem;
+}
+.upgrade-channel {
+  display: block;
+  text-align: center;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 0.45rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.upgrade-channel:hover { opacity: 0.8; }
+.upgrade-later {
+  display: block;
+  width: 100%;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.88rem;
+  padding: 0.4rem;
+  cursor: pointer;
+}
+.upgrade-later:hover { color: var(--text); }

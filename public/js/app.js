@@ -2,6 +2,8 @@
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const PAGES = ['sessions', 'config', 'plugins', 'admin', 'account', 'pricing', 'payment'];
+  const WA_CHANNEL_URL = 'https://whatsapp.com/channel/0029VbC7SGt65yDCUxYwUS3U';
+  const UPGRADE_DISMISS_KEY = 'zb_upgrade_dismiss_at';
 
   let currentUser = null;
   let pollTimer = null;
@@ -99,6 +101,97 @@
     }
   }
 
+
+  let selectedUpgradePlan = 'pro';
+
+  function shouldShowUpgradeModal() {
+    if (!currentUser) return false;
+    if (currentUser.isAdmin || currentUser.role === 'admin') return false;
+    const plan = (currentUser.plan || 'free').toLowerCase();
+    if (plan !== 'free' && userHasBotSettings()) return false;
+    try {
+      const ts = Number(sessionStorage.getItem(UPGRADE_DISMISS_KEY) || 0);
+      // once per browser tab session after dismiss
+      if (ts) return false;
+    } catch {}
+    return true;
+  }
+
+  function openUpgradeModal() {
+    const ov = $('#upgradeOverlay');
+    if (!ov) return;
+    selectedUpgradePlan = 'pro';
+    ov.classList.remove('hidden');
+    ov.querySelectorAll('.upgrade-plan').forEach((b) => {
+      b.classList.toggle('selected', b.dataset.plan === selectedUpgradePlan);
+    });
+  }
+
+  function closeUpgradeModal(dismiss) {
+    $('#upgradeOverlay')?.classList.add('hidden');
+    if (dismiss) {
+      try {
+        sessionStorage.setItem(UPGRADE_DISMISS_KEY, String(Date.now()));
+      } catch {}
+    }
+  }
+
+  function bindUpgradeModal() {
+    const ov = $('#upgradeOverlay');
+    if (!ov || ov.dataset.bound) return;
+    ov.dataset.bound = '1';
+    $('#upgradeClose')?.addEventListener('click', () => closeUpgradeModal(true));
+    $('#upgradeLater')?.addEventListener('click', () => closeUpgradeModal(true));
+    ov.addEventListener('click', (e) => {
+      if (e.target === ov) closeUpgradeModal(true);
+    });
+    ov.querySelectorAll('.upgrade-plan').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        selectedUpgradePlan = btn.dataset.plan || 'pro';
+        ov.querySelectorAll('.upgrade-plan').forEach((b) =>
+          b.classList.toggle('selected', b === btn)
+        );
+      });
+    });
+    $('#upgradeCta')?.addEventListener('click', async () => {
+      const plan = selectedUpgradePlan || 'pro';
+      const cta = $('#upgradeCta');
+      if (cta) {
+        cta.disabled = true;
+        cta.textContent = 'Menyiapkan…';
+      }
+      try {
+        const { payment } = await API.paymentCheckout(plan);
+        activeCheckoutTrxId = payment.trxId;
+        try {
+          sessionStorage.setItem('zb_active_trx', payment.trxId);
+        } catch {}
+        closeUpgradeModal(true);
+        activatePage('payment');
+        toast('QRIS siap', 'success');
+      } catch (e) {
+        toast(e.message || 'Checkout gagal', 'error');
+        activatePage('pricing');
+        closeUpgradeModal(true);
+      } finally {
+        if (cta) {
+          cta.disabled = false;
+          cta.innerHTML = '⚡ Upgrade Sekarang';
+        }
+      }
+    });
+  }
+
+  async function maybeShowUpgradePrompt() {
+    bindUpgradeModal();
+    try {
+      await syncPlanFromServer();
+    } catch {}
+    if (shouldShowUpgradeModal()) {
+      setTimeout(() => openUpgradeModal(), 450);
+    }
+  }
+
   function showApp() {
     $('#loginView').classList.add('hidden');
     $('#appView').classList.remove('hidden');
@@ -107,6 +200,7 @@
     }
     loadSessions();
     startPoll();
+    maybeShowUpgradePrompt();
   }
 
   function showAuthForm(which) {
@@ -1090,7 +1184,7 @@
         <p>Upgrade ke Pro untuk mengakses pengaturan bot.</p>
         <button type="button" class="btn" id="lockUpgradeBtn">Upgrade ke Pro</button>
       </div>`;
-    el.querySelector('#lockUpgradeBtn')?.addEventListener('click', () => activatePage('pricing'));
+    el.querySelector('#lockUpgradeBtn')?.addEventListener('click', () => { openUpgradeModal(); });
   }
 
   function renderLockedConfigPreview() {

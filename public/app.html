@@ -262,6 +262,48 @@
     </div>
   </div>
 
+  <!-- upgrade promo modal (free users) -->
+  <div class="upgrade-overlay hidden" id="upgradeOverlay" role="dialog" aria-modal="true">
+    <div class="upgrade-modal">
+      <button type="button" class="upgrade-close" id="upgradeClose" aria-label="Tutup">×</button>
+      <div class="upgrade-head">
+        <div class="upgrade-crown" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm0 2h14v2H5v-2z"/></svg>
+        </div>
+        <h2>Upgrade ke Pro</h2>
+        <p>Buka Bot Settings &amp; kustomisasi penuh.</p>
+      </div>
+      <div class="upgrade-body">
+        <ul class="upgrade-benefits">
+          <li><span class="ub-check">✓</span> <strong>Bot Settings</strong> — config, message, system, plugins.</li>
+          <li><span class="ub-check">✓</span> <strong>Multi session</strong> — jalankan beberapa nomor sekaligus.</li>
+          <li><span class="ub-check">✓</span> <strong>Prioritas</strong> — dukungan lebih cepat.</li>
+        </ul>
+        <div class="upgrade-plans">
+          <button type="button" class="upgrade-plan" data-plan="business">
+            <div>
+              <strong>Business</strong>
+              <span class="up-sub">15 session · semua fitur · 30 hari</span>
+            </div>
+            <div class="up-price">Rp15.000<span>/30 hari</span></div>
+          </button>
+          <button type="button" class="upgrade-plan" data-plan="pro">
+            <div>
+              <strong>Pro</strong>
+              <span class="up-sub">5 session · Bot Settings · 30 hari</span>
+            </div>
+            <div class="up-price">Rp5.000<span>/30 hari</span></div>
+          </button>
+        </div>
+        <button type="button" class="btn upgrade-cta" id="upgradeCta">⚡ Upgrade Sekarang</button>
+        <a class="upgrade-channel" href="https://whatsapp.com/channel/0029VbC7SGt65yDCUxYwUS3U" target="_blank" rel="noopener">
+          Ikuti saluran WhatsApp kami
+        </a>
+        <button type="button" class="upgrade-later" id="upgradeLater">Nanti saja</button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast-wrap" id="toasts"></div>
 
   <script src="/js/theme.js"></script>
