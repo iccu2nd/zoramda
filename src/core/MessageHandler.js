@@ -11,11 +11,7 @@
  * - Per-session config, plugin toggle, and permission isolation
  * - Group metadata + anti-spam cached in memory
  */
-import {
-  getContentType,
-  extractMessageContent,
-  downloadContentFromMessage,
-} from '@whiskeysockets/baileys'
+import { getContentType, extractMessageContent } from '@whiskeysockets/baileys'
 import logger from '../utils/logger.js'
 import {
   extractCommand,
@@ -272,30 +268,6 @@ export class MessageHandler {
       }
     }
 
-    /**
-     * Download media from this message or the quoted one.
-     * Returns Buffer with .mimetype when possible.
-     */
-    const download = async (preferQuoted = true) => {
-      const srcMsg =
-        preferQuoted && quoted?.message
-          ? quoted.message
-          : content || raw.message
-      if (!srcMsg) throw new Error('Tidak ada media.')
-      const mediaType = getContentType(srcMsg)
-      const mediaNode = srcMsg[mediaType]
-      if (!mediaNode) throw new Error('Media tidak ditemukan.')
-      const kind = mediaType.replace(/Message$/i, '')
-      const stream = await downloadContentFromMessage(mediaNode, kind)
-      const chunks = []
-      for await (const chunk of stream) chunks.push(chunk)
-      const buffer = Buffer.concat(chunks)
-      buffer.mimetype = mediaNode.mimetype || ''
-      buffer.fileName = mediaNode.fileName || ''
-      buffer.mediaType = mediaType
-      return buffer
-    }
-
     return {
       raw,
       key: raw.key,
@@ -316,7 +288,6 @@ export class MessageHandler {
       pushName: raw.pushName || '',
       timestamp: raw.messageTimestamp,
       reply,
-      download,
     }
   }
 
