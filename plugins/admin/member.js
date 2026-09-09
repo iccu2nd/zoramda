@@ -24,7 +24,7 @@ let handler = async (m, { conn, args, isOwner, command, usedPrefix }) => {
 
   let admin
   try {
-    admin = await checkGroupAdmin(conn, m.chat, m.sender)
+    admin = await checkGroupAdmin(conn, m.chat, m.sender, { lid: m.senderLid, pn: m.senderPn })
   } catch (err) {
     return m.reply(`Gagal cek info grup: ${err.message}`)
   }

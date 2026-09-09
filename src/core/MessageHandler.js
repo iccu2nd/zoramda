@@ -40,7 +40,8 @@ const PERM_PREMIUM = 'premium'
 
 /** @type {Map<string, { meta: any, exp: number }>} groupJid → cached metadata */
 const groupMetaCache = new Map()
-const GROUP_META_TTL_MS = 3 * 60 * 1000
+/** Short TTL — admin promote/demote must reflect quickly (not multi-minute stale) */
+const GROUP_META_TTL_MS = 15 * 1000
 
 /** @type {Map<string, number>} `${sessionId}:${sender}` → last command ts */
 const antiSpamMap = new Map()
@@ -56,13 +57,18 @@ function pruneAntiSpam(now) {
   }
 }
 
-async function getGroupMeta(sock, chatId) {
-  const hit = groupMetaCache.get(chatId)
+/**
+ * Group metadata from WhatsApp. Permission checks should pass force=true
+ * so admin/superadmin is never taken from a long-lived stale cache or DB.
+ */
+async function getGroupMeta(sock, chatId, force = false) {
   const now = Date.now()
-  if (hit && hit.exp > now) return hit.meta
+  if (!force) {
+    const hit = groupMetaCache.get(chatId)
+    if (hit && hit.exp > now) return hit.meta
+  }
   const meta = await sock.groupMetadata(chatId)
   groupMetaCache.set(chatId, { meta, exp: now + GROUP_META_TTL_MS })
-  // soft bound cache size
   if (groupMetaCache.size > 500) {
     const first = groupMetaCache.keys().next().value
     if (first) groupMetaCache.delete(first)
@@ -301,7 +307,9 @@ export class MessageHandler {
         if (!m.isGroup) return false
         if (isOwner) return true
         try {
-          const meta = metaBag.meta || (metaBag.meta = await getGroupMeta(sock, m.chat))
+          // force=true → live metadata from WA (admin/superadmin source of truth)
+          const meta =
+            metaBag.meta || (metaBag.meta = await getGroupMeta(sock, m.chat, true))
           const p = findParticipant(meta.participants || [], m.sender, {
             lid: m.senderLid,
             pn: m.senderPn,
@@ -314,11 +322,12 @@ export class MessageHandler {
       case PERM_BOTADMIN: {
         if (!m.isGroup) return false
         try {
-          const meta = metaBag.meta || (metaBag.meta = await getGroupMeta(sock, m.chat))
+          const meta =
+            metaBag.meta || (metaBag.meta = await getGroupMeta(sock, m.chat, true))
           const botId = sock.user?.id
           const botLid = sock.user?.lid || null
           const p = findParticipant(meta.participants || [], botId, {
-            lid: botLid,
+            lid: botLid ? normalizeJid(botLid) : null,
             pn: normalizeJid(botId),
           })
           return isParticipantAdmin(p)

@@ -39,17 +39,37 @@ export function normalizeJid(jid) {
 /**
  * Collect all known identity strings for a participant / user object or raw jid.
  * Used so LID and PN for the same person match each other.
+ *
+ * IMPORTANT: bare digits from @lid are tagged with a "lid:" prefix so they
+ * never falsely match a phone-number bare id (and vice-versa).
  */
 export function collectIdentities(...inputs) {
   const out = new Set()
-  const add = (v) => {
+  const add = (v, forceDomain = null) => {
     if (!v) return
-    const n = normalizeJid(v)
+    const s = String(v).trim()
+    if (!s) return
+    const n = normalizeJid(s)
     if (n) out.add(n)
-    // also bare user part for loose match within same domain later
-    const bare = String(v).split('@')[0]?.split(':')[0]
-    if (bare) out.add(bare)
+
+    const [userPart, domainPart] = s.split('@')
+    const bare = (userPart || '').split(':')[0]
+    if (!bare) return
+
+    const domain = forceDomain || domainPart || ''
+    if (domain === 'lid' || isLidJid(s)) {
+      out.add(`lid:${bare}`)
+      out.add(`${bare}@lid`)
+    } else if (domain === 's.whatsapp.net' || isPnJid(s) || (!domain && /^\d{8,15}$/.test(bare))) {
+      out.add(`pn:${bare}`)
+      out.add(bare)
+      out.add(`${bare}@s.whatsapp.net`)
+    } else {
+      // unknown — keep bare + normalized only
+      out.add(bare)
+    }
   }
+
   for (const input of inputs) {
     if (!input) continue
     if (typeof input === 'string') {
@@ -66,7 +86,8 @@ export function collectIdentities(...inputs) {
       add(input.participantAlt)
       add(input.remoteJid)
       add(input.remoteJidAlt)
-      // nested attrs from some Baileys group update payloads
+      // Baileys addressing variants
+      if (input.phone_number) add(input.phone_number)
       if (input.content?.attrs) {
         add(input.content.attrs.jid)
         add(input.content.attrs.phone_number)
@@ -99,11 +120,9 @@ export function resolveSenderFromKey(key, isGroup) {
     const alt = key.participantAlt || key.participantPn || null
     const lid = isLidJid(primary) ? normalizeJid(primary) : isLidJid(alt) ? normalizeJid(alt) : null
     const pn = isPnJid(alt) ? normalizeJid(alt) : isPnJid(primary) ? normalizeJid(primary) : null
-    // Prefer PN for owner/premium matching; fall back to LID
     const jid = pn || normalizeJid(primary) || normalizeJid(alt)
     return { jid, lid, pn }
   }
-  // DM
   const primary = key.remoteJid || null
   const alt = key.remoteJidAlt || null
   const lid = isLidJid(primary) ? normalizeJid(primary) : isLidJid(alt) ? normalizeJid(alt) : null
@@ -113,12 +132,23 @@ export function resolveSenderFromKey(key, isGroup) {
 }
 
 /**
- * Find a group participant matching sender (LID or PN).
- * Baileys 6/7 may put LID in `id` and PN in `phoneNumber` / `jid`.
+ * Find a group participant matching sender (LID and/or PN).
+ * Baileys may put LID in `id` and PN in `phoneNumber` / `jid`.
+ * Always pass senderAlts.lid when available.
  */
 export function findParticipant(participants, senderJid, senderAlts = {}) {
-  if (!Array.isArray(participants) || !senderJid) return null
-  const want = collectIdentities(senderJid, senderAlts.lid, senderAlts.pn, senderAlts.jid)
+  if (!Array.isArray(participants) || (!senderJid && !senderAlts?.lid && !senderAlts?.pn)) {
+    return null
+  }
+  const want = collectIdentities(
+    senderJid,
+    senderAlts.lid,
+    senderAlts.pn,
+    senderAlts.jid,
+    senderAlts.participant
+  )
+  if (!want.size) return null
+
   for (const p of participants) {
     const have = collectIdentities(p)
     if (identitiesMatch(want, have)) return p
@@ -126,19 +156,23 @@ export function findParticipant(participants, senderJid, senderAlts = {}) {
   return null
 }
 
+/** admin | superadmin only — never treat missing participant as admin */
 export function isParticipantAdmin(p) {
   if (!p) return false
   const a = p.admin
   return a === 'admin' || a === 'superadmin' || a === true
 }
 
-export function isOwner(jid, ownerNumbers = []) {
-  if (!jid) return false
-  // LID cannot match phone-number owner list by digits alone
-  if (isLidJid(jid)) return false
-  const num = String(jid).split('@')[0].replace(/\D/g, '')
-  if (!num) return false
-  return ownerNumbers.some((o) => String(o).replace(/\D/g, '') === num)
+export function isOwner(jid, ownerNumbers = [], alts = {}) {
+  if (!jid && !alts.lid && !alts.pn) return false
+  const candidates = [jid, alts.pn, alts.jid].filter(Boolean)
+  for (const c of candidates) {
+    if (isLidJid(c)) continue
+    const num = String(c).split('@')[0].replace(/\D/g, '')
+    if (!num) continue
+    if (ownerNumbers.some((o) => String(o).replace(/\D/g, '') === num)) return true
+  }
+  return false
 }
 
 export function sleep(ms) {
@@ -215,16 +249,26 @@ export function resolveTargets(m, args = []) {
 }
 
 /**
- * Group admin check with LID + PN awareness.
+ * Group admin check — always uses LIVE groupMetadata from WhatsApp
+ * (not DB / long-lived cache). Pass LID+PN in senderAlts for accuracy.
+ *
+ * @param {object} sock
+ * @param {string} chat group jid
+ * @param {string} senderJid preferred sender jid (usually PN)
+ * @param {{ lid?: string, pn?: string, jid?: string }} [senderAlts]
  */
 export async function checkGroupAdmin(sock, chat, senderJid, senderAlts = {}) {
+  // Always fetch latest from WA — source of truth for admin/superadmin
   const metadata = await sock.groupMetadata(chat)
   const participants = metadata.participants || []
   const botId = sock.user?.id
   const botLid = sock.user?.lid || null
 
   const senderP = findParticipant(participants, senderJid, senderAlts)
-  const botP = findParticipant(participants, botId, { lid: botLid, pn: normalizeJid(botId) })
+  const botP = findParticipant(participants, botId, {
+    lid: botLid ? normalizeJid(botLid) : null,
+    pn: normalizeJid(botId),
+  })
 
   return {
     metadata,
@@ -235,3 +279,4 @@ export async function checkGroupAdmin(sock, chat, senderJid, senderAlts = {}) {
     botParticipant: botP,
   }
 }
+

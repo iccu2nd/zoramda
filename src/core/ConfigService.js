@@ -504,8 +504,11 @@ class ConfigService {
 
   isOwner(sessionId, jid) {
     if (!jid) return false
+    // LID is not a phone number — cannot match ownerNumbers by digits
+    if (String(jid).includes('@lid')) return false
     const cfg = this.getCached(sessionId)
     const num = String(jid).split('@')[0].replace(/\D/g, '')
+    if (!num) return false
     return (cfg.ownerNumbers || []).some((o) => String(o).replace(/\D/g, '') === num)
   }
 
