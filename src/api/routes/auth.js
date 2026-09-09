@@ -13,7 +13,11 @@ import {
   normalizeUsername,
   isValidUsername,
   isValidPassword,
+  generateVerificationToken,
+  verifyToken,
 } from '../../utils/authToken.js'
+import { sendVerificationEmail, resolveBaseUrl } from '../../services/resendEmail.js'
+import { rateLimit } from '../middleware/rateLimit.js'
 
 const router = Router()
 
@@ -27,6 +31,7 @@ function publicUser(user) {
     userId: user.userId,
     username: user.username,
     email: user.email || '',
+    emailVerified: !!user.emailVerified,
     phone: user.phone || '',
     role: user.role,
     isAdmin: user.role === 'admin',
@@ -57,6 +62,7 @@ function normalizePhone(phone) {
  */
 router.post(
   '/register',
+  rateLimit({ windowMs: 60 * 60_000, max: 8, message: 'Terlalu banyak percobaan daftar. Coba lagi nanti.' }),
   validateBody({
     username: { type: 'string', required: true, maxLength: 32 },
     email: { type: 'string', required: true, maxLength: 120 },
@@ -104,6 +110,8 @@ router.post(
       const userId = uuidv4()
       const passwordHash = await hashPassword(password)
       const apiKey = generateApiKey()
+      const verificationToken = generateVerificationToken()
+      const verificationExpires = new Date(Date.now() + config.email.verifyTtlHours * 3600 * 1000)
 
       const user = await User.create({
         userId,
@@ -116,10 +124,21 @@ router.post(
         plan: 'free',
         name: req.body.name || '',
         maxSessions: 1,
+        emailVerified: false,
+        emailVerificationToken: verificationToken,
+        emailVerificationExpires: verificationExpires,
+        emailVerificationSentAt: new Date(),
+      })
+
+      const emailSent = await sendVerificationEmail({
+        to: user.email,
+        name: user.name || user.username,
+        token: verificationToken,
+        baseUrl: resolveBaseUrl(req),
       })
 
       const token = signToken(user)
-      res.status(201).json({ token, user: publicUser(user) })
+      res.status(201).json({ token, user: publicUser(user), emailSent })
     } catch (err) {
       if (err.code === 11000) {
         return res.status(409).json({ error: 'Username atau email sudah terdaftar.' })
@@ -136,6 +155,7 @@ router.post(
  */
 router.post(
   '/login',
+  rateLimit({ windowMs: 15 * 60_000, max: 15, message: 'Terlalu banyak percobaan masuk. Coba lagi nanti.' }),
   validateBody({
     username: { type: 'string', required: true, maxLength: 120 },
     password: { type: 'string', required: true, maxLength: 128 },
@@ -246,6 +266,100 @@ router.post('/apikey/rotate', authenticate, async (req, res) => {
   } catch (err) {
     logger.error({ err: err.message }, 'Rotate apiKey error')
     res.status(500).json({ error: 'Failed to rotate API key' })
+  }
+})
+
+/**
+ * Verify an email address using the token sent by email. Public route —
+ * hit directly by the link/button in the verification email.
+ */
+router.get('/verify-email', rateLimit({ windowMs: 15 * 60_000, max: 30 }), async (req, res) => {
+  try {
+    const token = String(req.query.token || '').trim()
+    if (!token) {
+      return res.status(400).json({ error: 'Token verifikasi tidak ditemukan.' })
+    }
+
+    const user = await User.findOne({ emailVerificationToken: token })
+    if (!user) {
+      // Might already have been verified & cleared — check by trying to
+      // give a friendlier message when possible, otherwise generic invalid.
+      return res.status(400).json({ error: 'Tautan verifikasi tidak valid atau sudah digunakan.' })
+    }
+
+    if (user.emailVerified) {
+      return res.json({ verified: true, alreadyVerified: true, email: user.email })
+    }
+
+    if (!user.emailVerificationExpires || user.emailVerificationExpires.getTime() < Date.now()) {
+      return res.status(410).json({ error: 'Tautan verifikasi sudah kedaluwarsa.', expired: true, email: user.email })
+    }
+
+    user.emailVerified = true
+    user.emailVerificationToken = null
+    user.emailVerificationExpires = null
+    await user.save()
+
+    res.json({ verified: true, alreadyVerified: false, email: user.email })
+  } catch (err) {
+    logger.error({ err: err.message }, 'Verify email error')
+    res.status(500).json({ error: 'Gagal memverifikasi email.' })
+  }
+})
+
+/**
+ * Resend the verification email. Accepts an email in body for the public
+ * "expired link" flow, or falls back to the authenticated user.
+ */
+router.post('/resend-verification', rateLimit({ windowMs: 60 * 60_000, max: 6 }), async (req, res) => {
+  try {
+    const bodyEmail = normalizeEmail(req.body?.email)
+    let user = null
+
+    if (bodyEmail) {
+      user = await User.findOne({ email: bodyEmail })
+    } else {
+      const authHeader = req.headers.authorization || ''
+      const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
+      if (bearer) {
+        const decoded = verifyToken(bearer)
+        if (decoded?.userId) user = await User.findOne({ userId: decoded.userId })
+      }
+    }
+
+    // Always respond with a generic success message to avoid leaking
+    // which emails exist in the system.
+    const genericOk = { ok: true, message: 'Jika email terdaftar dan belum terverifikasi, tautan verifikasi baru telah dikirim.' }
+
+    if (!user || user.emailVerified) {
+      return res.json(genericOk)
+    }
+
+    const cooldownMs = config.email.resendCooldownSeconds * 1000
+    if (user.emailVerificationSentAt && Date.now() - user.emailVerificationSentAt.getTime() < cooldownMs) {
+      const waitSec = Math.ceil(
+        (cooldownMs - (Date.now() - user.emailVerificationSentAt.getTime())) / 1000
+      )
+      return res.status(429).json({ error: `Tunggu ${waitSec} detik sebelum mengirim ulang.` })
+    }
+
+    const verificationToken = generateVerificationToken()
+    user.emailVerificationToken = verificationToken
+    user.emailVerificationExpires = new Date(Date.now() + config.email.verifyTtlHours * 3600 * 1000)
+    user.emailVerificationSentAt = new Date()
+    await user.save()
+
+    await sendVerificationEmail({
+      to: user.email,
+      name: user.name || user.username,
+      token: verificationToken,
+      baseUrl: resolveBaseUrl(req),
+    })
+
+    res.json(genericOk)
+  } catch (err) {
+    logger.error({ err: err.message }, 'Resend verification error')
+    res.status(500).json({ error: 'Gagal mengirim ulang email verifikasi.' })
   }
 })
 

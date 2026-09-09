@@ -201,7 +201,33 @@
     loadSessions();
     startPoll();
     maybeShowUpgradePrompt();
+    updateVerifyBanner();
   }
+
+  function updateVerifyBanner() {
+    const banner = $('#verifyBanner');
+    if (!banner) return;
+    const show = !!currentUser && currentUser.emailVerified === false;
+    banner.classList.toggle('hidden', !show);
+  }
+
+  let verifyResendCooldownUntil = 0;
+  $('#verifyBannerBtn')?.addEventListener('click', async () => {
+    const btn = $('#verifyBannerBtn');
+    const msg = $('#verifyBannerMsg');
+    if (Date.now() < verifyResendCooldownUntil) return;
+    btn.disabled = true;
+    msg.textContent = '';
+    try {
+      const res = await API.resendVerification({ email: currentUser?.email });
+      msg.textContent = res.message || 'Email verifikasi terkirim, cek inbox kamu.';
+      verifyResendCooldownUntil = Date.now() + 60000;
+      setTimeout(() => { btn.disabled = false; }, 60000);
+    } catch (e) {
+      msg.textContent = e.message || 'Gagal mengirim ulang.';
+      btn.disabled = false;
+    }
+  });
 
   function showAuthForm(which) {
     const login = which === 'login';
@@ -283,7 +309,7 @@
 
     $('#registerBtn').disabled = true;
     try {
-      const { token, user } = await API.register({
+      const { token, user, emailSent } = await API.register({
         username,
         email,
         password,
@@ -292,7 +318,9 @@
       });
       API.setToken(token);
       currentUser = user;
-      toast('Akun berhasil dibuat');
+      toast(emailSent
+        ? 'Akun berhasil dibuat. Cek email untuk verifikasi.'
+        : 'Akun berhasil dibuat.');
       showApp();
     } catch (e2) {
       errEl.textContent = e2.message || 'Pendaftaran gagal.';
@@ -1574,6 +1602,7 @@
         currentUser.features = me.features || currentUser.features;
       } catch {}
       renderAccount(currentUser);
+      updateVerifyBanner();
     } catch (e) {
       box.innerHTML = `<p style="color:var(--red)">${escapeHtml(e.message)}</p>`;
     }
@@ -1593,7 +1622,12 @@
     const maxS = user.maxSessions ?? 1;
     box.innerHTML = `
       <div class="field"><label>username</label><input value="${escapeAttr(user.username || '')}" disabled></div>
-      <div class="field"><label>email</label><input value="${escapeAttr(user.email || '-')}" disabled></div>
+      <div class="field">
+        <label>email</label>
+        <input value="${escapeAttr(user.email || '-')}" disabled>
+        <span class="chip-mini" style="margin-top:0.4rem;display:inline-block;${user.emailVerified ? '' : 'color:var(--orange)'}">${user.emailVerified ? 'terverifikasi' : 'belum diverifikasi'}</span>
+        ${user.emailVerified ? '' : '<button class="btn btn-sm btn-ghost" id="accountResendBtn" type="button" style="margin-left:0.5rem">kirim ulang verifikasi</button>'}
+      </div>
       <div class="field"><label>nama</label><input value="${escapeAttr(user.name || '-')}" disabled></div>
       <div class="field"><label>role</label><input value="${escapeAttr(user.isAdmin ? 'admin' : 'user')}" disabled></div>
       <div class="field"><label>plan</label><input value="${escapeAttr(plan)}" disabled></div>
@@ -1604,6 +1638,18 @@
       </div>
     `;
     $('#accountUpgradeBtn')?.addEventListener('click', () => activatePage('pricing'));
+    $('#accountResendBtn')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      try {
+        const res = await API.resendVerification({ email: user.email });
+        toast(res.message || 'Email verifikasi terkirim');
+      } catch (err) {
+        toast(err.message || 'Gagal mengirim ulang', 'error');
+      } finally {
+        setTimeout(() => { btn.disabled = false; }, 60000);
+      }
+    });
   }
 
   function escapeHtml(s) {

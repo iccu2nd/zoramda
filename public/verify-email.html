@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <meta name="theme-color" content="#eef0f4">
+  <title>Verifikasi email · botenv</title>
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('zb_theme');
+        document.documentElement.setAttribute('data-theme', t === 'dark' ? 'dark' : 'light');
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="stylesheet" href="/css/theme-switch.css">
+  <style>
+    .verify-page {
+      min-height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+    .verify-card {
+      max-width: 440px;
+      width: 100%;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 2rem 1.5rem;
+      box-shadow: var(--shadow-lg);
+      text-align: center;
+    }
+    .verify-icon {
+      width: 64px;
+      height: 64px;
+      margin: 0 auto 1.1rem;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .verify-icon svg { width: 30px; height: 30px; }
+    .verify-icon.state-loading { background: rgba(37, 99, 235, 0.1); color: var(--blue); }
+    .verify-icon.state-success { background: var(--green-soft); color: var(--green); }
+    .verify-icon.state-error { background: rgba(220, 38, 38, 0.1); color: var(--red); }
+    .verify-icon.state-loading svg { animation: verify-spin 0.9s linear infinite; }
+    @keyframes verify-spin { to { transform: rotate(360deg); } }
+    .verify-card h1 { font-size: 1.3rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .verify-card p.desc { color: var(--muted); font-weight: 500; font-size: 0.92rem; line-height: 1.55; margin-bottom: 1.4rem; }
+    .verify-resend { text-align: left; margin-top: 0.25rem; }
+    .verify-resend .outline-field { margin-bottom: 0.9rem; }
+    .verify-note { font-size: 0.8rem; color: var(--muted); margin-top: 0.9rem; }
+    .verify-note a { color: var(--blue); font-weight: 600; }
+    .verify-msg { font-size: 0.85rem; font-weight: 600; min-height: 1.1rem; margin: 0.6rem 0 0; }
+    .verify-msg.ok { color: var(--green); }
+    .verify-msg.err { color: var(--red); }
+  </style>
+</head>
+<body>
+  <div class="verify-page">
+    <div class="verify-card" id="verifyCard">
+      <div class="verify-icon state-loading" id="verifyIcon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 2a10 10 0 0 1 10 10"/></svg>
+      </div>
+      <h1 id="verifyTitle">Memverifikasi email...</h1>
+      <p class="desc" id="verifyDesc">Mohon tunggu sebentar.</p>
+      <div id="verifyExtra"></div>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/verify-email.js"></script>
+</body>
+</html>

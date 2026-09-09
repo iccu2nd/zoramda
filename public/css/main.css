@@ -1201,6 +1201,37 @@ code::-moz-selection,
   text-align: center;
 }
 
+/* email verification banner (dashboard) */
+.verify-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  background: rgba(234, 88, 12, 0.1);
+  color: var(--orange);
+  border: 1px solid rgba(234, 88, 12, 0.25);
+  border-radius: var(--radius-sm);
+  padding: 0.7rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin: 0 0 1rem;
+}
+.verify-banner svg { width: 18px; height: 18px; flex: none; }
+.verify-banner-btn {
+  border: 1px solid rgba(234, 88, 12, 0.35);
+  background: transparent;
+  color: var(--orange);
+  font-weight: 700;
+  font-size: 0.8rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.2s var(--ease);
+}
+.verify-banner-btn:hover { background: rgba(234, 88, 12, 0.12); }
+.verify-banner-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.verify-banner-msg { font-size: 0.78rem; font-weight: 600; opacity: 0.85; }
+
 /* plugin editor */
 
 

@@ -21,6 +21,16 @@ const config = {
     adminApiKey: process.env.ADMIN_API_KEY || 'dev-admin-key',
   },
 
+  email: {
+    resendApiKey: process.env.RESEND_API_KEY || '',
+    from: process.env.RESEND_FROM_EMAIL || 'Botenv <noreply@botenv.my.id>',
+    // Optional manual override. When empty, the app auto-detects the domain
+    // from each incoming request (protocol + host) instead.
+    appUrlOverride: (process.env.APP_URL || '').replace(/\/+$/, ''),
+    verifyTtlHours: parseInt(process.env.EMAIL_VERIFY_TTL_HOURS || '24', 10),
+    resendCooldownSeconds: parseInt(process.env.EMAIL_RESEND_COOLDOWN_SECONDS || '60', 10),
+  },
+
   logLevel: process.env.LOG_LEVEL || 'info',
   latencyThreshold: parseInt(process.env.LATENCY_LOG_THRESHOLD_MS || '500', 10),
 
@@ -34,3 +44,20 @@ const config = {
 }
 
 export default config
+
+// --- fail-fast: never allow known dev-default secrets in production ---
+if (config.isProd) {
+  const insecure = []
+  if (config.security.jwtSecret === 'dev-jwt-change-me') insecure.push('JWT_SECRET')
+  if (config.security.apiSecret === 'dev-secret-change-me') insecure.push('API_SECRET')
+  if (config.security.adminApiKey === 'dev-admin-key') insecure.push('ADMIN_API_KEY')
+  if (insecure.length) {
+    // logger isn't safe to import here (would create a circular import),
+    // so this uses console directly — it only ever fires on misconfiguration.
+    console.error(
+      `[FATAL] Refusing to start in production with default value(s) for: ${insecure.join(', ')}. ` +
+        'Set these to strong random values in your environment before deploying.'
+    )
+    process.exit(1)
+  }
+}

@@ -50,6 +50,9 @@ const API = {
   login: (body) => API.request('/api/auth/login', { method: 'POST', body: JSON.stringify(body) }),
   me: () => API.request('/api/auth/me'),
   rotateApiKey: () => API.request('/api/auth/apikey/rotate', { method: 'POST' }),
+  verifyEmail: (token) => API.request('/api/auth/verify-email?token=' + encodeURIComponent(token)),
+  resendVerification: (body) =>
+    API.request('/api/auth/resend-verification', { method: 'POST', body: JSON.stringify(body || {}) }),
 
   sessions: () => API.request('/api/sessions'),
   createSession: (body) => API.request('/api/sessions', { method: 'POST', body: JSON.stringify(body || {}) }),

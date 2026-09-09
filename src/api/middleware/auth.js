@@ -1,8 +1,16 @@
 import User from '../../db/models/User.js'
 import config from '../../config/index.js'
 import logger from '../../utils/logger.js'
+import crypto from 'crypto'
 import { verifyToken } from '../../utils/authToken.js'
 import { resolveEffectivePlan, hasFeature } from '../../config/plans.js'
+
+function safeEqual(a, b) {
+  const bufA = Buffer.from(String(a))
+  const bufB = Buffer.from(String(b))
+  if (bufA.length !== bufB.length) return false
+  return crypto.timingSafeEqual(bufA, bufB)
+}
 
 function attachUser(user) {
   const effective = resolveEffectivePlan(user)
@@ -32,7 +40,7 @@ export async function authenticate(req, res, next) {
       return res.status(401).json({ error: 'Missing credentials' })
     }
 
-    if (apiKey && config.security.adminApiKey && apiKey === config.security.adminApiKey) {
+    if (apiKey && config.security.adminApiKey && safeEqual(apiKey, config.security.adminApiKey)) {
       req.user = {
         userId: 'admin',
         role: 'admin',

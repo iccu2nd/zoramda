@@ -30,11 +30,36 @@ Setiap orang bisa daftar akun sendiri lewat dashboard (`/app`) atau API — **ti
 Login pakai username + password, dapat session token (JWT) yang dipakai dashboard secara otomatis.
 
 ```
-POST /api/auth/register   { username, password, name? }  → { token, user }
-POST /api/auth/login      { username, password }          → { token, user }
-GET  /api/auth/me                                          → profil + apiKey milik sendiri
-POST /api/auth/apikey/rotate                                → generate apiKey baru
+POST /api/auth/register           { username, email, password, confirmPassword, phone? } → { token, user, emailSent }
+POST /api/auth/login              { username, password }          → { token, user }
+GET  /api/auth/me                                                  → profil + apiKey milik sendiri
+POST /api/auth/apikey/rotate                                        → generate apiKey baru
+GET  /api/auth/verify-email?token=...                               → verifikasi email (dibuka dari link di email)
+POST /api/auth/resend-verification { email }                        → kirim ulang email verifikasi
 ```
+
+### Verifikasi email (Resend)
+
+Saat registrasi, akun langsung bisa dipakai, tapi email dianggap belum
+terverifikasi (`emailVerified: false`) sampai user klik tombol/link di email
+yang dikirim lewat [Resend](https://resend.com). Dashboard menampilkan
+banner "kirim ulang" selama email belum diverifikasi.
+
+Env var yang perlu diisi:
+
+```
+RESEND_API_KEY=re_xxxxxxxxxxxx      # API key dari resend.com — satu-satunya yang wajib diisi
+```
+
+Env lain opsional dan sudah punya default:
+
+- `RESEND_FROM_EMAIL` — default `Botenv <noreply@botenv.my.id>`. Domain `botenv.my.id` harus sudah diverifikasi di Resend (Domains → Add Domain → set DNS record SPF/DKIM). Ganti hanya kalau mau pakai alamat pengirim lain.
+- `APP_URL` — kosong = domain otomatis terdeteksi dari request (termasuk di belakang proxy seperti Railway). Isi manual hanya kalau perlu paksa domain tertentu.
+- `EMAIL_VERIFY_TTL_HOURS` — default `24` jam masa berlaku link.
+- `EMAIL_RESEND_COOLDOWN_SECONDS` — default `60` detik jeda antar kirim ulang.
+
+Jika `RESEND_API_KEY` tidak diisi, registrasi tetap berjalan normal — hanya
+saja email verifikasi tidak terkirim (dicatat sebagai warning di log).
 
 Endpoint session/config/plugin lainnya menerima salah satu dari:
 

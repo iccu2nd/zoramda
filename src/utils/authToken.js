@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
+import crypto from 'crypto'
 import config from '../config/index.js'
 
 const SALT_ROUNDS = 10
@@ -44,6 +45,10 @@ export function isValidPassword(pw) {
   return typeof pw === 'string' && pw.length >= 6 && pw.length <= 128
 }
 
+export function generateVerificationToken() {
+  return crypto.randomBytes(32).toString('hex')
+}
+
 export default {
   hashPassword,
   verifyPassword,
@@ -52,4 +57,5 @@ export default {
   normalizeUsername,
   isValidUsername,
   isValidPassword,
+  generateVerificationToken,
 }
