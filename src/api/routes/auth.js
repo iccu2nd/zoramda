@@ -148,14 +148,18 @@ router.post(
         if (field === 'email') {
           return res.status(409).json({ error: 'Email sudah terdaftar.' })
         }
-        // Collision on a field other than username/email (e.g. userId/apiKey
-        // clash, or an old/legacy document) — log the real field so it's
-        // debuggable instead of returning a misleading message.
+        // Collision on a field other than username/email (e.g. a stale
+        // unique index left over from an older schema version — phone is
+        // the usual suspect since many users share an empty '' value).
         logger.error(
           { field, keyValue: err.keyValue },
           'Register duplicate key on unexpected field'
         )
-        return res.status(409).json({ error: 'Gagal mendaftar karena konflik data. Coba lagi.' })
+        return res.status(409).json({
+          error: field
+            ? `Gagal mendaftar: field '${field}' bentrok dengan data lain. Kemungkinan ada index unik lama di database pada field ini — hubungi admin untuk cek.`
+            : 'Gagal mendaftar karena konflik data. Coba lagi.',
+        })
       }
       logger.error({ err: err.message }, 'Register error')
       res.status(500).json({ error: 'Pendaftaran gagal.' })
