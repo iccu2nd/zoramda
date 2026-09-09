@@ -31,7 +31,6 @@ const sessionConfigSchema = new mongoose.Schema(
     antiSpam: { type: Boolean, default: true },
     antiSpamCooldownMs: { type: Number, default: 2000 },
     readMessages: { type: Boolean, default: false },
-    streakEnabled: { type: Boolean, default: true },
     sendTyping: { type: Boolean, default: false },
     sendRecording: { type: Boolean, default: false },
 
