@@ -1163,14 +1163,63 @@
       </span>`;
     }
     if (s === 'pending') {
-      return `<span class="pay-badge wait" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      return `<span class="pay-badge wait pay-badge-pulse" aria-hidden="true">
+        <svg class="pay-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path class="pay-clock-hand" d="M12 7v5l3 2"/></svg>
       </span>`;
     }
-    // expired / failed
     return `<span class="pay-badge bad" aria-hidden="true">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
     </span>`;
+  }
+
+  function showPayCheckOverlay(state, message) {
+    const ov = $('#payCheckOverlay');
+    const card = $('#payCheckCard');
+    if (!ov || !card) return;
+    let body = '';
+    if (state === 'loading') {
+      body = `
+        <div class="pay-check-icon loading">
+          <span class="pay-check-spinner"></span>
+        </div>
+        <p class="pay-check-msg">Memeriksa status pembayaran…</p>`;
+    } else if (state === 'paid') {
+      body = `
+        <div class="pay-check-icon success">
+          <svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" fill="none"/><path fill="none" d="M14.5 27.5l7.5 7.5 15-16"/></svg>
+        </div>
+        <p class="pay-check-msg">${escapeHtml(message || 'Pembayaran berhasil')}</p>`;
+    } else if (state === 'pending') {
+      body = `
+        <div class="pay-check-icon pending">
+          <svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" fill="none"/><path fill="none" d="M18 18l16 16M34 18L18 34"/></svg>
+        </div>
+        <p class="pay-check-msg">${escapeHtml(message || 'Pembayaran belum masuk')}</p>`;
+    } else {
+      body = `
+        <div class="pay-check-icon error">
+          <svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" fill="none"/><path fill="none" d="M18 18l16 16M34 18L18 34"/></svg>
+        </div>
+        <p class="pay-check-msg">${escapeHtml(message || 'Status gagal / expired')}</p>`;
+    }
+    card.innerHTML = body;
+    ov.classList.remove('hidden');
+    if (state !== 'loading') {
+      const auto = setTimeout(() => hidePayCheckOverlay(), state === 'paid' ? 2200 : 1800);
+      ov.onclick = () => {
+        clearTimeout(auto);
+        hidePayCheckOverlay();
+      };
+    } else {
+      ov.onclick = null;
+    }
+  }
+
+  function hidePayCheckOverlay() {
+    const ov = $('#payCheckOverlay');
+    if (!ov) return;
+    ov.classList.add('hidden');
+    ov.onclick = null;
   }
 
   function renderFeatureLock(el) {
@@ -1465,27 +1514,32 @@
       const b = $('#checkPayBtn');
       if (b) {
         b.disabled = true;
-        b.innerHTML = '<span class="btn-spin"></span> Mengecek…';
+        b.textContent = 'Mengecek…';
       }
+      showPayCheckOverlay('loading');
       try {
         const res = await API.paymentCheck(payment.trxId);
-        renderPaymentPage(res.payment);
-        const msg = $('#payMsg');
-        if (msg) msg.textContent = res.message || '';
-        if (res.payment?.status === 'paid') {
-          toast(res.message || 'Pembayaran berhasil', 'success');
+        const st = res.payment?.status || 'pending';
+        if (st === 'paid') {
+          showPayCheckOverlay('paid', res.message || 'Pembayaran berhasil');
           await syncPlanFromServer();
           try {
             const u = await API.me();
             if (u?.user) Object.assign(currentUser, u.user);
             else if (u) Object.assign(currentUser, u);
           } catch {}
-        } else if (res.payment?.status === 'pending') {
-          toast(res.message || 'Belum masuk', 'info');
+        } else if (st === 'pending') {
+          showPayCheckOverlay('pending', res.message || 'Pembayaran belum masuk');
         } else {
-          toast(res.message || statusLabel(res.payment?.status), 'warning');
+          showPayCheckOverlay('error', res.message || statusLabel(st));
         }
+        setTimeout(() => {
+          renderPaymentPage(res.payment);
+          const msg = $('#payMsg');
+          if (msg) msg.textContent = res.message || '';
+        }, st === 'paid' ? 900 : 500);
       } catch (e) {
+        showPayCheckOverlay('error', e.message || 'Gagal cek status');
         toast(e.message || 'Gagal cek status', 'error');
       } finally {
         const b2 = $('#checkPayBtn');

@@ -2373,3 +2373,94 @@ code::-moz-selection,
   .pay-meta { grid-template-columns: 1fr; }
   .qris-img { width: min(280px, 85vw); }
 }
+
+
+/* pending clock animation */
+.pay-badge-pulse {
+  animation: pay-pulse 1.6s ease-in-out infinite;
+}
+.pay-clock-hand {
+  transform-origin: 12px 12px;
+  animation: pay-hand 2s linear infinite;
+}
+@keyframes pay-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.06); opacity: 0.88; }
+}
+@keyframes pay-hand {
+  to { transform: rotate(360deg); }
+}
+
+/* pay check overlay */
+.pay-check-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(20, 24, 32, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  animation: upgrade-in 0.2s ease;
+}
+.pay-check-overlay.hidden { display: none; }
+.pay-check-card {
+  background: var(--card);
+  border-radius: 16px;
+  padding: 1.5rem 1.4rem 1.35rem;
+  min-width: 220px;
+  max-width: 300px;
+  text-align: center;
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--border);
+}
+.pay-check-icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pay-check-icon svg {
+  width: 64px;
+  height: 64px;
+}
+.pay-check-icon.success { color: var(--green); }
+.pay-check-icon.pending,
+.pay-check-icon.error { color: var(--red); }
+.pay-check-icon.success circle,
+.pay-check-icon.pending circle,
+.pay-check-icon.error circle {
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-dasharray: 160;
+  stroke-dashoffset: 160;
+  animation: pay-circle 0.45s ease forwards;
+}
+.pay-check-icon.success path,
+.pay-check-icon.pending path,
+.pay-check-icon.error path {
+  stroke: currentColor;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 60;
+  stroke-dashoffset: 60;
+  animation: pay-check 0.35s 0.22s ease forwards;
+}
+.pay-check-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid color-mix(in srgb, var(--muted) 35%, transparent);
+  border-top-color: var(--text);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+.pay-check-msg {
+  margin: 0;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text);
+  line-height: 1.35;
+}
