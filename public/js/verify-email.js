@@ -48,17 +48,37 @@
         msg.textContent = 'Masukkan alamat email kamu.';
         return;
       }
+      if (!/^[^\s@]+@gmail\.com$/i.test(email)) {
+        msg.classList.add('err');
+        msg.textContent = 'Gunakan alamat @gmail.com.';
+        return;
+      }
       const btn = $('#resendBtn');
       btn.disabled = true;
+      btn.textContent = 'Mengirim…';
       try {
         const res = await API.resendVerification({ email });
-        msg.classList.add('ok');
-        msg.textContent = res.message || 'Tautan verifikasi baru sudah dikirim, cek inbox kamu.';
+        if (res.alreadyVerified) {
+          msg.classList.add('ok');
+          msg.textContent = res.message || 'Email sudah terverifikasi. Silakan masuk.';
+          btn.textContent = 'Kirim ulang tautan verifikasi';
+          return;
+        }
+        if (res.emailSent === false) {
+          msg.classList.add('err');
+          msg.textContent = res.message || res.error || 'Email gagal terkirim. Coba lagi nanti.';
+        } else {
+          msg.classList.add('ok');
+          msg.textContent =
+            res.message ||
+            'Tautan verifikasi baru sudah dikirim. Cek inbox Gmail dan folder spam.';
+        }
       } catch (e) {
         msg.classList.add('err');
         msg.textContent = e.message || 'Gagal mengirim ulang. Coba lagi nanti.';
       } finally {
         btn.disabled = false;
+        btn.textContent = 'Kirim ulang tautan verifikasi';
       }
     });
   }
@@ -92,19 +112,15 @@
       renderLoginCta(res.email);
     } catch (e) {
       const data = e.data || {};
-      if (data.expired) {
-        setState('error', {
-          title: 'Tautan sudah kedaluwarsa',
-          desc: 'Tautan verifikasi ini sudah tidak berlaku. Kirim ulang tautan baru ke email kamu.',
-        });
-        renderResendForm(data.email);
-      } else {
-        setState('error', {
-          title: 'Verifikasi gagal',
-          desc: e.message || 'Tautan verifikasi tidak valid atau sudah digunakan.',
-        });
-        renderResendForm();
-      }
+      const isExpired =
+        data.expired || data.code === 'TOKEN_EXPIRED' || data.code === 'TOKEN_INVALID' || e.status === 410;
+      setState('error', {
+        title: isExpired ? 'Tautan kedaluwarsa / tidak berlaku' : 'Verifikasi gagal',
+        desc:
+          e.message ||
+          'Tautan verifikasi tidak valid atau sudah tidak berlaku. Kirim ulang tautan baru ke email kamu.',
+      });
+      renderResendForm(data.email || '');
     }
   }
 

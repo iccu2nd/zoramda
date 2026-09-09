@@ -327,38 +327,55 @@ router.get(
     message: 'Terlalu banyak permintaan verifikasi. Coba lagi sebentar.',
   }),
   async (req, res) => {
-  try {
-    const token = String(req.query.token || '').trim()
-    if (!token) {
-      return res.status(400).json({ error: 'Token verifikasi tidak ditemukan.' })
+    try {
+      const token = String(req.query.token || '').trim()
+      if (!token) {
+        return res.status(400).json({
+          error: 'Token verifikasi tidak ditemukan.',
+          code: 'TOKEN_MISSING',
+        })
+      }
+
+      const user = await User.findOne({ emailVerificationToken: token })
+      if (!user) {
+        // Token tidak cocok: sudah dipakai, diganti resend, atau salah.
+        return res.status(400).json({
+          error:
+            'Tautan verifikasi tidak valid atau sudah tidak berlaku. Kirim ulang tautan baru ke email kamu.',
+          code: 'TOKEN_INVALID',
+          expired: true,
+        })
+      }
+
+      if (user.emailVerified) {
+        return res.json({ verified: true, alreadyVerified: true, email: user.email })
+      }
+
+      if (
+        !user.emailVerificationExpires ||
+        user.emailVerificationExpires.getTime() < Date.now()
+      ) {
+        return res.status(410).json({
+          error: 'Tautan verifikasi sudah kedaluwarsa. Kirim ulang tautan baru.',
+          code: 'TOKEN_EXPIRED',
+          expired: true,
+          email: user.email,
+        })
+      }
+
+      user.emailVerified = true
+      user.emailVerificationToken = null
+      user.emailVerificationExpires = null
+      user.emailVerificationSentAt = null
+      await user.save()
+
+      res.json({ verified: true, alreadyVerified: false, email: user.email })
+    } catch (err) {
+      logger.error({ err: err.message }, 'Verify email error')
+      res.status(500).json({ error: 'Gagal memverifikasi email.' })
     }
-
-    const user = await User.findOne({ emailVerificationToken: token })
-    if (!user) {
-      // Might already have been verified & cleared — check by trying to
-      // give a friendlier message when possible, otherwise generic invalid.
-      return res.status(400).json({ error: 'Tautan verifikasi tidak valid atau sudah digunakan.' })
-    }
-
-    if (user.emailVerified) {
-      return res.json({ verified: true, alreadyVerified: true, email: user.email })
-    }
-
-    if (!user.emailVerificationExpires || user.emailVerificationExpires.getTime() < Date.now()) {
-      return res.status(410).json({ error: 'Tautan verifikasi sudah kedaluwarsa.', expired: true, email: user.email })
-    }
-
-    user.emailVerified = true
-    user.emailVerificationToken = null
-    user.emailVerificationExpires = null
-    await user.save()
-
-    res.json({ verified: true, alreadyVerified: false, email: user.email })
-  } catch (err) {
-    logger.error({ err: err.message }, 'Verify email error')
-    res.status(500).json({ error: 'Gagal memverifikasi email.' })
   }
-})
+)
 
 /**
  * Resend the verification email. Accepts an email in body for the public
@@ -373,55 +390,100 @@ router.post(
     message: 'Terlalu banyak kirim ulang email. Coba lagi nanti.',
   }),
   async (req, res) => {
-  try {
-    const bodyEmail = normalizeEmail(req.body?.email)
-    let user = null
+    try {
+      const bodyEmail = normalizeEmail(req.body?.email)
+      let user = null
 
-    if (bodyEmail) {
-      user = await User.findOne({ email: bodyEmail })
-    } else {
-      const authHeader = req.headers.authorization || ''
-      const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
-      if (bearer) {
-        const decoded = verifyToken(bearer)
-        if (decoded?.userId) user = await User.findOne({ userId: decoded.userId })
+      if (bodyEmail) {
+        user = await User.findOne({ email: bodyEmail })
+      } else {
+        const authHeader = req.headers.authorization || ''
+        const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
+        if (bearer) {
+          const decoded = verifyToken(bearer)
+          if (decoded?.userId) user = await User.findOne({ userId: decoded.userId })
+        }
       }
-    }
 
-    // Always respond with a generic success message to avoid leaking
-    // which emails exist in the system.
-    const genericOk = { ok: true, message: 'Jika email terdaftar dan belum terverifikasi, tautan verifikasi baru telah dikirim.' }
+      // Privacy: jangan bocorkan apakah email ada di sistem.
+      // Tapi jika user KETEMU dan pengiriman gagal → harus jujur (emailSent:false).
+      const genericOk = {
+        ok: true,
+        emailSent: true,
+        message:
+          'Jika email terdaftar dan belum terverifikasi, tautan verifikasi baru telah dikirim. Cek inbox & folder spam.',
+      }
 
-    if (!user || user.emailVerified) {
-      return res.json(genericOk)
-    }
+      if (!user) {
+        return res.json(genericOk)
+      }
 
-    const cooldownMs = config.email.resendCooldownSeconds * 1000
-    if (user.emailVerificationSentAt && Date.now() - user.emailVerificationSentAt.getTime() < cooldownMs) {
-      const waitSec = Math.ceil(
-        (cooldownMs - (Date.now() - user.emailVerificationSentAt.getTime())) / 1000
+      if (user.emailVerified) {
+        return res.json({
+          ok: true,
+          emailSent: false,
+          alreadyVerified: true,
+          message: 'Email ini sudah terverifikasi. Silakan langsung masuk.',
+        })
+      }
+
+      const cooldownMs = config.email.resendCooldownSeconds * 1000
+      if (
+        user.emailVerificationSentAt &&
+        Date.now() - user.emailVerificationSentAt.getTime() < cooldownMs
+      ) {
+        const waitSec = Math.ceil(
+          (cooldownMs - (Date.now() - user.emailVerificationSentAt.getTime())) / 1000
+        )
+        return res.status(429).json({
+          error: `Tunggu ${waitSec} detik sebelum mengirim ulang.`,
+          retryAfterSec: waitSec,
+        })
+      }
+
+      // Generate token dulu, kirim email, baru simpan ke DB.
+      // Kalau email gagal, token lama tetap valid (user bisa pakai link sebelumnya
+      // atau coba resend lagi) — hindari “token putus tapi email tidak sampai”.
+      const verificationToken = generateVerificationToken()
+      const verificationExpires = new Date(
+        Date.now() + config.email.verifyTtlHours * 3600 * 1000
       )
-      return res.status(429).json({ error: `Tunggu ${waitSec} detik sebelum mengirim ulang.` })
+
+      const emailSent = await sendVerificationEmail({
+        to: user.email,
+        name: user.name || user.username,
+        token: verificationToken,
+        baseUrl: resolveBaseUrl(req),
+      })
+
+      if (!emailSent) {
+        logger.error(
+          { email: user.email, userId: user.userId },
+          'Resend verification: provider failed to send'
+        )
+        return res.status(502).json({
+          error:
+            'Gagal mengirim email verifikasi. Cek konfigurasi RESEND_API_KEY / domain pengirim, atau coba lagi nanti.',
+          emailSent: false,
+        })
+      }
+
+      user.emailVerificationToken = verificationToken
+      user.emailVerificationExpires = verificationExpires
+      user.emailVerificationSentAt = new Date()
+      await user.save()
+
+      res.json({
+        ok: true,
+        emailSent: true,
+        message:
+          'Tautan verifikasi baru sudah dikirim. Cek inbox Gmail (dan folder spam), lalu klik tautannya.',
+      })
+    } catch (err) {
+      logger.error({ err: err.message }, 'Resend verification error')
+      res.status(500).json({ error: 'Gagal mengirim ulang email verifikasi.' })
     }
-
-    const verificationToken = generateVerificationToken()
-    user.emailVerificationToken = verificationToken
-    user.emailVerificationExpires = new Date(Date.now() + config.email.verifyTtlHours * 3600 * 1000)
-    user.emailVerificationSentAt = new Date()
-    await user.save()
-
-    await sendVerificationEmail({
-      to: user.email,
-      name: user.name || user.username,
-      token: verificationToken,
-      baseUrl: resolveBaseUrl(req),
-    })
-
-    res.json(genericOk)
-  } catch (err) {
-    logger.error({ err: err.message }, 'Resend verification error')
-    res.status(500).json({ error: 'Gagal mengirim ulang email verifikasi.' })
   }
-})
+)
 
 export default router
