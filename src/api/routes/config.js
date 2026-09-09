@@ -90,6 +90,7 @@ export default function createConfigRoutes(sessionManager) {
         { key: 'antiSpam', type: 'boolean', label: 'Anti Spam' },
         { key: 'antiSpamCooldownMs', type: 'number', label: 'Cooldown Anti Spam (ms)' },
         { key: 'readMessages', type: 'boolean', label: 'Read Message (centang biru)' },
+        { key: 'streakEnabled', type: 'boolean', label: 'Fitur Streak (.streak) ON/OFF' },
         { key: 'sendTyping', type: 'boolean', label: 'Kirim Typing Indicator' },
         { key: 'sendRecording', type: 'boolean', label: 'Kirim Recording Indicator' },
         { key: 'menuTitle', type: 'string', label: 'Judul Menu' },
