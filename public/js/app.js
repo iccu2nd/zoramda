@@ -236,7 +236,6 @@
     if (page === 'config' || page === 'plugins') applyBotSettingsGate();
     if (page === 'pricing') loadPricing();
     if (page === 'payment') loadPaymentPage();
-    if (page === 'sessions') refreshDashOverview();
     if (page === 'admin') loadAdmin();
   }
 
@@ -759,6 +758,11 @@
   }
 
   $('#saveConfigBtn').addEventListener('click', async () => {
+    if (!userHasBotSettings()) {
+      toast('Upgrade ke Pro untuk menyimpan config', 'warning');
+      activatePage('pricing');
+      return;
+    }
     if (!selectedConfigSession) {
       toast('Select a session first');
       return;
@@ -1086,26 +1090,74 @@
         <p>Upgrade ke Pro untuk mengakses pengaturan bot.</p>
         <button type="button" class="btn" id="lockUpgradeBtn">Upgrade ke Pro</button>
       </div>`;
-    $('#lockUpgradeBtn')?.addEventListener('click', () => activatePage('pricing'));
+    el.querySelector('#lockUpgradeBtn')?.addEventListener('click', () => activatePage('pricing'));
+  }
+
+  function renderLockedConfigPreview() {
+    const box = $('#configForm');
+    if (!box) return;
+    box.innerHTML = `
+      <div class="field"><label>nama bot</label><input value="Botenv" disabled tabindex="-1"></div>
+      <div class="field-row">
+        <div class="field"><label>prefix</label><input value="." disabled tabindex="-1"></div>
+        <div class="field"><label>owner name</label><input value="Owner" disabled tabindex="-1"></div>
+      </div>
+      <div class="field"><label>nomor owner</label><input value="628xxxxxxxxxx" disabled tabindex="-1"></div>
+      <div class="switch-row"><span>mode publik</span><div class="switch on"></div></div>
+      <div class="switch-row"><span>anti spam</span><div class="switch on"></div></div>
+      <div class="field"><label>pesan maintenance</label><textarea disabled tabindex="-1">Bot sedang maintenance.</textarea></div>
+      <div class="field"><label>pesan limit habis</label><textarea disabled tabindex="-1">Limit kamu sudah habis.</textarea></div>
+    `;
+  }
+
+  function renderLockedPluginsPreview() {
+    const box = $('#pluginList');
+    if (!box) return;
+    box.innerHTML = `
+      <div class="plugin-card" style="pointer-events:none">
+        <div class="plugin-head"><strong>main/help.js</strong><span class="hint">help, menu</span></div>
+        <div class="switch-row"><span>enabled</span><div class="switch on"></div></div>
+        <div class="field"><label>custom commands</label><input value="help, menu" disabled></div>
+      </div>
+      <div class="plugin-card" style="pointer-events:none">
+        <div class="plugin-head"><strong>main/ping.js</strong><span class="hint">ping</span></div>
+        <div class="switch-row"><span>enabled</span><div class="switch on"></div></div>
+      </div>
+      <div class="plugin-card" style="pointer-events:none">
+        <div class="plugin-head"><strong>admin/group.js</strong><span class="hint">kick, promote…</span></div>
+        <div class="switch-row"><span>enabled</span><div class="switch"></div></div>
+      </div>
+    `;
   }
 
   function applyBotSettingsGate() {
     const locked = !userHasBotSettings();
-    const configForm = $('#configForm');
-    const pluginsList = $('#pluginsList');
+    const configGate = $('#configGate');
+    const pluginsGate = $('#pluginsGate');
     const configLocked = $('#configLocked');
     const pluginsLocked = $('#pluginsLocked');
+    const saveBtn = $('#saveConfigBtn');
 
     if (locked) {
-      if (configForm) configForm.classList.add('hidden');
-      if (pluginsList) pluginsList.classList.add('hidden');
+      configGate?.classList.add('is-locked');
+      pluginsGate?.classList.add('is-locked');
       renderFeatureLock(configLocked);
       renderFeatureLock(pluginsLocked);
+      renderLockedConfigPreview();
+      renderLockedPluginsPreview();
+      if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.setAttribute('aria-disabled', 'true');
+      }
     } else {
-      if (configForm) configForm.classList.remove('hidden');
-      if (pluginsList) pluginsList.classList.remove('hidden');
+      configGate?.classList.remove('is-locked');
+      pluginsGate?.classList.remove('is-locked');
       configLocked?.classList.add('hidden');
       pluginsLocked?.classList.add('hidden');
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.removeAttribute('aria-disabled');
+      }
     }
   }
 
@@ -1127,40 +1179,7 @@
   }
 
   async function refreshDashOverview() {
-    const root = $('#dashOverview');
-    if (!root) return;
-    const me = await syncPlanFromServer();
-    const plan = (me?.plan || currentUser?.plan || 'free').toUpperCase();
-    const exp = me?.planExpiresAt || currentUser?.planExpiresAt;
-    const last = me?.lastPayment;
-    root.innerHTML = `
-      <div class="ov-grid">
-        <div class="ov-card">
-          <div class="ov-label">Plan saat ini</div>
-          <div class="ov-value">${escapeHtml(plan)}</div>
-        </div>
-        <div class="ov-card">
-          <div class="ov-label">Status akun</div>
-          <div class="ov-value">${currentUser?.isAdmin ? 'Admin' : 'Aktif'}</div>
-        </div>
-        <div class="ov-card">
-          <div class="ov-label">Status bot</div>
-          <div class="ov-value">${me?.connectedCount ?? 0} / ${me?.sessionCount ?? 0} connected</div>
-        </div>
-        <div class="ov-card">
-          <div class="ov-label">Masa berlaku</div>
-          <div class="ov-value">${exp ? formatWib(exp) : (plan === 'FREE' ? '—' : '—')}</div>
-        </div>
-        <div class="ov-card">
-          <div class="ov-label">Transaksi terakhir</div>
-          <div class="ov-value">${last ? escapeHtml(statusLabel(last.status)) + ' · ' + escapeHtml(last.trxId || '') : 'Belum ada'}</div>
-        </div>
-        <div class="ov-card ov-cta">
-          <div class="ov-label">Upgrade</div>
-          <button type="button" class="btn btn-sm" id="ovUpgradeBtn">Lihat Pricing</button>
-        </div>
-      </div>`;
-    $('#ovUpgradeBtn')?.addEventListener('click', () => activatePage('pricing'));
+    /* overview cards removed */
   }
 
   async function loadPricing() {

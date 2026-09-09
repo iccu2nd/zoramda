@@ -189,8 +189,7 @@
       <!-- sessions page -->
       <section id="page-sessions">
         <h1 class="page-title">sessions</h1>
-        <p class="page-sub">Kelola koneksi WhatsApp dan status akun</p>
-        <div id="dashOverview" class="dash-overview"></div>
+        <p class="page-sub">Manage WhatsApp connections and session status</p>
         <div class="toolbar">
           <button class="btn btn-sm" id="refreshSessions" type="button">refresh</button>
           <div class="spacer"></div>
@@ -203,10 +202,14 @@
       <section id="page-config" class="hidden">
         <h1 class="page-title">config</h1>
         <p class="page-sub">Per-session bot settings. Changes apply immediately and stay isolated.</p>
-        <div id="configLocked" class="feature-lock hidden"></div>
-        <div class="card" id="configForm" style="padding:1.25rem"></div>
-        <div class="toolbar" style="margin-top:1rem">
-          <button class="btn" id="saveConfigBtn" type="button">simpan</button>
+        <div class="feature-gate" id="configGate">
+          <div id="configLocked" class="feature-lock-overlay hidden"></div>
+          <div class="feature-content" id="configContent">
+            <div class="card" id="configForm" style="padding:1.25rem"></div>
+            <div class="toolbar" style="margin-top:1rem">
+              <button class="btn" id="saveConfigBtn" type="button">simpan</button>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -214,8 +217,12 @@
       <section id="page-plugins" class="hidden">
         <h1 class="page-title">plugins</h1>
         <p class="page-sub">Enable plugins, permissions, custom commands, and responses per session</p>
-        <div id="pluginsLocked" class="feature-lock hidden"></div>
-        <div id="pluginList"></div>
+        <div class="feature-gate" id="pluginsGate">
+          <div id="pluginsLocked" class="feature-lock-overlay hidden"></div>
+          <div class="feature-content" id="pluginsContent">
+            <div id="pluginList"></div>
+          </div>
+        </div>
       </section>
 
       <!-- account page -->
