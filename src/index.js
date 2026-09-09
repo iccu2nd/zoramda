@@ -4,7 +4,7 @@
  */
 import config from './config/index.js'
 import logger from './utils/logger.js'
-import { connectMongo, disconnectMongo } from './db/mongo.js'
+import { connectMongo, disconnectMongo, syncModelIndexes } from './db/mongo.js'
 import SessionManager from './core/SessionManager.js'
 import { createServer } from './api/server.js'
 
@@ -16,6 +16,7 @@ async function main() {
 
   // 1. Database first
   await connectMongo()
+  await syncModelIndexes()
 
   // 2. Core engine (plugins + session restore runs in background).
   //    Bot config is per-user now and warms lazily per session — no

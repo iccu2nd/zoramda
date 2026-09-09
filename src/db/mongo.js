@@ -41,6 +41,39 @@ export async function connectMongo() {
   return connectionPromise
 }
 
+/**
+ * Reconciles each model's indexes with what's actually in MongoDB — drops
+ * any index that's no longer declared in the schema (e.g. leftover unique
+ * indexes from an older schema version, like a removed `usernameLower`
+ * field) and creates any that are missing. Runs once at boot; failures are
+ * logged but never crash startup, since the app can still run on existing
+ * indexes even if a sync attempt fails (e.g. insufficient Atlas permissions).
+ */
+export async function syncModelIndexes() {
+  const models = [
+    (await import('./models/User.js')).default,
+    (await import('./models/Session.js')).default,
+    (await import('./models/SessionConfig.js')).default,
+    (await import('./models/Payment.js')).default,
+    (await import('./models/BotConfig.js')).default,
+    (await import('./models/AuthState.js')).default,
+  ]
+
+  for (const model of models) {
+    try {
+      const dropped = await model.syncIndexes()
+      if (dropped.length) {
+        logger.info({ model: model.modelName, dropped }, 'Dropped stale indexes')
+      }
+    } catch (err) {
+      logger.warn(
+        { model: model.modelName, err: err.message },
+        'Index sync failed for model — continuing with existing indexes'
+      )
+    }
+  }
+}
+
 export function getDb() {
   return mongoose.connection
 }
@@ -61,4 +94,4 @@ mongoose.connection.on('disconnected', () => {
   logger.warn('MongoDB disconnected')
 })
 
-export default { connectMongo, getDb, disconnectMongo }
+export default { connectMongo, getDb, disconnectMongo, syncModelIndexes }
