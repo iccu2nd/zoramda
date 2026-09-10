@@ -1,6 +1,5 @@
 import axios from 'axios'
 
-const API_URL = 'https://www.tikwm.com/api/'
 const USER_AGENT =
   'Mozilla/5.0 (Linux; Android 15; SM-F958 Build/AP3A.240905.015) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.6723.86 Mobile Safari/537.36'
 
@@ -18,25 +17,26 @@ const formatDuration = (s) => {
   return m + ':' + String(r).padStart(2, '0')
 }
 
-const ttdown = async (url) => {
-  if (!/tiktok\.com/.test(url)) throw new Error('URL tidak valid')
-  const { data } = await axios.get(API_URL, {
+/** Provider utama: tikwm.com */
+async function fromTikwm(url) {
+  const { data } = await axios.get('https://www.tikwm.com/api/', {
     params: { url, hd: 1 },
-    headers: { 'User-Agent': USER_AGENT },
+    headers: {
+      'User-Agent': USER_AGENT,
+      Referer: 'https://www.tikwm.com/',
+      Accept: 'application/json, text/plain, */*',
+    },
     timeout: 30000,
   })
   if (!data || data.code !== 0 || !data.data) {
-    throw new Error(data?.msg || 'Gagal mengambil data')
+    throw new Error(data?.msg || 'tikwm: gagal mengambil data')
   }
   const d = data.data
   const isSlide = Array.isArray(d.images) && d.images.length > 0
   return {
     type: isSlide ? 'slide' : 'video',
     title: (d.title || '').trim(),
-    author: {
-      username: d.author?.unique_id || '-',
-      nickname: d.author?.nickname || '-',
-    },
+    author: { username: d.author?.unique_id || '-', nickname: d.author?.nickname || '-' },
     video: d.hdplay || d.play || null,
     music: d.music || null,
     images: isSlide ? d.images : [],
@@ -50,18 +50,70 @@ const ttdown = async (url) => {
   }
 }
 
-const buildCaption = (data, botName) => {
-  const lines = [
-    '',
-    data.title || '-',
-    '',
-    '- Author: ' + data.author.nickname + ' (@' + data.author.username + ')',
-  ]
-  if (data.type === 'video') {
-    lines.push('- Durasi: ' + formatDuration(data.duration))
-  } else {
-    lines.push('- Total Foto: ' + data.images.length)
+/**
+ * Provider cadangan: tiklydown.eu.org — dipakai otomatis kalau tikwm
+ * gagal/kena block (403). Parsing dibikin defensif (banyak fallback nama
+ * field) karena API publik gini suka ganti-ganti struktur response.
+ */
+async function fromTiklydown(url) {
+  const { data } = await axios.get('https://tiklydown.eu.org/api/download', {
+    params: { url },
+    headers: { 'User-Agent': USER_AGENT },
+    timeout: 30000,
+  })
+  const r = data?.result || data?.data
+  if (!r) throw new Error('tiklydown: gagal mengambil data')
+
+  const images = r.images || r.image_list || r.slides || []
+  const isSlide = Array.isArray(images) && images.length > 0
+  const video =
+    r.video?.no_watermark || r.video?.noWatermark || r.video?.play || r.video?.download || r.video_url || null
+  const music = r.music?.play || r.music?.url || r.music_url || r.audio || null
+  const stats = r.stats || {}
+
+  return {
+    type: isSlide ? 'slide' : 'video',
+    title: (r.title || r.desc || '').trim(),
+    author: {
+      username: r.author?.username || r.author?.unique_id || '-',
+      nickname: r.author?.nickname || r.author?.name || '-',
+    },
+    video,
+    music,
+    images,
+    duration: r.duration || 0,
+    stats: {
+      plays: stats.playCount || stats.play_count || 0,
+      likes: stats.diggCount || stats.digg_count || stats.likeCount || 0,
+      comments: stats.commentCount || stats.comment_count || 0,
+      shares: stats.shareCount || stats.share_count || 0,
+    },
   }
+}
+
+const ttdown = async (url) => {
+  if (!/tiktok\.com/.test(url)) throw new Error('URL tidak valid')
+
+  try {
+    return await fromTikwm(url)
+  } catch (err) {
+    // tikwm sering nge-block IP datacenter/VPS (403) — coba provider cadangan
+    try {
+      const result = await fromTiklydown(url)
+      if (!result.video && !result.images.length) {
+        throw new Error('response kosong')
+      }
+      return result
+    } catch (err2) {
+      throw new Error(`Semua provider gagal.\n- tikwm: ${err.message}\n- tiklydown: ${err2.message}`)
+    }
+  }
+}
+
+const buildCaption = (data, botName) => {
+  const lines = ['', data.title || '-', '', '- Author: ' + data.author.nickname + ' (@' + data.author.username + ')']
+  if (data.type === 'video') lines.push('- Durasi: ' + formatDuration(data.duration))
+  else lines.push('- Total Foto: ' + data.images.length)
   lines.push(
     '- Ditonton: ' + formatNumber(data.stats.plays),
     '- Suka: ' + formatNumber(data.stats.likes),
@@ -95,9 +147,7 @@ let handler = async (m, { conn, text, usedPrefix, command, config }) => {
       await m.reply(caption)
       const album = data.images.map((url) => ({ image: { url } }))
       await conn.sendAlbum(m.chat, album, { quoted: m.raw })
-      if (data.music) {
-        await conn.sendAudio(m.chat, data.music, false, m.raw)
-      }
+      if (data.music) await conn.sendAudio(m.chat, data.music, false, m.raw)
     } else {
       if (!data.video) {
         await m.react('❌')
@@ -108,9 +158,7 @@ let handler = async (m, { conn, text, usedPrefix, command, config }) => {
         { video: { url: data.video }, caption, mimetype: 'video/mp4' },
         { quoted: m.raw }
       )
-      if (data.music) {
-        await conn.sendAudio(m.chat, data.music, false, m.raw)
-      }
+      if (data.music) await conn.sendAudio(m.chat, data.music, false, m.raw)
     }
 
     await m.react('✅')
