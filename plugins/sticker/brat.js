@@ -5,18 +5,21 @@ let handler = async (m, { conn, text, usedPrefix, command }) => {
     return m.reply(`Masukkan teks.\nContoh: *${usedPrefix + command} teks isi sendiri*`)
   }
 
-  await conn.sendMessage(m.chat, { react: { text: '🕐', key: m.key } })
+  await m.react('🕐')
 
   try {
     const url = `https://aqul-brat.hf.space/api/brat?text=${encodeURIComponent(text)}`
     const res = await axios.get(url, { responseType: 'arraybuffer', timeout: 15000 })
     const buf = Buffer.from(res.data)
 
-    await conn.sendMessage(m.chat, { sticker: buf }, { quoted: m.raw })
+    await conn.sendSticker(m.chat, buf, m.raw, {
+      packname: 'Botenv',
+      author: m.pushName || 'Brat',
+    })
 
-    await conn.sendMessage(m.chat, { react: { text: '✅', key: m.key } })
+    await m.react('✅')
   } catch (err) {
-    await conn.sendMessage(m.chat, { react: { text: '❌', key: m.key } })
+    await m.react('❌')
     await m.reply(`❌ Gagal: ${err.message}`)
     throw err
   }
