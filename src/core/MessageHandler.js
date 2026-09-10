@@ -11,7 +11,7 @@
  * - Per-session config, plugin toggle, and permission isolation
  * - Group metadata + anti-spam cached in memory
  */
-import { getContentType, extractMessageContent } from '@whiskeysockets/baileys'
+import { getContentType, extractMessageContent, downloadMediaMessage } from '@whiskeysockets/baileys'
 import logger from '../utils/logger.js'
 import {
   extractCommand,
@@ -37,6 +37,40 @@ const PERM_ADMIN = 'admin'
 const PERM_BOTADMIN = 'botadmin'
 const PERM_OWNER = 'owner'
 const PERM_PREMIUM = 'premium'
+
+const MEDIA_TYPES = [
+  'imageMessage',
+  'videoMessage',
+  'audioMessage',
+  'documentMessage',
+  'stickerMessage',
+  'ptvMessage',
+]
+
+/** Ambil teks/caption dari sebuah message content + tipenya. Dipakai untuk pesan utama & quoted. */
+function extractTextFromContent(content, type) {
+  if (!content || !type) return ''
+  switch (type) {
+    case 'conversation':
+      return content.conversation || ''
+    case 'extendedTextMessage':
+      return content.extendedTextMessage?.text || ''
+    case 'imageMessage':
+      return content.imageMessage?.caption || ''
+    case 'videoMessage':
+      return content.videoMessage?.caption || ''
+    case 'documentMessage':
+      return content.documentMessage?.caption || ''
+    case 'buttonsResponseMessage':
+      return content.buttonsResponseMessage?.selectedDisplayText || ''
+    case 'listResponseMessage':
+      return content.listResponseMessage?.title || ''
+    case 'templateButtonReplyMessage':
+      return content.templateButtonReplyMessage?.selectedDisplayText || ''
+    default:
+      return ''
+  }
+}
 
 /** @type {Map<string, { meta: any, exp: number }>} groupJid → cached metadata */
 const groupMetaCache = new Map()
@@ -245,18 +279,57 @@ export class MessageHandler {
     const quotedParticipant =
       contextInfo?.participant || contextInfo?.participantAlt || null
     const quotedMessage = contextInfo?.quotedMessage || null
-    const quoted = quotedMessage
-      ? {
-          sender: normalizeJid(quotedParticipant),
-          message: quotedMessage,
-          key: {
-            remoteJid: jid,
-            id: contextInfo?.stanzaId,
-            fromMe: false,
-            participant: quotedParticipant,
-          },
-        }
-      : null
+
+    let quoted = null
+    if (quotedMessage) {
+      const qContent = extractMessageContent(quotedMessage) || quotedMessage
+      const qType = getContentType(qContent) || getContentType(quotedMessage)
+      const qSender = normalizeJid(quotedParticipant)
+      const qKey = {
+        remoteJid: jid,
+        id: contextInfo?.stanzaId,
+        fromMe: !!qSender && qSender === normalizeJid(sock.user?.id),
+        participant: quotedParticipant,
+      }
+      const qIsMedia = MEDIA_TYPES.includes(qType)
+
+      quoted = {
+        // fields lama — jangan dihapus, plugin lain (delete.js, broadcast.js) masih pakai ini
+        sender: qSender,
+        message: quotedMessage,
+        key: qKey,
+
+        // fields/method baru biar gampang dipakai plugin
+        chat: jid,
+        fromMe: qKey.fromMe,
+        mtype: qType,
+        text: extractTextFromContent(qContent, qType),
+        isMedia: qIsMedia,
+        mediaType: qIsMedia ? qType : null,
+        mediaMessage: qIsMedia ? qContent : null,
+        mentionedJid: (qContent?.[qType]?.contextInfo?.mentionedJid || []).map(normalizeJid),
+
+        /** m.quoted.download() → Buffer media dari pesan yang di-quote */
+        download: async () => {
+          if (!qIsMedia) throw new Error('Pesan yang di-quote bukan media')
+          return downloadMediaMessage(
+            { key: qKey, message: quotedMessage },
+            'buffer',
+            {},
+            { reuploadRequest: sock.updateMediaMessage }
+          )
+        },
+
+        /** m.quoted.reply('teks') → balas dengan mengutip pesan yang di-quote */
+        reply: async (content) => {
+          const payload = typeof content === 'string' ? { text: content } : content
+          return sock.sendMessage(jid, payload, { quoted: { key: qKey, message: quotedMessage } })
+        },
+
+        /** m.quoted.delete() → hapus pesan yang di-quote (perlu pesan itu milik bot) */
+        delete: async () => sock.sendMessage(jid, { delete: qKey }),
+      }
+    }
 
     const reply = async (content, quotedMsg = raw) => {
       if (latency) latency.mark('reply_started')

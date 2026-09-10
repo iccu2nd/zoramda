@@ -1,21 +1,14 @@
-import { downloadMediaMessage, extractMessageContent } from '@whiskeysockets/baileys'
+import { downloadMediaMessage } from '@whiskeysockets/baileys'
 
 const MAX_VIDEO_SECONDS = 6
 
-/** Ambil { key, message } dari foto/video yang di-reply, atau dari pesan itu sendiri. */
-function resolveTarget(m) {
-  if (m.quoted?.message) {
-    return { key: m.quoted.key, message: extractMessageContent(m.quoted.message) }
-  }
-  return { key: m.key, message: extractMessageContent(m.raw.message) }
-}
-
 let handler = async (m, { conn, usedPrefix, command, config }) => {
-  const target = resolveTarget(m)
-  const message = target.message || {}
+  // Contoh pakai m.quoted: kalau reply ke foto/video, tinggal cek m.quoted.isMedia
+  const useQuoted = m.quoted?.isMedia
+  const mediaType = useQuoted ? m.quoted.mediaType : m.type
 
-  const isImage = !!message.imageMessage
-  const isVideo = !!message.videoMessage
+  const isImage = mediaType === 'imageMessage'
+  const isVideo = mediaType === 'videoMessage'
 
   if (!isImage && !isVideo) {
     return m.reply(
@@ -25,7 +18,7 @@ let handler = async (m, { conn, usedPrefix, command, config }) => {
   }
 
   if (isVideo) {
-    const seconds = message.videoMessage?.seconds || 0
+    const seconds = (useQuoted ? m.quoted.mediaMessage?.videoMessage : m.raw.message?.videoMessage)?.seconds || 0
     if (seconds > MAX_VIDEO_SECONDS) {
       return m.reply(`Video terlalu panjang. Maksimal ${MAX_VIDEO_SECONDS} detik ya.`)
     }
@@ -34,12 +27,10 @@ let handler = async (m, { conn, usedPrefix, command, config }) => {
   await m.react('🕐')
 
   try {
-    const buffer = await downloadMediaMessage(
-      target,
-      'buffer',
-      {},
-      { reuploadRequest: conn.updateMediaMessage }
-    )
+    // m.quoted.download() sudah otomatis nangani media dari pesan yang di-reply
+    const buffer = useQuoted
+      ? await m.quoted.download()
+      : await downloadMediaMessage(m.raw, 'buffer', {}, { reuploadRequest: conn.updateMediaMessage })
 
     await conn.sendSticker(m.chat, buffer, m.raw, {
       packname: config.get('packName') || 'Botenv',
