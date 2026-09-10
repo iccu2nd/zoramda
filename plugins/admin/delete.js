@@ -10,7 +10,7 @@ let handler = async (m, { conn, isOwner, usedPrefix }) => {
     return m.reply(`Reply pesan yang mau dihapus dengan ${usedPrefix}delete`)
   }
 
-  const isOwnMessage = m.quoted.key.fromMe
+  const isOwnMessage = m.quoted.fromMe
 
   if (m.isGroup && !isOwnMessage) {
     let admin
@@ -30,7 +30,7 @@ let handler = async (m, { conn, isOwner, usedPrefix }) => {
   }
 
   try {
-    await conn.sendMessage(m.chat, { delete: m.quoted.key })
+    await m.quoted.delete()
   } catch (err) {
     await m.reply(`Gagal hapus pesan: ${err.message}`)
   }

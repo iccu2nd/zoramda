@@ -15,7 +15,7 @@ const DELAY_MS = 1500
 let handler = async (m, { conn, text, isOwner, botName }) => {
   if (!isOwner) return m.reply('Perintah ini hanya untuk owner.')
 
-  const content = m.quoted?.message
+  const content = m.quoted
     ? { forward: m.quoted }
     : text
       ? { text: `📢 *Broadcast dari ${botName}*\n\n${text}` }
