@@ -529,21 +529,26 @@
     const page = currentPage;
     const items = [];
 
-    // Mobile / small: open full sidebar nav
-    items.push(ctxItem('Buka navigasi', ICO.nav, () => {
-      closeCtxMenu();
-      openSidebar();
-    }));
-    items.push(ctxSep());
-
-    if (page !== 'sessions') {
-      items.push(ctxItem('Back to dashboard', ICO.back, () => activatePage('sessions')));
+    // —— Admin: isi hamburger khusus (tanpa tab UI) ——
+    if (page === 'admin') {
+      items.push(ctxItem('Users', ICO.user, () => {
+        closeCtxMenu();
+        showAdminView('users');
+      }));
+      items.push(ctxItem('Bot yang konek', ICO.refresh, () => {
+        closeCtxMenu();
+        showAdminView('sessions');
+      }));
+      items.push(ctxItem('List plugins', ICO.plug, () => {
+        closeCtxMenu();
+        showAdminView('plugins');
+      }));
       items.push(ctxSep());
+      items.push(ctxItem('Kembali ke dashboard', ICO.back, () => activatePage('sessions')));
     }
 
-    // —— Session actions ——
-    if (page === 'sessions') {
-      items.push(ctxLabel('Session'));
+    // —— Sessions ——
+    else if (page === 'sessions') {
       items.push(ctxItem('Session baru', ICO.plus, () => {
         closeCtxMenu();
         $('#newSessionBtn')?.click();
@@ -553,70 +558,46 @@
         loadSessions();
       }));
       items.push(ctxSep());
-      items.push(ctxLabel('Akun'));
       items.push(ctxItem('Akun saya', ICO.user, () => activatePage('account')));
       items.push(ctxItem('Pricing', ICO.price, () => activatePage('pricing')));
       if (currentUser?.isAdmin || currentUser?.role === 'admin') {
         items.push(ctxSep());
-        items.push(ctxItem('Admin panel', ICO.admin, () => activatePage('admin')));
+        items.push(ctxItem('Admin', ICO.admin, () => activatePage('admin')));
       }
     }
 
-    // —— Config (bot settings) ——
-    if (page === 'config') {
-      items.push(ctxLabel('Config'));
-      items.push(ctxItem('Tab: Info', ICO.edit, () => {
-        closeCtxMenu();
-        pendingConfigTab = 'info';
-        loadConfig();
-      }));
-      items.push(ctxItem('Tab: Message', ICO.edit, () => {
-        closeCtxMenu();
-        pendingConfigTab = 'pesan';
-        loadConfig();
-      }));
-      items.push(ctxItem('Tab: System', ICO.edit, () => {
-        closeCtxMenu();
-        pendingConfigTab = 'system';
-        loadConfig();
-      }));
+    // —— Config ——
+    else if (page === 'config') {
+      items.push(ctxItem('Kembali ke dashboard', ICO.back, () => activatePage('sessions')));
+      items.push(ctxSep());
       items.push(ctxItem('Simpan config', ICO.save, () => {
         closeCtxMenu();
         $('#saveConfigBtn')?.click();
       }));
-      items.push(ctxSep());
-      items.push(ctxLabel('Plugins session'));
-      items.push(ctxItem('Kelola plugins session', ICO.plug, () => activatePage('plugins')));
+      items.push(ctxItem('Plugins session', ICO.plug, () => activatePage('plugins')));
+      items.push(ctxItem('Akun saya', ICO.user, () => activatePage('account')));
     }
 
-    // —— Plugins session (toggle/permission — bukan script editor) ——
-    if (page === 'plugins') {
-      items.push(ctxLabel('Plugins session'));
-      items.push(ctxItem('Refresh daftar plugin', ICO.refresh, () => {
+    // —— Plugins session ——
+    else if (page === 'plugins') {
+      items.push(ctxItem('Kembali ke dashboard', ICO.back, () => activatePage('sessions')));
+      items.push(ctxSep());
+      items.push(ctxItem('Refresh plugins', ICO.refresh, () => {
         closeCtxMenu();
         loadPlugins();
       }));
-      items.push(ctxItem('Ke config bot', ICO.edit, () => {
+      items.push(ctxItem('Config bot', ICO.edit, () => {
         pendingConfigTab = 'info';
         activatePage('config');
       }));
-      items.push(ctxSep());
-      items.push(ctxLabel('Catatan'));
-      items.push(ctxItem('Edit script plugin → Admin', ICO.admin, () => {
-        adminTab = 'plugins';
-        activatePage('admin');
-      }));
+      items.push(ctxItem('Akun saya', ICO.user, () => activatePage('account')));
     }
 
-    // —— Account / user ——
-    if (page === 'account') {
-      items.push(ctxLabel('Akun'));
-      items.push(ctxItem('Refresh akun', ICO.refresh, () => {
-        closeCtxMenu();
-        loadAccount();
-      }));
-      items.push(ctxItem('Pricing / upgrade', ICO.price, () => activatePage('pricing')));
+    // —— Account ——
+    else if (page === 'account') {
+      items.push(ctxItem('Kembali ke dashboard', ICO.back, () => activatePage('sessions')));
       items.push(ctxSep());
+      items.push(ctxItem('Pricing', ICO.price, () => activatePage('pricing')));
       items.push(ctxItem('Keluar', ICO.out, () => {
         closeCtxMenu();
         $('#logoutBtn')?.click();
@@ -624,56 +605,17 @@
     }
 
     // —— Pricing / payment ——
-    if (page === 'pricing' || page === 'payment') {
-      items.push(ctxLabel('Pembayaran'));
+    else if (page === 'pricing' || page === 'payment') {
+      items.push(ctxItem('Kembali ke dashboard', ICO.back, () => activatePage('sessions')));
+      items.push(ctxSep());
       items.push(ctxItem('Pricing', ICO.price, () => activatePage('pricing')));
       items.push(ctxItem('Payment', ICO.price, () => activatePage('payment')));
       items.push(ctxItem('Akun saya', ICO.user, () => activatePage('account')));
     }
 
-    // —— Admin (isi hamburger berbeda) ——
-    if (page === 'admin') {
-      items.push(ctxLabel('Admin'));
-      items.push(ctxItem('Users', ICO.user, () => {
-        closeCtxMenu();
-        setAdminTab('users');
-      }));
-      items.push(ctxItem('Bot sessions', ICO.refresh, () => {
-        closeCtxMenu();
-        setAdminTab('sessions');
-      }));
-      items.push(ctxSep());
-      items.push(ctxLabel('Plugin scripts'));
-      items.push(ctxItem('Kelola / edit plugins', ICO.edit, () => {
-        closeCtxMenu();
-        setAdminTab('plugins');
-      }));
-      items.push(ctxItem('Tambah plugin baru', ICO.plus, () => {
-        closeCtxMenu();
-        setAdminTab('plugins');
-        setTimeout(() => $('#adminPluginNew')?.click(), 80);
-      }));
-      items.push(ctxItem('Reload semua plugins', ICO.refresh, async () => {
-        closeCtxMenu();
-        try {
-          const r = await API.adminReloadPlugins();
-          toast(`Reloaded · ${r.count || 0} plugins`);
-        } catch (e) {
-          toast(e.message || 'Reload gagal');
-        }
-      }));
-      items.push(ctxSep());
-      items.push(ctxItem('Sign out admin key', ICO.out, () => {
-        closeCtxMenu();
-        API.clearAdminKey();
-        loadAdmin();
-      }, { danger: true }));
-    }
-
-    // Common footer when not already on account
-    if (page !== 'account' && page !== 'sessions') {
-      items.push(ctxSep());
-      items.push(ctxItem('Akun saya', ICO.user, () => activatePage('account')));
+    // —— fallback ——
+    else {
+      items.push(ctxItem('Kembali ke dashboard', ICO.back, () => activatePage('sessions')));
     }
 
     menu.innerHTML = items
@@ -705,13 +647,24 @@
     if (e.key === 'Escape') closeCtxMenu();
   });
 
-  function setAdminTab(tab) {
-    adminTab = tab || 'users';
-    $$('.admin-tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === adminTab));
-    $$('.admin-panel').forEach((p) => p.classList.toggle('hidden', p.dataset.panel !== adminTab));
-    if (adminTab === 'plugins') {
-      // ensure editor list is visible
-      $('#adminPanelPlugins')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  /** Admin view switcher — dikontrol hamburger saja, tanpa tab bar */
+  function showAdminView(view) {
+    adminTab = view || 'users';
+    const map = {
+      users: '#adminPanelUsers',
+      sessions: '#adminPanelSessions',
+      plugins: '#adminPanelPlugins',
+    };
+    Object.keys(map).forEach((k) => {
+      const el = $(map[k]);
+      if (el) el.classList.toggle('hidden', k !== adminTab);
+    });
+    // update page subtitle hint
+    const sub = document.querySelector('#page-admin .page-sub');
+    if (sub) {
+      if (adminTab === 'users') sub.textContent = 'Kelola user terdaftar';
+      else if (adminTab === 'sessions') sub.textContent = 'Bot yang sedang konek / session aktif';
+      else if (adminTab === 'plugins') sub.textContent = 'List & edit source plugin bot';
     }
   }
 
@@ -2134,7 +2087,6 @@
       ]);
 
       const s = stats;
-      const tab = adminTab || 'users';
       box.innerHTML = `
         <div class="toolbar" style="margin-bottom:0.75rem">
           <div class="spacer"></div>
@@ -2147,45 +2099,39 @@
           <div class="admin-stat"><div class="admin-stat-val">${s.sessions?.total ?? 0}</div><div class="admin-stat-label">Sessions</div></div>
           <div class="admin-stat"><div class="admin-stat-val">${s.plugins ?? 0}</div><div class="admin-stat-label">Plugins</div></div>
         </div>
+        <p class="hint" style="margin:0 0 0.85rem;font-size:0.8rem;color:var(--muted)">Pakai menu ☰ untuk ganti tampilan: Users · Bot yang konek · List plugins.</p>
 
-        <div class="admin-tabs" role="tablist">
-          <button type="button" class="admin-tab ${tab === 'users' ? 'active' : ''}" data-tab="users">Users</button>
-          <button type="button" class="admin-tab ${tab === 'sessions' ? 'active' : ''}" data-tab="sessions">Sessions</button>
-          <button type="button" class="admin-tab ${tab === 'plugins' ? 'active' : ''}" data-tab="plugins">Plugin scripts</button>
-        </div>
-
-        <div class="admin-panel ${tab === 'users' ? '' : 'hidden'}" data-panel="users" id="adminPanelUsers">
+        <div id="adminPanelUsers" class="admin-panel">
           <div class="admin-section" style="margin:0">
             <div class="admin-section-head">
-              <h2 class="admin-h2">Registered users</h2>
+              <h2 class="admin-h2">Users</h2>
               <input type="search" id="adminUserQ" placeholder="Search username / email" class="admin-search" />
             </div>
             <div id="adminUserList"></div>
           </div>
         </div>
 
-        <div class="admin-panel ${tab === 'sessions' ? '' : 'hidden'}" data-panel="sessions" id="adminPanelSessions">
+        <div id="adminPanelSessions" class="admin-panel hidden">
           <div class="admin-section" style="margin:0">
             <div class="admin-section-head">
-              <h2 class="admin-h2">Bot sessions</h2>
+              <h2 class="admin-h2">Bot yang konek</h2>
               <button class="btn btn-sm btn-ghost" type="button" id="adminRefreshSessions">Refresh</button>
             </div>
             <div id="adminSessionList"></div>
           </div>
         </div>
 
-        <div class="admin-panel ${tab === 'plugins' ? '' : 'hidden'}" data-panel="plugins" id="adminPanelPlugins">
+        <div id="adminPanelPlugins" class="admin-panel hidden">
           <div class="admin-section" style="margin:0">
             <div class="admin-section-head">
-              <h2 class="admin-h2">Plugin scripts</h2>
+              <h2 class="admin-h2">List plugins</h2>
               <div class="toolbar" style="gap:0.4rem;flex-wrap:wrap">
                 <button class="btn btn-sm" type="button" id="adminPluginNew">+ Plugin baru</button>
                 <button class="btn btn-sm btn-ghost" type="button" id="adminPluginReload">Reload</button>
               </div>
             </div>
             <p class="hint" style="margin:0 0 0.6rem;font-size:0.8rem;color:var(--muted)">
-              Edit source seperti file <code>plugins/**/*.js</code>. Simpan = tulis disk + hot-reload.
-              Wrapper di <code>conn</code>: sendSticker, sendAudio, sendAlbum, sendButton.
+              Edit source seperti <code>plugins/**/*.js</code>. Simpan = tulis disk + hot-reload.
             </p>
             <div id="adminPluginList" class="admin-plugin-list"></div>
             <div id="adminPluginEditor" class="admin-plugin-editor hidden" style="margin-top:0.85rem">
@@ -2224,14 +2170,10 @@
         renderAdminGate(box);
       });
 
-      $$('.admin-tab').forEach((btn) => {
-        btn.addEventListener('click', () => setAdminTab(btn.dataset.tab));
-      });
-
       renderAdminUsers(usersData.users || []);
       renderAdminSessions(sessionsData.sessions || []);
       setupAdminPluginEditor(pluginsData);
-      setAdminTab(tab);
+      showAdminView(adminTab || 'users');
 
       let searchTimer;
       $('#adminUserQ')?.addEventListener('input', (e) => {
