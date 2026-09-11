@@ -113,6 +113,26 @@ const API = {
   adminDeleteSession: (id) =>
     API.request('/api/admin/sessions/' + encodeURIComponent(id), { method: 'DELETE' }),
 
+  adminPlugins: () => API.request('/api/admin/plugins'),
+  adminPluginTemplate: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return API.request('/api/admin/plugins/template' + (q ? '?' + q : ''));
+  },
+  adminPluginSource: (file) =>
+    API.request('/api/admin/plugins/source?file=' + encodeURIComponent(file)),
+  adminSavePluginSource: (file, source) =>
+    API.request('/api/admin/plugins/source', {
+      method: 'PUT',
+      body: JSON.stringify({ file, source }),
+    }),
+  adminDeletePluginSource: (file) =>
+    API.request('/api/admin/plugins/source', {
+      method: 'DELETE',
+      body: JSON.stringify({ file }),
+    }),
+  adminReloadPlugins: () =>
+    API.request('/api/admin/plugins/reload', { method: 'POST' }),
+
   paymentPlans: () => API.request('/api/payment/plans'),
   paymentMe: () => API.request('/api/payment/me'),
   paymentCheckout: (plan) =>

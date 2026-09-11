@@ -249,5 +249,106 @@ export default function createAdminRoutes(sessionManager) {
     }
   })
 
+  // ─── Plugin source editor (admin only) ─────────────────────────────────
+
+  /** List all plugin files + load status */
+  router.get('/plugins', async (req, res) => {
+    try {
+      const plugins = await sessionManager.pluginLoader.listSources()
+      res.json({
+        plugins,
+        folders: sessionManager.pluginLoader.getFolders(),
+        count: plugins.length,
+      })
+    } catch (err) {
+      logger.error({ err: err.message }, 'Admin list plugins error')
+      res.status(500).json({ error: 'Failed to list plugins' })
+    }
+  })
+
+  /** Get starter template source */
+  router.get('/plugins/template', async (req, res) => {
+    try {
+      const { getPluginTemplate } = await import('../../core/PluginLoader.js')
+      const folder = String(req.query.folder || 'tools')
+      const name = String(req.query.name || 'hello')
+      const command = String(req.query.command || name)
+      const source = getPluginTemplate({ folder, name, command })
+      res.json({
+        source,
+        suggestedFile: `${folder}/${name.replace(/[^a-zA-Z0-9_-]/g, '') || 'hello'}.js`,
+        folders: sessionManager.pluginLoader.getFolders(),
+      })
+    } catch (err) {
+      res.status(500).json({ error: err.message || 'Failed to build template' })
+    }
+  })
+
+  /** Read plugin source */
+  router.get('/plugins/source', async (req, res) => {
+    try {
+      const file = String(req.query.file || '')
+      if (!file) return res.status(400).json({ error: 'Query ?file=folder/name.js wajib' })
+      const data = await sessionManager.pluginLoader.readSource(file)
+      res.json(data)
+    } catch (err) {
+      const status =
+        err.code === 'INVALID_PATH' ? 400 : err.code === 'ENOENT' || err.code === 'NOT_FOUND' ? 404 : 500
+      res.status(status).json({ error: err.message || 'Failed to read source' })
+    }
+  })
+
+  /** Create / update plugin source then hot-reload */
+  router.put('/plugins/source', async (req, res) => {
+    try {
+      const file = String(req.body?.file || '')
+      const source = req.body?.source
+      if (!file) return res.status(400).json({ error: 'Body.file wajib (contoh: tools/hello.js)' })
+      if (typeof source !== 'string') return res.status(400).json({ error: 'Body.source (string) wajib' })
+      const result = await sessionManager.pluginLoader.writeSource(file, source)
+      logger.info(
+        { file: result.file, created: result.created, by: req.user?.userId },
+        'Admin saved plugin source'
+      )
+      res.json(result)
+    } catch (err) {
+      const status =
+        err.code === 'INVALID_PATH' ||
+        err.code === 'EMPTY_SOURCE' ||
+        err.code === 'INVALID_SOURCE' ||
+        err.code === 'SOURCE_TOO_LARGE' ||
+        err.code === 'LOAD_FAILED'
+          ? 400
+          : 500
+      logger.error({ err: err.message, code: err.code }, 'Admin save plugin error')
+      res.status(status).json({ error: err.message || 'Failed to save plugin' })
+    }
+  })
+
+  /** Delete plugin file + reload */
+  router.delete('/plugins/source', async (req, res) => {
+    try {
+      const file = String(req.body?.file || req.query.file || '')
+      if (!file) return res.status(400).json({ error: 'file wajib' })
+      const result = await sessionManager.pluginLoader.deleteSource(file)
+      logger.info({ file: result.file, by: req.user?.userId }, 'Admin deleted plugin')
+      res.json(result)
+    } catch (err) {
+      const status =
+        err.code === 'INVALID_PATH' ? 400 : err.code === 'NOT_FOUND' ? 404 : 500
+      res.status(status).json({ error: err.message || 'Failed to delete plugin' })
+    }
+  })
+
+  /** Force reload all plugins from disk */
+  router.post('/plugins/reload', async (req, res) => {
+    try {
+      const result = await sessionManager.pluginLoader.reloadNow()
+      res.json({ ok: true, ...result })
+    } catch (err) {
+      res.status(500).json({ error: err.message || 'Reload failed' })
+    }
+  })
+
   return router
 }

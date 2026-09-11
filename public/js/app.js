@@ -1878,10 +1878,11 @@
 
     box.innerHTML = '<p style="color:var(--muted);font-weight:500">Loading…</p>';
     try {
-      const [stats, usersData, sessionsData] = await Promise.all([
+      const [stats, usersData, sessionsData, pluginsData] = await Promise.all([
         API.adminStats(),
         API.adminUsers({ limit: 50 }),
         API.adminSessions(),
+        API.adminPlugins().catch(() => ({ plugins: [], folders: [] })),
       ]);
 
       const s = stats;
@@ -1900,8 +1901,50 @@
 
         <div class="admin-section">
           <div class="admin-section-head">
+            <h2 class="admin-h2">Plugin scripts</h2>
+            <div class="toolbar" style="gap:0.4rem;flex-wrap:wrap">
+              <button class="btn btn-sm" type="button" id="adminPluginNew">+ Plugin baru</button>
+              <button class="btn btn-sm btn-ghost" type="button" id="adminPluginReload">Reload</button>
+            </div>
+          </div>
+          <p class="hint" style="margin:0 0 0.6rem;font-size:0.8rem;color:var(--muted)">
+            Edit source plugin seperti file <code>plugins/**/*.js</code>. Simpan = tulis ke disk + hot-reload tanpa restart bot.
+            Wrapper tersedia di <code>conn</code>: sendSticker, sendAudio, sendAlbum, sendButton.
+          </p>
+          <div id="adminPluginList" class="admin-plugin-list"></div>
+          <div id="adminPluginEditor" class="admin-plugin-editor hidden" style="margin-top:0.85rem">
+            <div class="field-row" style="gap:0.5rem;flex-wrap:wrap;align-items:flex-end">
+              <div class="field" style="flex:1;min-width:140px">
+                <label>Path file</label>
+                <input type="text" id="adminPluginPath" placeholder="tools/hello.js" />
+              </div>
+              <div class="field" style="width:120px">
+                <label>Folder</label>
+                <select id="adminPluginFolder"></select>
+              </div>
+              <div class="field" style="width:120px">
+                <label>Command</label>
+                <input type="text" id="adminPluginCmd" placeholder="hello" />
+              </div>
+              <button class="btn btn-sm btn-ghost" type="button" id="adminPluginTpl">Isi template</button>
+            </div>
+            <div class="field" style="margin-top:0.5rem">
+              <label>Source script</label>
+              <textarea id="adminPluginSource" rows="18" spellcheck="false" style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:0.78rem;line-height:1.45;tab-size:2"></textarea>
+            </div>
+            <div class="toolbar" style="margin-top:0.55rem;gap:0.4rem;flex-wrap:wrap">
+              <button class="btn btn-sm" type="button" id="adminPluginSave">Simpan &amp; reload</button>
+              <button class="btn btn-sm btn-ghost" type="button" id="adminPluginClose">Tutup editor</button>
+              <button class="btn btn-sm btn-ghost" type="button" id="adminPluginDelete" style="color:var(--red)">Hapus file</button>
+              <span id="adminPluginMeta" class="hint" style="margin-left:auto;font-size:0.78rem;color:var(--muted)"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="admin-section">
+          <div class="admin-section-head">
             <h2 class="admin-h2">Registered users</h2>
-            <input type="search" id="adminUserQ" placeholder="Search username" class="admin-search" />
+            <input type="search" id="adminUserQ" placeholder="Search username / email" class="admin-search" />
           </div>
           <div id="adminUserList"></div>
         </div>
@@ -1922,6 +1965,7 @@
 
       renderAdminUsers(usersData.users || []);
       renderAdminSessions(sessionsData.sessions || []);
+      setupAdminPluginEditor(pluginsData);
 
       let searchTimer;
       $('#adminUserQ')?.addEventListener('input', (e) => {
@@ -1955,6 +1999,155 @@
       }
       box.innerHTML = `<p style="color:var(--red)">${escapeHtml(e.message)}</p>`;
     }
+  }
+
+  function setupAdminPluginEditor(initial) {
+    const folders = initial?.folders || ['main', 'tools', 'group', 'admin', 'downloader', 'owner', 'sticker', 'other'];
+    const folderSel = $('#adminPluginFolder');
+    if (folderSel) {
+      folderSel.innerHTML = folders.map((f) => `<option value="${escapeAttr(f)}">${escapeHtml(f)}</option>`).join('');
+      folderSel.value = 'tools';
+    }
+
+    function renderList(plugins) {
+      const el = $('#adminPluginList');
+      if (!el) return;
+      if (!plugins?.length) {
+        el.innerHTML = '<div class="empty">Belum ada plugin di disk.</div>';
+        return;
+      }
+      const byFolder = {};
+      for (const p of plugins) {
+        const f = p.folder || 'other';
+        if (!byFolder[f]) byFolder[f] = [];
+        byFolder[f].push(p);
+      }
+      let html = '';
+      for (const f of Object.keys(byFolder).sort()) {
+        html += `<div class="plugin-folder open" style="margin-bottom:0.5rem">
+          <div class="plugin-folder-name" style="font-weight:700;margin-bottom:0.35rem">${escapeHtml(f)} <span class="hint">(${byFolder[f].length})</span></div>`;
+        for (const p of byFolder[f]) {
+          const cmds = (p.commands || []).map((c) => '.' + c).join('  ') || '—';
+          html += `<div class="card admin-plugin-card" data-file="${escapeAttr(p.file)}" style="padding:0.55rem 0.7rem;margin-bottom:0.35rem;cursor:pointer">
+            <div class="admin-user-top">
+              <div>
+                <div class="plugin-name">${escapeHtml(p.file)}${p.loaded ? '' : ' · <span style="color:var(--orange)">not loaded</span>'}${p.heavy ? ' · heavy' : ''}</div>
+                <div class="plugin-tags">${escapeHtml(cmds)}</div>
+              </div>
+              <button class="btn btn-sm btn-ghost" type="button" data-act="edit">Edit</button>
+            </div>
+          </div>`;
+        }
+        html += '</div>';
+      }
+      el.innerHTML = html;
+      el.querySelectorAll('.admin-plugin-card').forEach((card) => {
+        const open = async () => {
+          try {
+            const data = await API.adminPluginSource(card.dataset.file);
+            openPluginEditor(data);
+          } catch (e) {
+            toast(e.message || 'Gagal baca source');
+          }
+        };
+        card.addEventListener('click', (e) => {
+          if (e.target.closest('[data-act="edit"]') || e.currentTarget === card) open();
+        });
+      });
+    }
+
+    function openPluginEditor(data) {
+      const ed = $('#adminPluginEditor');
+      if (!ed) return;
+      ed.classList.remove('hidden');
+      $('#adminPluginPath').value = data.file || '';
+      $('#adminPluginSource').value = data.source || '';
+      const folder = (data.file || '').split('/')[0];
+      if (folder && folderSel) folderSel.value = folder;
+      const meta = $('#adminPluginMeta');
+      if (meta) {
+        meta.textContent = data.loaded
+          ? `loaded · cmds: ${(data.commands || []).join(', ') || '—'}`
+          : 'file ada, belum ter-load';
+      }
+      ed.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    renderList(initial?.plugins || []);
+
+    $('#adminPluginNew')?.addEventListener('click', async () => {
+      const folder = folderSel?.value || 'tools';
+      const cmd = ($('#adminPluginCmd')?.value || 'hello').trim() || 'hello';
+      try {
+        const tpl = await API.adminPluginTemplate({ folder, name: cmd, command: cmd });
+        openPluginEditor({ file: tpl.suggestedFile, source: tpl.source, loaded: false, commands: [cmd] });
+      } catch (e) {
+        toast(e.message || 'Gagal template');
+      }
+    });
+
+    $('#adminPluginTpl')?.addEventListener('click', async () => {
+      const folder = folderSel?.value || 'tools';
+      const cmd = ($('#adminPluginCmd')?.value || 'hello').trim() || 'hello';
+      try {
+        const tpl = await API.adminPluginTemplate({ folder, name: cmd, command: cmd });
+        $('#adminPluginPath').value = tpl.suggestedFile;
+        $('#adminPluginSource').value = tpl.source;
+        toast('Template diisi');
+      } catch (e) {
+        toast(e.message || 'Gagal template');
+      }
+    });
+
+    $('#adminPluginSave')?.addEventListener('click', async () => {
+      const file = ($('#adminPluginPath')?.value || '').trim();
+      const source = $('#adminPluginSource')?.value ?? '';
+      if (!file) return toast('Isi path file (folder/nama.js)');
+      try {
+        const res = await API.adminSavePluginSource(file, source);
+        toast((res.created ? 'Plugin dibuat · ' : 'Plugin diupdate · ') + res.file);
+        const list = await API.adminPlugins();
+        renderList(list.plugins || []);
+        openPluginEditor({
+          file: res.file,
+          source,
+          loaded: true,
+          commands: res.commands,
+        });
+      } catch (e) {
+        toast(e.message || 'Save gagal');
+      }
+    });
+
+    $('#adminPluginDelete')?.addEventListener('click', async () => {
+      const file = ($('#adminPluginPath')?.value || '').trim();
+      if (!file) return toast('Tidak ada file');
+      if (!confirm('Hapus plugin ' + file + ' dari disk?')) return;
+      try {
+        await API.adminDeletePluginSource(file);
+        toast('Dihapus · ' + file);
+        $('#adminPluginEditor')?.classList.add('hidden');
+        const list = await API.adminPlugins();
+        renderList(list.plugins || []);
+      } catch (e) {
+        toast(e.message || 'Delete gagal');
+      }
+    });
+
+    $('#adminPluginClose')?.addEventListener('click', () => {
+      $('#adminPluginEditor')?.classList.add('hidden');
+    });
+
+    $('#adminPluginReload')?.addEventListener('click', async () => {
+      try {
+        const r = await API.adminReloadPlugins();
+        toast(`Reloaded · ${r.count || 0} plugins`);
+        const list = await API.adminPlugins();
+        renderList(list.plugins || []);
+      } catch (e) {
+        toast(e.message || 'Reload gagal');
+      }
+    });
   }
 
   function renderAdminUsers(users) {
