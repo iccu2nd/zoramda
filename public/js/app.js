@@ -406,7 +406,11 @@
   });
 
   /* ——— nav ——— */
+  let currentPage = 'sessions';
+  let adminTab = 'users'; // users | sessions | plugins
+
   function activatePage(page) {
+    currentPage = page || 'sessions';
     $$('.side-link[data-page]').forEach((b) => b.classList.remove('active'));
     $$('.side-sublink').forEach((b) => b.classList.remove('active'));
     $('#navBotSettings')?.classList.remove('active');
@@ -427,6 +431,7 @@
     if (page === 'pricing') loadPricing();
     if (page === 'payment') loadPaymentPage();
     if (page === 'admin') loadAdmin();
+    closeCtxMenu();
   }
 
   $$('.side-link[data-page]').forEach((btn) => {
@@ -464,8 +469,251 @@
     $('#sidebar').classList.remove('open');
     $('#sideBackdrop').classList.remove('show');
   }
-  $('#menuBtn')?.addEventListener('click', openSidebar);
-  $('#sideBackdrop')?.addEventListener('click', closeSidebar);
+  $('#sideBackdrop')?.addEventListener('click', () => {
+    closeSidebar();
+    closeCtxMenu();
+  });
+
+  /* ——— contextual hamburger (isi beda per halaman) ——— */
+  const ICO = {
+    back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>',
+    plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+    refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>',
+    user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>',
+    plug: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 7v4M15 7v4M12 11v6M8 3h8v8a4 4 0 0 1-8 0V3z"/></svg>',
+    edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>',
+    nav: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
+    save: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>',
+    price: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
+    admin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg>',
+    out: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>',
+  };
+
+  function closeCtxMenu() {
+    $('#ctxMenu')?.classList.add('hidden');
+    $('#menuBtn')?.setAttribute('aria-expanded', 'false');
+  }
+
+  function openCtxMenu() {
+    buildCtxMenu();
+    $('#ctxMenu')?.classList.remove('hidden');
+    $('#menuBtn')?.setAttribute('aria-expanded', 'true');
+  }
+
+  function toggleCtxMenu() {
+    const menu = $('#ctxMenu');
+    if (!menu) return;
+    if (menu.classList.contains('hidden')) openCtxMenu();
+    else closeCtxMenu();
+  }
+
+  function ctxItem(label, icon, action, opts = {}) {
+    return {
+      type: 'item',
+      label,
+      icon: icon || '',
+      action,
+      danger: !!opts.danger,
+    };
+  }
+  function ctxLabel(text) {
+    return { type: 'label', label: text };
+  }
+  function ctxSep() {
+    return { type: 'sep' };
+  }
+
+  function buildCtxMenu() {
+    const menu = $('#ctxMenu');
+    if (!menu) return;
+    const page = currentPage;
+    const items = [];
+
+    // Mobile / small: open full sidebar nav
+    items.push(ctxItem('Buka navigasi', ICO.nav, () => {
+      closeCtxMenu();
+      openSidebar();
+    }));
+    items.push(ctxSep());
+
+    if (page !== 'sessions') {
+      items.push(ctxItem('Back to dashboard', ICO.back, () => activatePage('sessions')));
+      items.push(ctxSep());
+    }
+
+    // —— Session actions ——
+    if (page === 'sessions') {
+      items.push(ctxLabel('Session'));
+      items.push(ctxItem('Session baru', ICO.plus, () => {
+        closeCtxMenu();
+        $('#newSessionBtn')?.click();
+      }));
+      items.push(ctxItem('Refresh sessions', ICO.refresh, () => {
+        closeCtxMenu();
+        loadSessions();
+      }));
+      items.push(ctxSep());
+      items.push(ctxLabel('Akun'));
+      items.push(ctxItem('Akun saya', ICO.user, () => activatePage('account')));
+      items.push(ctxItem('Pricing', ICO.price, () => activatePage('pricing')));
+      if (currentUser?.isAdmin || currentUser?.role === 'admin') {
+        items.push(ctxSep());
+        items.push(ctxItem('Admin panel', ICO.admin, () => activatePage('admin')));
+      }
+    }
+
+    // —— Config (bot settings) ——
+    if (page === 'config') {
+      items.push(ctxLabel('Config'));
+      items.push(ctxItem('Tab: Info', ICO.edit, () => {
+        closeCtxMenu();
+        pendingConfigTab = 'info';
+        loadConfig();
+      }));
+      items.push(ctxItem('Tab: Message', ICO.edit, () => {
+        closeCtxMenu();
+        pendingConfigTab = 'pesan';
+        loadConfig();
+      }));
+      items.push(ctxItem('Tab: System', ICO.edit, () => {
+        closeCtxMenu();
+        pendingConfigTab = 'system';
+        loadConfig();
+      }));
+      items.push(ctxItem('Simpan config', ICO.save, () => {
+        closeCtxMenu();
+        $('#saveConfigBtn')?.click();
+      }));
+      items.push(ctxSep());
+      items.push(ctxLabel('Plugins session'));
+      items.push(ctxItem('Kelola plugins session', ICO.plug, () => activatePage('plugins')));
+    }
+
+    // —— Plugins session (toggle/permission — bukan script editor) ——
+    if (page === 'plugins') {
+      items.push(ctxLabel('Plugins session'));
+      items.push(ctxItem('Refresh daftar plugin', ICO.refresh, () => {
+        closeCtxMenu();
+        loadPlugins();
+      }));
+      items.push(ctxItem('Ke config bot', ICO.edit, () => {
+        pendingConfigTab = 'info';
+        activatePage('config');
+      }));
+      items.push(ctxSep());
+      items.push(ctxLabel('Catatan'));
+      items.push(ctxItem('Edit script plugin → Admin', ICO.admin, () => {
+        adminTab = 'plugins';
+        activatePage('admin');
+      }));
+    }
+
+    // —— Account / user ——
+    if (page === 'account') {
+      items.push(ctxLabel('Akun'));
+      items.push(ctxItem('Refresh akun', ICO.refresh, () => {
+        closeCtxMenu();
+        loadAccount();
+      }));
+      items.push(ctxItem('Pricing / upgrade', ICO.price, () => activatePage('pricing')));
+      items.push(ctxSep());
+      items.push(ctxItem('Keluar', ICO.out, () => {
+        closeCtxMenu();
+        $('#logoutBtn')?.click();
+      }, { danger: true }));
+    }
+
+    // —— Pricing / payment ——
+    if (page === 'pricing' || page === 'payment') {
+      items.push(ctxLabel('Pembayaran'));
+      items.push(ctxItem('Pricing', ICO.price, () => activatePage('pricing')));
+      items.push(ctxItem('Payment', ICO.price, () => activatePage('payment')));
+      items.push(ctxItem('Akun saya', ICO.user, () => activatePage('account')));
+    }
+
+    // —— Admin (isi hamburger berbeda) ——
+    if (page === 'admin') {
+      items.push(ctxLabel('Admin'));
+      items.push(ctxItem('Users', ICO.user, () => {
+        closeCtxMenu();
+        setAdminTab('users');
+      }));
+      items.push(ctxItem('Bot sessions', ICO.refresh, () => {
+        closeCtxMenu();
+        setAdminTab('sessions');
+      }));
+      items.push(ctxSep());
+      items.push(ctxLabel('Plugin scripts'));
+      items.push(ctxItem('Kelola / edit plugins', ICO.edit, () => {
+        closeCtxMenu();
+        setAdminTab('plugins');
+      }));
+      items.push(ctxItem('Tambah plugin baru', ICO.plus, () => {
+        closeCtxMenu();
+        setAdminTab('plugins');
+        setTimeout(() => $('#adminPluginNew')?.click(), 80);
+      }));
+      items.push(ctxItem('Reload semua plugins', ICO.refresh, async () => {
+        closeCtxMenu();
+        try {
+          const r = await API.adminReloadPlugins();
+          toast(`Reloaded · ${r.count || 0} plugins`);
+        } catch (e) {
+          toast(e.message || 'Reload gagal');
+        }
+      }));
+      items.push(ctxSep());
+      items.push(ctxItem('Sign out admin key', ICO.out, () => {
+        closeCtxMenu();
+        API.clearAdminKey();
+        loadAdmin();
+      }, { danger: true }));
+    }
+
+    // Common footer when not already on account
+    if (page !== 'account' && page !== 'sessions') {
+      items.push(ctxSep());
+      items.push(ctxItem('Akun saya', ICO.user, () => activatePage('account')));
+    }
+
+    menu.innerHTML = items
+      .map((it) => {
+        if (it.type === 'sep') return '<div class="ctx-menu-sep"></div>';
+        if (it.type === 'label') return `<span class="ctx-menu-label">${escapeHtml(it.label)}</span>`;
+        return `<button type="button" class="ctx-menu-item${it.danger ? ' danger' : ''}" data-ctx>${it.icon || ''}<span>${escapeHtml(it.label)}</span></button>`;
+      })
+      .join('');
+
+    const actionables = items.filter((it) => it.type === 'item');
+    menu.querySelectorAll('[data-ctx]').forEach((btn, i) => {
+      btn.addEventListener('click', () => {
+        const act = actionables[i]?.action;
+        if (typeof act === 'function') act();
+      });
+    });
+  }
+
+  $('#menuBtn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleCtxMenu();
+  });
+  document.addEventListener('click', (e) => {
+    const wrap = $('#ctxMenuWrap');
+    if (wrap && !wrap.contains(e.target)) closeCtxMenu();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeCtxMenu();
+  });
+
+  function setAdminTab(tab) {
+    adminTab = tab || 'users';
+    $$('.admin-tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === adminTab));
+    $$('.admin-panel').forEach((p) => p.classList.toggle('hidden', p.dataset.panel !== adminTab));
+    if (adminTab === 'plugins') {
+      // ensure editor list is visible
+      $('#adminPanelPlugins')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
 
   /* ——— sessions ——— */
   function statusClass(s) {
@@ -1886,6 +2134,7 @@
       ]);
 
       const s = stats;
+      const tab = adminTab || 'users';
       box.innerHTML = `
         <div class="toolbar" style="margin-bottom:0.75rem">
           <div class="spacer"></div>
@@ -1899,62 +2148,74 @@
           <div class="admin-stat"><div class="admin-stat-val">${s.plugins ?? 0}</div><div class="admin-stat-label">Plugins</div></div>
         </div>
 
-        <div class="admin-section">
-          <div class="admin-section-head">
-            <h2 class="admin-h2">Plugin scripts</h2>
-            <div class="toolbar" style="gap:0.4rem;flex-wrap:wrap">
-              <button class="btn btn-sm" type="button" id="adminPluginNew">+ Plugin baru</button>
-              <button class="btn btn-sm btn-ghost" type="button" id="adminPluginReload">Reload</button>
+        <div class="admin-tabs" role="tablist">
+          <button type="button" class="admin-tab ${tab === 'users' ? 'active' : ''}" data-tab="users">Users</button>
+          <button type="button" class="admin-tab ${tab === 'sessions' ? 'active' : ''}" data-tab="sessions">Sessions</button>
+          <button type="button" class="admin-tab ${tab === 'plugins' ? 'active' : ''}" data-tab="plugins">Plugin scripts</button>
+        </div>
+
+        <div class="admin-panel ${tab === 'users' ? '' : 'hidden'}" data-panel="users" id="adminPanelUsers">
+          <div class="admin-section" style="margin:0">
+            <div class="admin-section-head">
+              <h2 class="admin-h2">Registered users</h2>
+              <input type="search" id="adminUserQ" placeholder="Search username / email" class="admin-search" />
             </div>
-          </div>
-          <p class="hint" style="margin:0 0 0.6rem;font-size:0.8rem;color:var(--muted)">
-            Edit source plugin seperti file <code>plugins/**/*.js</code>. Simpan = tulis ke disk + hot-reload tanpa restart bot.
-            Wrapper tersedia di <code>conn</code>: sendSticker, sendAudio, sendAlbum, sendButton.
-          </p>
-          <div id="adminPluginList" class="admin-plugin-list"></div>
-          <div id="adminPluginEditor" class="admin-plugin-editor hidden" style="margin-top:0.85rem">
-            <div class="field-row" style="gap:0.5rem;flex-wrap:wrap;align-items:flex-end">
-              <div class="field" style="flex:1;min-width:140px">
-                <label>Path file</label>
-                <input type="text" id="adminPluginPath" placeholder="tools/hello.js" />
-              </div>
-              <div class="field" style="width:120px">
-                <label>Folder</label>
-                <select id="adminPluginFolder"></select>
-              </div>
-              <div class="field" style="width:120px">
-                <label>Command</label>
-                <input type="text" id="adminPluginCmd" placeholder="hello" />
-              </div>
-              <button class="btn btn-sm btn-ghost" type="button" id="adminPluginTpl">Isi template</button>
-            </div>
-            <div class="field" style="margin-top:0.5rem">
-              <label>Source script</label>
-              <textarea id="adminPluginSource" rows="18" spellcheck="false" style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:0.78rem;line-height:1.45;tab-size:2"></textarea>
-            </div>
-            <div class="toolbar" style="margin-top:0.55rem;gap:0.4rem;flex-wrap:wrap">
-              <button class="btn btn-sm" type="button" id="adminPluginSave">Simpan &amp; reload</button>
-              <button class="btn btn-sm btn-ghost" type="button" id="adminPluginClose">Tutup editor</button>
-              <button class="btn btn-sm btn-ghost" type="button" id="adminPluginDelete" style="color:var(--red)">Hapus file</button>
-              <span id="adminPluginMeta" class="hint" style="margin-left:auto;font-size:0.78rem;color:var(--muted)"></span>
-            </div>
+            <div id="adminUserList"></div>
           </div>
         </div>
 
-        <div class="admin-section">
-          <div class="admin-section-head">
-            <h2 class="admin-h2">Registered users</h2>
-            <input type="search" id="adminUserQ" placeholder="Search username / email" class="admin-search" />
+        <div class="admin-panel ${tab === 'sessions' ? '' : 'hidden'}" data-panel="sessions" id="adminPanelSessions">
+          <div class="admin-section" style="margin:0">
+            <div class="admin-section-head">
+              <h2 class="admin-h2">Bot sessions</h2>
+              <button class="btn btn-sm btn-ghost" type="button" id="adminRefreshSessions">Refresh</button>
+            </div>
+            <div id="adminSessionList"></div>
           </div>
-          <div id="adminUserList"></div>
         </div>
 
-        <div class="admin-section">
-          <div class="admin-section-head">
-            <h2 class="admin-h2">Bot sessions</h2>
-            <button class="btn btn-sm btn-ghost" type="button" id="adminRefreshSessions">Refresh</button>
+        <div class="admin-panel ${tab === 'plugins' ? '' : 'hidden'}" data-panel="plugins" id="adminPanelPlugins">
+          <div class="admin-section" style="margin:0">
+            <div class="admin-section-head">
+              <h2 class="admin-h2">Plugin scripts</h2>
+              <div class="toolbar" style="gap:0.4rem;flex-wrap:wrap">
+                <button class="btn btn-sm" type="button" id="adminPluginNew">+ Plugin baru</button>
+                <button class="btn btn-sm btn-ghost" type="button" id="adminPluginReload">Reload</button>
+              </div>
+            </div>
+            <p class="hint" style="margin:0 0 0.6rem;font-size:0.8rem;color:var(--muted)">
+              Edit source seperti file <code>plugins/**/*.js</code>. Simpan = tulis disk + hot-reload.
+              Wrapper di <code>conn</code>: sendSticker, sendAudio, sendAlbum, sendButton.
+            </p>
+            <div id="adminPluginList" class="admin-plugin-list"></div>
+            <div id="adminPluginEditor" class="admin-plugin-editor hidden" style="margin-top:0.85rem">
+              <div class="field-row" style="gap:0.5rem;flex-wrap:wrap;align-items:flex-end">
+                <div class="field" style="flex:1;min-width:140px">
+                  <label>Path file</label>
+                  <input type="text" id="adminPluginPath" placeholder="tools/hello.js" />
+                </div>
+                <div class="field" style="width:120px">
+                  <label>Folder</label>
+                  <select id="adminPluginFolder"></select>
+                </div>
+                <div class="field" style="width:120px">
+                  <label>Command</label>
+                  <input type="text" id="adminPluginCmd" placeholder="hello" />
+                </div>
+                <button class="btn btn-sm btn-ghost" type="button" id="adminPluginTpl">Isi template</button>
+              </div>
+              <div class="field" style="margin-top:0.5rem">
+                <label>Source script</label>
+                <textarea id="adminPluginSource" rows="18" spellcheck="false" style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:0.78rem;line-height:1.45;tab-size:2"></textarea>
+              </div>
+              <div class="toolbar" style="margin-top:0.55rem;gap:0.4rem;flex-wrap:wrap">
+                <button class="btn btn-sm" type="button" id="adminPluginSave">Simpan &amp; reload</button>
+                <button class="btn btn-sm btn-ghost" type="button" id="adminPluginClose">Tutup editor</button>
+                <button class="btn btn-sm btn-ghost" type="button" id="adminPluginDelete" style="color:var(--red)">Hapus file</button>
+                <span id="adminPluginMeta" class="hint" style="margin-left:auto;font-size:0.78rem;color:var(--muted)"></span>
+              </div>
+            </div>
           </div>
-          <div id="adminSessionList"></div>
         </div>
       `;
 
@@ -1963,9 +2224,14 @@
         renderAdminGate(box);
       });
 
+      $$('.admin-tab').forEach((btn) => {
+        btn.addEventListener('click', () => setAdminTab(btn.dataset.tab));
+      });
+
       renderAdminUsers(usersData.users || []);
       renderAdminSessions(sessionsData.sessions || []);
       setupAdminPluginEditor(pluginsData);
+      setAdminTab(tab);
 
       let searchTimer;
       $('#adminUserQ')?.addEventListener('input', (e) => {

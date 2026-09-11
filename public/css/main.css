@@ -1745,6 +1745,92 @@ code::-moz-selection,
   width: 40px;
   height: 40px;
 }
+
+/* contextual hamburger menu */
+.ctx-menu-wrap {
+  position: relative;
+}
+.ctx-menu {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  min-width: 240px;
+  max-width: min(320px, calc(100vw - 1.5rem));
+  max-height: min(70vh, 480px);
+  overflow-y: auto;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+  padding: 0.4rem;
+  z-index: 80;
+}
+.ctx-menu-label {
+  display: block;
+  padding: 0.45rem 0.65rem 0.25rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.ctx-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 500;
+  text-align: left;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.ctx-menu-item:hover {
+  background: var(--chip);
+}
+.ctx-menu-item svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+.ctx-menu-item.danger {
+  color: var(--red);
+}
+.ctx-menu-sep {
+  height: 1px;
+  margin: 0.35rem 0.4rem;
+  background: var(--border-soft);
+}
+.admin-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+}
+.admin-tab {
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.admin-tab.active {
+  background: var(--chip);
+  border-color: var(--text);
+}
+.admin-panel.hidden {
+  display: none !important;
+}
 .main > section,
 .main > .toolbar {
   padding-left: 1.5rem;
