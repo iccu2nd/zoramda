@@ -219,17 +219,21 @@ export class ConnectionManager {
   _attachEvents(sock) {
     this._cleanupListeners()
 
-    const onConnectionUpdate = async (update) => {
+    const onConnectionUpdate = (update) => {
       const { connection, lastDisconnect, qr } = update
 
-      // QR hanya jika belum pakai pairing code
+      // QR only when not already pairing — encode off the Baileys event turn
       if (qr && !this.pairingCode) {
-        try {
-          this.qr = await QRCode.toDataURL(qr)
-        } catch {
-          this.qr = qr
-        }
-        await this.setStatus(STATES.QR)
+        this.qr = qr // raw fallback immediately
+        this.setStatus(STATES.QR).catch(() => {})
+        QRCode.toDataURL(qr)
+          .then((dataUrl) => {
+            if (this.sock === sock && !this.pairingCode) {
+              this.qr = dataUrl
+              this.setStatus(STATES.QR).catch(() => {})
+            }
+          })
+          .catch(() => {})
       }
 
       if (connection === 'open') {
@@ -238,9 +242,9 @@ export class ConnectionManager {
         this.pairingCode = null
         this.pendingPairingPhone = null
         this.phoneNumber = sock.user?.id?.split(':')[0] || null
-        await this.setStatus(STATES.CONNECTED, {
+        this.setStatus(STATES.CONNECTED, {
           fields: { phoneNumber: this.phoneNumber },
-        })
+        }).catch(() => {})
         logger.info({ sessionId: this.sessionId, phone: this.phoneNumber }, 'Session connected')
       }
 
@@ -253,17 +257,17 @@ export class ConnectionManager {
         const loggedOut = statusCode === DisconnectReason.loggedOut
 
         if (loggedOut || this.isStopping) {
-          await this.setStatus(STATES.DISCONNECTED)
+          this.setStatus(STATES.DISCONNECTED).catch(() => {})
           if (loggedOut && this.clearAuth) {
-            await this.clearAuth()
+            this.clearAuth().catch(() => {})
           }
           this.sock = null
           return
         }
 
-        await this.setStatus(STATES.RECONNECTING, {
+        this.setStatus(STATES.RECONNECTING, {
           error: serializeError(lastDisconnect?.error)?.message,
-        })
+        }).catch(() => {})
         this.scheduleReconnect()
       }
     }
@@ -365,6 +369,8 @@ export class ConnectionManager {
           await this.sock.logout()
           if (this.clearAuth) await this.clearAuth()
         } else {
+          // Drain pending auth writes before tearing down socket
+          if (this.saveCreds) await this.saveCreds({ flush: true }).catch(() => {})
           this.sock.end(undefined)
         }
       } catch (err) {

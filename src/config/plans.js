@@ -7,7 +7,7 @@ export const PLANS = {
     id: 'free',
     name: 'Free',
     amount: 0,
-    maxSessions: 1,
+    maxSessions: 5,
     durationDays: null,
     features: {
       pairing: true,
@@ -15,7 +15,7 @@ export const PLANS = {
     },
     featureList: [
       'Connect Pairing',
-      '1 session WhatsApp',
+      '5 session WhatsApp',
       'Bot Settings terkunci',
     ],
   },
@@ -23,7 +23,7 @@ export const PLANS = {
     id: 'pro',
     name: 'Pro',
     amount: 5000,
-    maxSessions: 5,
+    maxSessions: 2,
     durationDays: 30,
     features: {
       pairing: true,
@@ -32,7 +32,7 @@ export const PLANS = {
     featureList: [
       'Connect Pairing',
       'Bot Settings (config, message, system, plugins)',
-      '5 session WhatsApp',
+      '2 session WhatsApp',
     ],
   },
   business: {

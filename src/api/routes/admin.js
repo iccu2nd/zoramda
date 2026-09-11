@@ -59,9 +59,11 @@ export default function createAdminRoutes(sessionManager) {
       const q = String(req.query.q || '').trim()
       const filter = {}
       if (q) {
+        const esc = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
         filter.$or = [
-          { username: new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') },
-          { name: new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') },
+          { username: new RegExp(esc, 'i') },
+          { name: new RegExp(esc, 'i') },
+          { email: new RegExp(esc, 'i') },
           { userId: q },
         ]
       }
@@ -122,6 +124,20 @@ export default function createAdminRoutes(sessionManager) {
         update.maxSessions = Math.max(0, parseInt(body.maxSessions, 10) || 0)
       }
       if (body.name !== undefined) update.name = String(body.name).slice(0, 64)
+      if (body.plan === 'free' || body.plan === 'pro' || body.plan === 'business') {
+        update.plan = body.plan
+        if (body.plan === 'free') {
+          update.planExpiresAt = null
+        } else if (body.planExpiresAt) {
+          update.planExpiresAt = new Date(body.planExpiresAt)
+        } else if (body.plan !== 'free') {
+          // default 30 days from now when upgrading
+          update.planExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+        }
+      }
+      if (body.planExpiresAt !== undefined && body.plan === undefined) {
+        update.planExpiresAt = body.planExpiresAt ? new Date(body.planExpiresAt) : null
+      }
 
       if (userId === req.user.userId && update.role === 'user') {
         return res.status(400).json({ error: 'Tidak bisa demote diri sendiri' })
@@ -142,6 +158,38 @@ export default function createAdminRoutes(sessionManager) {
     } catch (err) {
       logger.error({ err: err.message }, 'Admin patch user error')
       res.status(500).json({ error: 'Failed to update user' })
+    }
+  })
+
+  /** Delete user account */
+  router.delete('/users/:userId', async (req, res) => {
+    try {
+      const { userId } = req.params
+      if (userId === req.user.userId) {
+        return res.status(400).json({ error: 'Tidak bisa menghapus akun sendiri' })
+      }
+      const user = await User.findOne({ userId }).lean()
+      if (!user) return res.status(404).json({ error: 'User not found' })
+      if (user.role === 'admin') {
+        return res.status(400).json({ error: 'Tidak bisa menghapus akun admin lain' })
+      }
+
+      // stop & delete sessions belonging to user
+      const sessions = await Session.find({ userId, isActive: true }).lean()
+      for (const s of sessions) {
+        try {
+          await sessionManager.deleteSession(s.sessionId)
+        } catch (_) {}
+      }
+      await Session.deleteMany({ userId })
+      await SessionConfig.deleteMany({ userId })
+      await User.deleteOne({ userId })
+
+      logger.info({ userId, by: req.user.userId }, 'Admin deleted user')
+      res.json({ deleted: true, userId })
+    } catch (err) {
+      logger.error({ err: err.message }, 'Admin delete user error')
+      res.status(500).json({ error: 'Failed to delete user' })
     }
   })
 

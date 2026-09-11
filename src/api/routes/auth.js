@@ -32,7 +32,6 @@ function publicUser(user) {
     username: user.username,
     email: user.email || '',
     emailVerified: !!user.emailVerified,
-    phone: user.phone || '',
     role: user.role,
     isAdmin: user.role === 'admin',
     plan: effective.id,
@@ -51,11 +50,6 @@ function isValidEmail(email) {
   return /^[^\s@]+@gmail\.com$/.test(email) && email.length <= 120
 }
 
-function normalizePhone(phone) {
-  return String(phone || '').replace(/\D/g, '')
-}
-
-
 /**
  * Self-service registration – anyone can create their own account.
  * No admin key required. Each user gets their own apiKey and config.
@@ -73,7 +67,6 @@ router.post(
     email: { type: 'string', required: true, maxLength: 120 },
     password: { type: 'string', required: true, maxLength: 128 },
     confirmPassword: { type: 'string', maxLength: 128 },
-    phone: { type: 'string', maxLength: 20 },
     name: { type: 'string', maxLength: 64 },
   }),
   async (req, res) => {
@@ -82,7 +75,6 @@ router.post(
       const email = normalizeEmail(req.body.email)
       const password = String(req.body.password || '')
       const confirmPassword = String(req.body.confirmPassword ?? req.body.passwordConfirm ?? '')
-      const phone = normalizePhone(req.body.phone)
 
       if (!isValidUsername(username)) {
         return res.status(400).json({
@@ -97,9 +89,6 @@ router.post(
       }
       if (confirmPassword && password !== confirmPassword) {
         return res.status(400).json({ error: 'Konfirmasi password tidak cocok.' })
-      }
-      if (phone && (phone.length < 8 || phone.length > 16)) {
-        return res.status(400).json({ error: 'Masukkan nomor WhatsApp yang valid.' })
       }
 
       const existing = await User.findOne({
@@ -122,13 +111,12 @@ router.post(
         userId,
         username,
         email,
-        phone: phone || '',
         passwordHash,
         apiKey,
         role: 'user',
         plan: 'free',
         name: req.body.name || '',
-        maxSessions: 1,
+        maxSessions: 5,
         emailVerified: false,
         emailVerificationToken: verificationToken,
         emailVerificationExpires: verificationExpires,

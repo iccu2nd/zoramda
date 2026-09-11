@@ -99,6 +99,8 @@ const API = {
       method: 'PATCH',
       body: JSON.stringify(body),
     }),
+  adminDeleteUser: (userId) =>
+    API.request('/api/admin/users/' + encodeURIComponent(userId), { method: 'DELETE' }),
   adminSessions: (params = {}) => {
     const q = new URLSearchParams(params).toString();
     return API.request('/api/admin/sessions' + (q ? '?' + q : ''));

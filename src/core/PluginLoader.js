@@ -22,6 +22,8 @@ export class PluginLoader {
     this.plugins = new Map()
     /** @type {Map<string, object[]>} command -> list of handlers */
     this.commands = new Map()
+    /** @type {object[]|null} cached Array.from(plugins.values()) — avoid alloc on hot path */
+    this._allPluginsCache = null
     this.watcher = null
     this.reloadDebounce = null
     this.isLoading = false
@@ -69,6 +71,7 @@ export class PluginLoader {
       // Atomic swap – no partial state visible to message handler
       this.plugins = newPlugins
       this.commands = newCommands
+      this._allPluginsCache = Array.from(newPlugins.values())
     } finally {
       this.isLoading = false
     }
@@ -152,7 +155,9 @@ export class PluginLoader {
   }
 
   getAllPlugins() {
-    return Array.from(this.plugins.values())
+    if (this._allPluginsCache) return this._allPluginsCache
+    this._allPluginsCache = Array.from(this.plugins.values())
+    return this._allPluginsCache
   }
 
   getMenuByTags() {

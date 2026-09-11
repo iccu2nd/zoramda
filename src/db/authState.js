@@ -88,13 +88,18 @@ export async function useMongoAuthState(sessionId) {
     },
   }
 
-  const saveCreds = async () => {
-    scheduleFlush(20)
-    // optionally wait for pending flush when explicitly requested (logout/stop)
+  const saveCreds = async (opts = {}) => {
+    // Hot path (creds.update): debounce only — never block Signal pipeline
+    if (!opts?.flush) {
+      scheduleFlush(60)
+      return
+    }
+    // Explicit flush (logout / stop): drain pending write
     if (flushTimer) {
       clearTimeout(flushTimer)
       flushTimer = null
     }
+    dirty = true
     await doFlush()
   }
 

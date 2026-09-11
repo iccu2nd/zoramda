@@ -49,6 +49,8 @@ export class SessionManager {
       while (idx < active.length) {
         const s = active[idx++]
         try {
+          // Warm session config in parallel with socket start — first command never hits cold defaults
+          if (s.userId) configService.warm(s.sessionId, s.userId).catch(() => {})
           await this._startConnection(s.sessionId, { userId: s.userId })
         } catch (err) {
           logger.error({ sessionId: s.sessionId, err: err.message }, 'Restore start failed')
@@ -70,14 +72,14 @@ export class SessionManager {
     let maxSessions = user?.maxSessions
     if (maxSessions == null) maxSessions = config.session.maxPerUser
     if (user?.role === 'admin') maxSessions = Math.max(maxSessions, config.session.maxPerUser)
-    // expired plan → fall back to free limit
+    // expired plan → fall back to free limit from plans
     if (
       user?.plan &&
       user.plan !== 'free' &&
       user.planExpiresAt &&
       new Date(user.planExpiresAt).getTime() < Date.now()
     ) {
-      maxSessions = 1
+      maxSessions = 5
     }
     if (count >= maxSessions) {
       const err = new Error(

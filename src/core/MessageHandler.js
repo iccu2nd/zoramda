@@ -72,10 +72,12 @@ function extractTextFromContent(content, type) {
   }
 }
 
-/** @type {Map<string, { meta: any, exp: number }>} groupJid → cached metadata */
+/** @type {Map<string, { meta: any, exp: number, fetchedAt: number }>} groupJid → cached metadata */
 const groupMetaCache = new Map()
-/** Short TTL — admin promote/demote must reflect quickly (not multi-minute stale) */
-const GROUP_META_TTL_MS = 15 * 1000
+/** Soft TTL — reuse cache for most checks */
+const GROUP_META_TTL_MS = 20 * 1000
+/** Even force=true reuses cache if fresher than this (avoids WA round-trip spam) */
+const GROUP_META_FORCE_FRESH_MS = 3 * 1000
 
 /** @type {Map<string, number>} `${sessionId}:${sender}` → last command ts */
 const antiSpamMap = new Map()
@@ -92,17 +94,19 @@ function pruneAntiSpam(now) {
 }
 
 /**
- * Group metadata from WhatsApp. Permission checks should pass force=true
- * so admin/superadmin is never taken from a long-lived stale cache or DB.
+ * Group metadata from WhatsApp.
+ * force=true prefers live data for admin checks, but still reuses a
+ * very-fresh cache (<3s) to avoid serial WA queries under rapid commands.
  */
 async function getGroupMeta(sock, chatId, force = false) {
   const now = Date.now()
-  if (!force) {
-    const hit = groupMetaCache.get(chatId)
-    if (hit && hit.exp > now) return hit.meta
+  const hit = groupMetaCache.get(chatId)
+  if (hit) {
+    if (!force && hit.exp > now) return hit.meta
+    if (force && now - hit.fetchedAt < GROUP_META_FORCE_FRESH_MS) return hit.meta
   }
   const meta = await sock.groupMetadata(chatId)
-  groupMetaCache.set(chatId, { meta, exp: now + GROUP_META_TTL_MS })
+  groupMetaCache.set(chatId, { meta, exp: now + GROUP_META_TTL_MS, fetchedAt: now })
   if (groupMetaCache.size > 500) {
     const first = groupMetaCache.keys().next().value
     if (first) groupMetaCache.delete(first)
@@ -138,23 +142,24 @@ export class MessageHandler {
     if (!raw?.message || raw.key?.fromMe) return
     if (raw.key?.remoteJid === 'status@broadcast') return
 
-    // Per-session concurrency cap — drop excess under flood (owner still allowed later)
+    // Fast path: config from memory only — before any slot / tracker allocation
+    const cfg = configService.getCached(sessionId)
+    const prefix = cfg.prefix || '.'
+
+    // Cheap pre-check: extract text early; skip non-commands before full parse
+    // (no session slot consumed for chat noise / stickers / non-prefix messages)
+    const quickText = _quickText(raw)
+    if (!quickText) return
+    if (!quickText.startsWith(prefix)) return
+
+    // Only real command candidates take a concurrency slot
     if (!tryAcquireSessionSlot(sessionId)) return
 
     const latency = new LatencyTracker(raw.key?.id, sessionId)
+    let slotHeld = true
 
     try {
       latency.mark('handler_started')
-
-      // Fast path: config from memory only
-      const cfg = configService.getCached(sessionId)
-      const prefix = cfg.prefix || '.'
-
-      // Cheap pre-check: extract text early; skip non-commands before full parse
-      const quickText = _quickText(raw)
-      if (!quickText) return
-      // If text doesn't start with prefix, skip (no command)
-      if (!quickText.startsWith(prefix)) return
 
       const m = this._parseMessage(raw, sock, prefix, latency)
       if (!m || !m.command) return
@@ -194,25 +199,28 @@ export class MessageHandler {
       if (!isOwner && configService.isBanned(sessionId, m.senderPn || m.sender)) return
       if (cfg.publicMode === false && !isOwner) return
 
-      // Resolve plugins: try global command map first (O(1)), then custom overrides
+      // Resolve plugins: O(1) global map first, then O(1) custom-command index
       let handlers = this.pluginLoader.getHandlers(m.command)
       if (handlers.length) {
-        handlers = handlers.filter((p) => {
+        const filtered = []
+        for (let i = 0; i < handlers.length; i++) {
+          const p = handlers[i]
           const state = configService.getPluginState(
             sessionId,
             p.file,
             p.permissions || ['everyone']
           )
-          if (state.enabled === false) return false
+          if (state.enabled === false) continue
           // Custom command remap claimed this file for another name
-          if (state.commands && state.commands.length) return false
-          return true
-        })
+          if (state.commands && state.commands.length) continue
+          filtered.push(p)
+        }
+        handlers = filtered
       }
       if (handlers.length === 0) {
-        const allPlugins = this.pluginLoader.getAllPlugins()
-        const matchedFiles = configService.resolveCommandFiles(sessionId, m.command, allPlugins)
+        const matchedFiles = configService.resolveCommandFiles(sessionId, m.command)
         if (matchedFiles.size) {
+          const allPlugins = this.pluginLoader.getAllPlugins()
           handlers = allPlugins.filter((p) => matchedFiles.has(p.file))
         }
       }
@@ -234,7 +242,7 @@ export class MessageHandler {
         )
       )
     } finally {
-      releaseSessionSlot(sessionId)
+      if (slotHeld) releaseSessionSlot(sessionId)
       latency.finish()
     }
   }
@@ -488,12 +496,13 @@ export class MessageHandler {
       return
     }
 
-    // Limit — memory-first (no await DB)
-    if (configService.isLimitEnabled(sessionId) && !isOwner) {
+    // Limit — per-plugin useLimit + cost; memory-first (no await DB)
+    if (configService.isLimitEnabled(sessionId) && !isOwner && state.useLimit) {
       const isPremiumUser = configService.isPremium(sessionId, m.senderPn || m.sender)
       const bypassLimit = isPremiumUser && botCfg.premiumUnlimited
       if (!bypassLimit) {
-        const result = configService.consumeLimit(sessionId, userId, m.sender)
+        const cost = Math.max(0, parseInt(state.limitCost, 10) || 0)
+        const result = configService.consumeLimit(sessionId, userId, m.sender, cost)
         if (!result.allowed) {
           await m.reply(botCfg.limitMessage || 'Limit kamu sudah habis.')
           return

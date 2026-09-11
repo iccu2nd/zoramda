@@ -78,6 +78,8 @@ export default function createPluginRoutes(sessionManager) {
           enabled: state.enabled,
           permissions: state.permissions,
           defaultPermissions: defaultPerms,
+          useLimit: !!state.useLimit,
+          limitCost: state.limitCost || 0,
           responses,
         }
       })

@@ -350,7 +350,6 @@
     const email = $('#regEmail').value.trim();
     const password = $('#regPassword').value;
     const confirmPassword = $('#regConfirmPassword').value;
-    const phone = ($('#regPhone')?.value || '').trim();
     const errEl = $('#registerError');
     errEl.textContent = '';
 
@@ -378,7 +377,6 @@
         email,
         password,
         confirmPassword,
-        phone,
       });
       // Tidak set token — user harus verifikasi email dulu.
       API.clearToken();
@@ -890,18 +888,19 @@
             <div class="switch ${config.useLimit ? 'on' : ''}" data-k="useLimit" data-bool></div>
           </div>
           <div id="limitFields" style="${config.useLimit ? '' : 'display:none'}">
-            <div class="field-row">
-              <div class="field"><label>limit terpakai per perintah</label><input type="number" min="0" data-k="limitCost" value="${escapeAttr(config.limitCost ?? 1)}"></div>
-              <div class="field"><label>limit default user baru</label><input type="number" min="0" data-k="defaultLimit" value="${escapeAttr(config.defaultLimit ?? 10)}"></div>
+            <div class="field">
+              <label>limit default user baru</label>
+              <input type="number" min="0" data-k="defaultLimit" value="${escapeAttr(config.defaultLimit ?? 10)}">
             </div>
             <div class="switch-row">
               <span>premium unlimited</span>
-              <div class="switch ${config.premiumUnlimited ? 'on' : ''}" data-k="premiumUnlimited" data-bool></div>
+              <div class="switch ${config.premiumUnlimited !== false ? 'on' : ''}" data-k="premiumUnlimited" data-bool></div>
             </div>
-            <div class="field" id="premiumLimitField" style="${config.premiumUnlimited ? 'display:none' : ''}">
+            <div class="field" id="premiumLimitField" style="${config.premiumUnlimited !== false ? 'display:none' : ''}">
               <label>limit default premium (jika tidak unlimited)</label>
               <input type="number" min="0" data-k="premiumDefaultLimit" value="${escapeAttr(config.premiumDefaultLimit ?? 100)}">
             </div>
+            <p class="hint" style="margin:0.4rem 0 0;font-size:0.78rem;color:var(--muted)">Biaya limit per fitur diatur di menu Plugins (toggle Use Limit + angka).</p>
           </div>
 
           <p class="sub" style="margin:1.1rem 0 0.5rem;font-weight:700;color:var(--text)">Perilaku Bot</p>
@@ -1097,6 +1096,8 @@
                 </div>`
               : '';
 
+          const useLimitOn = !!p.useLimit;
+          const limitCostVal = p.limitCost ?? 1;
           html += `<div class="plugin-card" data-file="${escapeAttr(p.file)}" data-command="${escapeAttr(primary)}" data-defaults='${defaultPermsAttr}'>
             <div class="plugin-head">
               <div class="plugin-head-text">
@@ -1109,6 +1110,14 @@
               <label>Custom commands</label>
               <input type="text" data-act="commands" placeholder="${escapeAttr((p.defaultCommands || p.commands || []).join(', '))}" value="${escapeAttr((p.customCommands || []).join(', '))}" />
               <p class="hint" style="margin:0.25rem 0 0;font-size:0.78rem;color:var(--muted)">Leave empty to use defaults (${escapeHtml((p.defaultCommands || p.commands || []).join(', '))})</p>
+            </div>
+            <div class="switch-row" style="margin:0.35rem 0">
+              <span>Use Limit</span>
+              <div class="switch ${useLimitOn ? 'on' : ''}" data-act="useLimit" role="switch"></div>
+            </div>
+            <div class="field plugin-limit-cost" style="margin:0.25rem 0 ${useLimitOn ? '0.35rem' : '0'};${useLimitOn ? '' : 'display:none'}">
+              <label>Limit cost (angka yang dipotong)</label>
+              <input type="number" min="0" data-act="limitCost" value="${escapeAttr(limitCostVal)}" />
             </div>
             <div class="perm-list">
               <div class="perm-list-title">Permissions</div>
@@ -1149,11 +1158,18 @@
           sw.addEventListener('click', (e) => {
             e.stopPropagation();
             sw.classList.toggle('on');
+            if (sw.dataset.act === 'useLimit') {
+              const costBox = card.querySelector('.plugin-limit-cost');
+              if (costBox) costBox.style.display = sw.classList.contains('on') ? '' : 'none';
+            }
           });
         });
 
         card.querySelector('[data-act="saveState"]')?.addEventListener('click', async () => {
           const enabled = card.querySelector('[data-act="toggle"]').classList.contains('on');
+          const useLimit = !!card.querySelector('[data-act="useLimit"]')?.classList.contains('on');
+          const limitCostRaw = card.querySelector('[data-act="limitCost"]')?.value;
+          const limitCost = useLimit ? Math.max(0, parseInt(limitCostRaw, 10) || 1) : 0;
           const permissions = [...card.querySelectorAll('.switch[data-perm].on')].map(
             (el) => el.dataset.perm
           );
@@ -1165,7 +1181,7 @@
             : [];
           try {
             await API.updateSessionPlugins(sessionId, {
-              [file]: { enabled, permissions, commands },
+              [file]: { enabled, permissions, commands, useLimit, limitCost },
             });
             const respBody = {};
             let hasResp = false;
@@ -1187,7 +1203,7 @@
         card.querySelector('[data-act="resetDefault"]')?.addEventListener('click', async () => {
           try {
             await API.updateSessionPlugins(sessionId, {
-              [file]: { enabled: true, permissions: defaults, commands: [] },
+              [file]: { enabled: true, permissions: defaults, commands: [], useLimit: false, limitCost: 0 },
             });
             if (command && card.querySelectorAll('[data-resp-key]').length) {
               const body = {};
@@ -1951,11 +1967,12 @@
     el.innerHTML = users
       .map((u) => {
         const sess = u.sessions || {};
+        const plan = (u.plan || 'free').toLowerCase();
         return `<div class="card admin-user-card" data-uid="${escapeAttr(u.userId)}">
           <div class="admin-user-top">
             <div>
               <div class="plugin-name">${escapeHtml(u.username)}${u.role === 'admin' ? ' · admin' : ''}</div>
-              <div class="plugin-tags">${escapeHtml(u.name || '—')} · ${sess.total || 0} sessions · ${sess.connected || 0} connected</div>
+              <div class="plugin-tags">${escapeHtml(u.email || '—')} · ${escapeHtml(u.name || '—')} · ${sess.total || 0} sessions · ${sess.connected || 0} connected</div>
             </div>
             <div class="switch ${u.isActive ? 'on' : ''}" data-act="active" title="Active"></div>
           </div>
@@ -1967,11 +1984,21 @@
             </select>
           </div>
           <div class="admin-user-row">
+            <label>Plan</label>
+            <select data-act="plan">
+              <option value="free" ${plan === 'free' ? 'selected' : ''}>free</option>
+              <option value="pro" ${plan === 'pro' ? 'selected' : ''}>pro</option>
+              <option value="business" ${plan === 'business' ? 'selected' : ''}>business</option>
+            </select>
+          </div>
+          <div class="admin-user-row">
             <label>Max sessions</label>
             <input type="number" min="0" max="50" data-act="maxSessions" value="${u.maxSessions ?? 5}" />
           </div>
-          <div class="toolbar" style="margin-top:0.55rem">
+          <div class="toolbar" style="margin-top:0.55rem;gap:0.4rem;flex-wrap:wrap">
             <button class="btn btn-sm" data-act="saveUser" type="button">Save</button>
+            <button class="btn btn-sm btn-ghost" data-act="upgradePro" type="button">Upgrade Pro</button>
+            <button class="btn btn-sm btn-ghost" data-act="deleteUser" type="button" style="color:var(--red)">Hapus akun</button>
           </div>
         </div>`;
       })
@@ -1986,6 +2013,7 @@
         const body = {
           isActive: card.querySelector('[data-act="active"]').classList.contains('on'),
           role: card.querySelector('[data-act="role"]').value,
+          plan: card.querySelector('[data-act="plan"]').value,
           maxSessions: parseInt(card.querySelector('[data-act="maxSessions"]').value, 10),
         };
         try {
@@ -1993,6 +2021,25 @@
           toast('User updated');
         } catch (e) {
           toast(e.message || 'Update failed');
+        }
+      });
+      card.querySelector('[data-act="upgradePro"]')?.addEventListener('click', async () => {
+        try {
+          await API.adminPatchUser(uid, { plan: 'pro' });
+          toast('User upgraded to Pro');
+          loadAdmin();
+        } catch (e) {
+          toast(e.message || 'Upgrade failed');
+        }
+      });
+      card.querySelector('[data-act="deleteUser"]')?.addEventListener('click', async () => {
+        if (!confirm('Hapus akun ini permanen beserta semua session-nya?')) return;
+        try {
+          await API.adminDeleteUser(uid);
+          toast('Akun dihapus');
+          loadAdmin();
+        } catch (e) {
+          toast(e.message || 'Delete failed');
         }
       });
     });

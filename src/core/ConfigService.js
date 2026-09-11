@@ -39,7 +39,6 @@ const DEFAULTS = {
   pluginResponses: {},
   plugins: {},
   useLimit: false,
-  limitCost: 1,
   defaultLimit: 10,
   premiumUnlimited: true,
   premiumDefaultLimit: 100,
@@ -57,6 +56,7 @@ const COLD_DEFAULTS = Object.freeze({
   premiumUsers: Object.freeze([]),
   userLimits: Object.freeze({}),
   extra: Object.freeze({}),
+  _cmdIndex: Object.freeze(new Map()),
 })
 
 const EDITABLE_FIELDS = [
@@ -85,7 +85,6 @@ const EDITABLE_FIELDS = [
   'maintenanceMessage',
   'maxSessionsPerUser',
   'useLimit',
-  'limitCost',
   'defaultLimit',
   'premiumUnlimited',
   'premiumDefaultLimit',
@@ -122,9 +121,6 @@ function cleanPartial(partial) {
   }
   if (clean.maxSessionsPerUser !== undefined) {
     clean.maxSessionsPerUser = Math.max(1, parseInt(clean.maxSessionsPerUser, 10) || 5)
-  }
-  if (clean.limitCost !== undefined) {
-    clean.limitCost = Math.max(0, parseInt(clean.limitCost, 10) || 0)
   }
   if (clean.defaultLimit !== undefined) {
     clean.defaultLimit = Math.max(0, parseInt(clean.defaultLimit, 10) || 0)
@@ -173,19 +169,52 @@ function normalizePlugins(raw) {
         : []
   for (const [key, val] of entries) {
     if (!val || typeof val !== 'object') continue
+    const useLimit = val.useLimit === true
+    const limitCost = useLimit ? Math.max(0, parseInt(val.limitCost, 10) || 1) : 0
     out[key] = {
       enabled: val.enabled !== false,
       permissions: normalizePermList(val.permissions ?? val.permission, ['everyone']),
       commands: Array.isArray(val.commands)
         ? val.commands.map((c) => String(c).toLowerCase().trim()).filter(Boolean)
         : undefined,
+      useLimit,
+      limitCost,
     }
   }
   return out
 }
 
+/**
+ * Build reverse index: customCommand → Set of plugin files.
+ * Used so resolveCommandFiles is O(1) instead of scanning every plugin.
+ */
+function buildCustomCommandIndex(plugins) {
+  /** @type {Map<string, Set<string>>} */
+  const index = new Map()
+  if (!plugins || typeof plugins !== 'object') return index
+  for (const [file, state] of Object.entries(plugins)) {
+    if (!state || state.enabled === false) continue
+    const cmds = state.commands
+    if (!Array.isArray(cmds) || cmds.length === 0) continue
+    for (const raw of cmds) {
+      const cmd = String(raw || '')
+        .toLowerCase()
+        .trim()
+        .replace(/^\./, '')
+      if (!cmd) continue
+      let set = index.get(cmd)
+      if (!set) {
+        set = new Set()
+        index.set(cmd, set)
+      }
+      set.add(file)
+    }
+  }
+  return index
+}
+
 function toCache(doc) {
-  if (!doc) return { ...DEFAULTS, pluginResponses: {}, plugins: {} }
+  if (!doc) return { ...DEFAULTS, pluginResponses: {}, plugins: {}, _cmdIndex: new Map() }
 
   const next = { ...DEFAULTS }
   for (const key of EDITABLE_FIELDS) {
@@ -201,6 +230,7 @@ function toCache(doc) {
   next.pluginResponses =
     doc.pluginResponses && typeof doc.pluginResponses === 'object' ? doc.pluginResponses : {}
   next.plugins = normalizePlugins(doc.plugins)
+  next._cmdIndex = buildCustomCommandIndex(next.plugins)
   return next
 }
 
@@ -352,8 +382,11 @@ class ConfigService {
         enabled: true,
         permissions: defaults,
         commands: undefined,
+        useLimit: false,
+        limitCost: 0,
       }
     }
+    const useLimit = state.useLimit === true
     return {
       enabled: state.enabled !== false,
       permissions: Array.isArray(state.permissions) && state.permissions.length
@@ -361,36 +394,28 @@ class ConfigService {
         : defaults,
       commands:
         Array.isArray(state.commands) && state.commands.length ? state.commands : undefined,
+      useLimit,
+      limitCost: useLimit ? Math.max(0, parseInt(state.limitCost, 10) || 1) : 0,
     }
   }
 
   /**
    * Resolve which plugin files handle a command for this session,
    * respecting per-session custom command aliases.
+   * Uses prebuilt reverse index (O(1)) — no full plugin scan on hot path.
    * Returns Set of plugin file paths that should run for this command.
    */
-  resolveCommandFiles(sessionId, command, allPlugins) {
+  resolveCommandFiles(sessionId, command) {
     const cmd = String(command || '')
       .toLowerCase()
       .trim()
       .replace(/^\./, '')
     if (!cmd) return new Set()
     const cfg = this.getCached(sessionId)
-    const matched = new Set()
-
-    for (const p of allPlugins) {
-      const state = cfg.plugins && cfg.plugins[p.file]
-      // disabled plugins never match
-      if (state && state.enabled === false) continue
-      const custom =
-        state && Array.isArray(state.commands) && state.commands.length
-          ? state.commands.map((c) => String(c).toLowerCase().trim().replace(/^\./, ''))
-          : null
-      // custom set → use only custom; empty/undefined → plugin defaults
-      const cmds = custom || p.commands || []
-      if (cmds.includes(cmd)) matched.add(p.file)
-    }
-    return matched
+    const index = cfg._cmdIndex
+    if (!index || typeof index.get !== 'function') return new Set()
+    const hit = index.get(cmd)
+    return hit ? new Set(hit) : new Set()
   }
 
   async updatePluginStates(sessionId, userId, states) {
@@ -423,8 +448,10 @@ class ConfigService {
                 ? [...prev.permissions]
                 : ['everyone'],
               commands: Array.isArray(prev.commands) ? [...prev.commands] : undefined,
+              useLimit: prev.useLimit === true,
+              limitCost: Math.max(0, parseInt(prev.limitCost, 10) || 0),
             }
-          : { enabled: true, permissions: ['everyone'], commands: undefined }
+          : { enabled: true, permissions: ['everyone'], commands: undefined, useLimit: false, limitCost: 0 }
 
       if (val.enabled !== undefined) {
         cur.enabled = Boolean(val.enabled)
@@ -446,6 +473,16 @@ class ConfigService {
         }
         changed = true
       }
+      if (val.useLimit !== undefined) {
+        cur.useLimit = Boolean(val.useLimit)
+        changed = true
+      }
+      if (val.limitCost !== undefined) {
+        cur.limitCost = Math.max(0, parseInt(val.limitCost, 10) || 0)
+        changed = true
+      }
+      // if useLimit off, force cost 0
+      if (!cur.useLimit) cur.limitCost = 0
       plugins[file] = cur
     }
 
@@ -566,20 +603,25 @@ class ConfigService {
 
   /**
    * Gate + spend limit for a command use.
+   * cost comes from the plugin's limitCost (or 0 if plugin does not use limit).
    * HOT PATH: update in-memory cache immediately, persist to Mongo async
    * so light commands never wait on a DB round-trip.
    * Returns { allowed, remaining, cost }.
    */
-  consumeLimit(sessionId, userId, jid) {
+  consumeLimit(sessionId, userId, jid, cost = 0) {
     const cfg = this.getCached(sessionId)
-    const cost = Math.max(0, cfg.limitCost || 0)
+    const spend = Math.max(0, parseInt(cost, 10) || 0)
     const current = this.getUserLimit(sessionId, jid)
 
-    if (current < cost) {
-      return { allowed: false, remaining: current, cost }
+    if (spend <= 0) {
+      return { allowed: true, remaining: current, cost: 0 }
     }
 
-    const next = current - cost
+    if (current < spend) {
+      return { allowed: false, remaining: current, cost: spend }
+    }
+
+    const next = current - spend
     const key = String(jid).split('@')[0].replace(/\D/g, '')
 
     // memory-first
@@ -598,7 +640,7 @@ class ConfigService {
       })
     })
 
-    return { allowed: true, remaining: next, cost }
+    return { allowed: true, remaining: next, cost: spend }
   }
 
   async setUserLimit(sessionId, userId, jid, amount) {
