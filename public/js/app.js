@@ -406,11 +406,7 @@
   });
 
   /* ——— nav ——— */
-  let currentPage = 'sessions';
-  let adminTab = 'users'; // users | sessions | plugins
-
   function activatePage(page) {
-    currentPage = page || 'sessions';
     $$('.side-link[data-page]').forEach((b) => b.classList.remove('active'));
     $$('.side-sublink').forEach((b) => b.classList.remove('active'));
     $('#navBotSettings')?.classList.remove('active');
@@ -431,7 +427,6 @@
     if (page === 'pricing') loadPricing();
     if (page === 'payment') loadPaymentPage();
     if (page === 'admin') loadAdmin();
-    closeCtxMenu();
   }
 
   $$('.side-link[data-page]').forEach((btn) => {
@@ -469,204 +464,8 @@
     $('#sidebar').classList.remove('open');
     $('#sideBackdrop').classList.remove('show');
   }
-  $('#sideBackdrop')?.addEventListener('click', () => {
-    closeSidebar();
-    closeCtxMenu();
-  });
-
-  /* ——— contextual hamburger (isi beda per halaman) ——— */
-  const ICO = {
-    back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>',
-    plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
-    refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>',
-    user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>',
-    plug: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 7v4M15 7v4M12 11v6M8 3h8v8a4 4 0 0 1-8 0V3z"/></svg>',
-    edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>',
-    nav: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
-    save: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>',
-    price: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
-    admin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg>',
-    out: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>',
-  };
-
-  function closeCtxMenu() {
-    $('#ctxMenu')?.classList.add('hidden');
-    $('#menuBtn')?.setAttribute('aria-expanded', 'false');
-  }
-
-  function openCtxMenu() {
-    buildCtxMenu();
-    $('#ctxMenu')?.classList.remove('hidden');
-    $('#menuBtn')?.setAttribute('aria-expanded', 'true');
-  }
-
-  function toggleCtxMenu() {
-    const menu = $('#ctxMenu');
-    if (!menu) return;
-    if (menu.classList.contains('hidden')) openCtxMenu();
-    else closeCtxMenu();
-  }
-
-  function ctxItem(label, icon, action, opts = {}) {
-    return {
-      type: 'item',
-      label,
-      icon: icon || '',
-      action,
-      danger: !!opts.danger,
-    };
-  }
-  function ctxLabel(text) {
-    return { type: 'label', label: text };
-  }
-  function ctxSep() {
-    return { type: 'sep' };
-  }
-
-  function buildCtxMenu() {
-    const menu = $('#ctxMenu');
-    if (!menu) return;
-    const page = currentPage;
-    const items = [];
-
-    // —— Admin: isi hamburger khusus (tanpa tab UI) ——
-    if (page === 'admin') {
-      items.push(ctxItem('Users', ICO.user, () => {
-        closeCtxMenu();
-        showAdminView('users');
-      }));
-      items.push(ctxItem('Bot yang konek', ICO.refresh, () => {
-        closeCtxMenu();
-        showAdminView('sessions');
-      }));
-      items.push(ctxItem('List plugins', ICO.plug, () => {
-        closeCtxMenu();
-        showAdminView('plugins');
-      }));
-      items.push(ctxSep());
-      items.push(ctxItem('Kembali ke dashboard', ICO.back, () => activatePage('sessions')));
-    }
-
-    // —— Sessions ——
-    else if (page === 'sessions') {
-      items.push(ctxItem('Session baru', ICO.plus, () => {
-        closeCtxMenu();
-        $('#newSessionBtn')?.click();
-      }));
-      items.push(ctxItem('Refresh sessions', ICO.refresh, () => {
-        closeCtxMenu();
-        loadSessions();
-      }));
-      items.push(ctxSep());
-      items.push(ctxItem('Akun saya', ICO.user, () => activatePage('account')));
-      items.push(ctxItem('Pricing', ICO.price, () => activatePage('pricing')));
-      if (currentUser?.isAdmin || currentUser?.role === 'admin') {
-        items.push(ctxSep());
-        items.push(ctxItem('Admin', ICO.admin, () => activatePage('admin')));
-      }
-    }
-
-    // —— Config ——
-    else if (page === 'config') {
-      items.push(ctxItem('Kembali ke dashboard', ICO.back, () => activatePage('sessions')));
-      items.push(ctxSep());
-      items.push(ctxItem('Simpan config', ICO.save, () => {
-        closeCtxMenu();
-        $('#saveConfigBtn')?.click();
-      }));
-      items.push(ctxItem('Plugins session', ICO.plug, () => activatePage('plugins')));
-      items.push(ctxItem('Akun saya', ICO.user, () => activatePage('account')));
-    }
-
-    // —— Plugins session ——
-    else if (page === 'plugins') {
-      items.push(ctxItem('Kembali ke dashboard', ICO.back, () => activatePage('sessions')));
-      items.push(ctxSep());
-      items.push(ctxItem('Refresh plugins', ICO.refresh, () => {
-        closeCtxMenu();
-        loadPlugins();
-      }));
-      items.push(ctxItem('Config bot', ICO.edit, () => {
-        pendingConfigTab = 'info';
-        activatePage('config');
-      }));
-      items.push(ctxItem('Akun saya', ICO.user, () => activatePage('account')));
-    }
-
-    // —— Account ——
-    else if (page === 'account') {
-      items.push(ctxItem('Kembali ke dashboard', ICO.back, () => activatePage('sessions')));
-      items.push(ctxSep());
-      items.push(ctxItem('Pricing', ICO.price, () => activatePage('pricing')));
-      items.push(ctxItem('Keluar', ICO.out, () => {
-        closeCtxMenu();
-        $('#logoutBtn')?.click();
-      }, { danger: true }));
-    }
-
-    // —— Pricing / payment ——
-    else if (page === 'pricing' || page === 'payment') {
-      items.push(ctxItem('Kembali ke dashboard', ICO.back, () => activatePage('sessions')));
-      items.push(ctxSep());
-      items.push(ctxItem('Pricing', ICO.price, () => activatePage('pricing')));
-      items.push(ctxItem('Payment', ICO.price, () => activatePage('payment')));
-      items.push(ctxItem('Akun saya', ICO.user, () => activatePage('account')));
-    }
-
-    // —— fallback ——
-    else {
-      items.push(ctxItem('Kembali ke dashboard', ICO.back, () => activatePage('sessions')));
-    }
-
-    menu.innerHTML = items
-      .map((it) => {
-        if (it.type === 'sep') return '<div class="ctx-menu-sep"></div>';
-        if (it.type === 'label') return `<span class="ctx-menu-label">${escapeHtml(it.label)}</span>`;
-        return `<button type="button" class="ctx-menu-item${it.danger ? ' danger' : ''}" data-ctx>${it.icon || ''}<span>${escapeHtml(it.label)}</span></button>`;
-      })
-      .join('');
-
-    const actionables = items.filter((it) => it.type === 'item');
-    menu.querySelectorAll('[data-ctx]').forEach((btn, i) => {
-      btn.addEventListener('click', () => {
-        const act = actionables[i]?.action;
-        if (typeof act === 'function') act();
-      });
-    });
-  }
-
-  $('#menuBtn')?.addEventListener('click', (e) => {
-    e.stopPropagation();
-    toggleCtxMenu();
-  });
-  document.addEventListener('click', (e) => {
-    const wrap = $('#ctxMenuWrap');
-    if (wrap && !wrap.contains(e.target)) closeCtxMenu();
-  });
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeCtxMenu();
-  });
-
-  /** Admin view switcher — dikontrol hamburger saja, tanpa tab bar */
-  function showAdminView(view) {
-    adminTab = view || 'users';
-    const map = {
-      users: '#adminPanelUsers',
-      sessions: '#adminPanelSessions',
-      plugins: '#adminPanelPlugins',
-    };
-    Object.keys(map).forEach((k) => {
-      const el = $(map[k]);
-      if (el) el.classList.toggle('hidden', k !== adminTab);
-    });
-    // update page subtitle hint
-    const sub = document.querySelector('#page-admin .page-sub');
-    if (sub) {
-      if (adminTab === 'users') sub.textContent = 'Kelola user terdaftar';
-      else if (adminTab === 'sessions') sub.textContent = 'Bot yang sedang konek / session aktif';
-      else if (adminTab === 'plugins') sub.textContent = 'List & edit source plugin bot';
-    }
-  }
+  $('#menuBtn')?.addEventListener('click', openSidebar);
+  $('#sideBackdrop')?.addEventListener('click', closeSidebar);
 
   /* ——— sessions ——— */
   function statusClass(s) {
@@ -2099,8 +1898,6 @@
           <div class="admin-stat"><div class="admin-stat-val">${s.sessions?.total ?? 0}</div><div class="admin-stat-label">Sessions</div></div>
           <div class="admin-stat"><div class="admin-stat-val">${s.plugins ?? 0}</div><div class="admin-stat-label">Plugins</div></div>
         </div>
-        <p class="hint" style="margin:0 0 0.85rem;font-size:0.8rem;color:var(--muted)">Pakai menu ☰ untuk ganti tampilan: Users · Bot yang konek · List plugins.</p>
-
         <div id="adminPanelUsers" class="admin-panel">
           <div class="admin-section" style="margin:0">
             <div class="admin-section-head">
@@ -2111,7 +1908,7 @@
           </div>
         </div>
 
-        <div id="adminPanelSessions" class="admin-panel hidden">
+        <div id="adminPanelSessions" class="admin-panel">
           <div class="admin-section" style="margin:0">
             <div class="admin-section-head">
               <h2 class="admin-h2">Bot yang konek</h2>
@@ -2121,7 +1918,7 @@
           </div>
         </div>
 
-        <div id="adminPanelPlugins" class="admin-panel hidden">
+        <div id="adminPanelPlugins" class="admin-panel">
           <div class="admin-section" style="margin:0">
             <div class="admin-section-head">
               <h2 class="admin-h2">List plugins</h2>
@@ -2173,7 +1970,6 @@
       renderAdminUsers(usersData.users || []);
       renderAdminSessions(sessionsData.sessions || []);
       setupAdminPluginEditor(pluginsData);
-      showAdminView(adminTab || 'users');
 
       let searchTimer;
       $('#adminUserQ')?.addEventListener('input', (e) => {
