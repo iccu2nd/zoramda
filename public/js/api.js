@@ -10,16 +10,33 @@ const API = {
   },
 
   getAdminKey() {
-    try { return sessionStorage.getItem('zb_admin_key') || ''; } catch { return ''; }
+    try {
+      // localStorage = sesi admin tetap setelah refresh / buka ulang browser
+      return (
+        localStorage.getItem('zb_admin_key') ||
+        sessionStorage.getItem('zb_admin_key') ||
+        ''
+      );
+    } catch {
+      return '';
+    }
   },
   setAdminKey(k) {
     try {
-      if (k) sessionStorage.setItem('zb_admin_key', k);
-      else sessionStorage.removeItem('zb_admin_key');
+      if (k) {
+        localStorage.setItem('zb_admin_key', k);
+        sessionStorage.removeItem('zb_admin_key');
+      } else {
+        localStorage.removeItem('zb_admin_key');
+        sessionStorage.removeItem('zb_admin_key');
+      }
     } catch {}
   },
   clearAdminKey() {
-    try { sessionStorage.removeItem('zb_admin_key'); } catch {}
+    try {
+      localStorage.removeItem('zb_admin_key');
+      sessionStorage.removeItem('zb_admin_key');
+    } catch {}
   },
 
   async request(path, opts = {}) {

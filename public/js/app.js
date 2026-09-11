@@ -406,7 +406,12 @@
   });
 
   /* ——— nav ——— */
+  let currentPage = 'sessions';
+  let adminView = 'users'; // users | bots | plugins
+
   function activatePage(page) {
+    currentPage = page || 'sessions';
+    closeAdminMenu();
     $$('.side-link[data-page]').forEach((b) => b.classList.remove('active'));
     $$('.side-sublink').forEach((b) => b.classList.remove('active'));
     $('#navBotSettings')?.classList.remove('active');
@@ -457,6 +462,7 @@
   });
 
   function openSidebar() {
+    closeAdminMenu();
     $('#sidebar').classList.add('open');
     $('#sideBackdrop').classList.add('show');
   }
@@ -464,8 +470,85 @@
     $('#sidebar').classList.remove('open');
     $('#sideBackdrop').classList.remove('show');
   }
-  $('#menuBtn')?.addEventListener('click', openSidebar);
-  $('#sideBackdrop')?.addEventListener('click', closeSidebar);
+
+  /* Admin hamburger: only on admin page after key is saved */
+  function closeAdminMenu() {
+    $('#ctxMenu')?.classList.add('hidden');
+    $('#menuBtn')?.setAttribute('aria-expanded', 'false');
+  }
+
+  function openAdminMenu() {
+    const menu = $('#ctxMenu');
+    if (!menu) return;
+    menu.innerHTML = [
+      { label: 'Users', act: 'users' },
+      { label: 'Bots', act: 'bots' },
+      { label: 'Plugins', act: 'plugins' },
+      { sep: true },
+      { label: 'Back dashboard', act: 'dashboard' },
+    ]
+      .map((it) =>
+        it.sep
+          ? '<div class="ctx-menu-sep"></div>'
+          : `<button type="button" class="ctx-menu-item" data-admin-act="${it.act}"><span>${it.label}</span></button>`
+      )
+      .join('');
+    menu.querySelectorAll('[data-admin-act]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const act = btn.dataset.adminAct;
+        closeAdminMenu();
+        if (act === 'dashboard') {
+          activatePage('sessions');
+          return;
+        }
+        showAdminView(act === 'bots' ? 'bots' : act);
+      });
+    });
+    menu.classList.remove('hidden');
+    $('#menuBtn')?.setAttribute('aria-expanded', 'true');
+  }
+
+  function showAdminView(view) {
+    adminView = view || 'users';
+    const map = {
+      users: '#adminPanelUsers',
+      bots: '#adminPanelSessions',
+      plugins: '#adminPanelPlugins',
+    };
+    Object.keys(map).forEach((k) => {
+      const el = $(map[k]);
+      if (el) el.classList.toggle('hidden', k !== adminView);
+    });
+    const sub = document.querySelector('#page-admin .page-sub');
+    if (sub) {
+      if (adminView === 'users') sub.textContent = 'Users';
+      else if (adminView === 'bots') sub.textContent = 'Bots yang konek';
+      else if (adminView === 'plugins') sub.textContent = 'Plugins — edit / tambah script';
+    }
+  }
+
+  $('#menuBtn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    // Hanya di halaman admin + sudah login admin key → menu khusus
+    if (currentPage === 'admin' && API.getAdminKey()) {
+      const menu = $('#ctxMenu');
+      if (menu && !menu.classList.contains('hidden')) closeAdminMenu();
+      else openAdminMenu();
+      return;
+    }
+    openSidebar();
+  });
+  $('#sideBackdrop')?.addEventListener('click', () => {
+    closeSidebar();
+    closeAdminMenu();
+  });
+  document.addEventListener('click', (e) => {
+    const wrap = $('#ctxMenuWrap');
+    if (wrap && !wrap.contains(e.target)) closeAdminMenu();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeAdminMenu();
+  });
 
   /* ——— sessions ——— */
   function statusClass(s) {
@@ -1908,56 +1991,57 @@
           </div>
         </div>
 
-        <div id="adminPanelSessions" class="admin-panel">
+        <div id="adminPanelSessions" class="admin-panel hidden">
           <div class="admin-section" style="margin:0">
             <div class="admin-section-head">
-              <h2 class="admin-h2">Bot yang konek</h2>
+              <h2 class="admin-h2">Bots</h2>
               <button class="btn btn-sm btn-ghost" type="button" id="adminRefreshSessions">Refresh</button>
             </div>
             <div id="adminSessionList"></div>
           </div>
         </div>
 
-        <div id="adminPanelPlugins" class="admin-panel">
-          <div class="admin-section" style="margin:0">
-            <div class="admin-section-head">
-              <h2 class="admin-h2">List plugins</h2>
-              <div class="toolbar" style="gap:0.4rem;flex-wrap:wrap">
-                <button class="btn btn-sm" type="button" id="adminPluginNew">+ Plugin baru</button>
-                <button class="btn btn-sm btn-ghost" type="button" id="adminPluginReload">Reload</button>
-              </div>
-            </div>
-            <p class="hint" style="margin:0 0 0.6rem;font-size:0.8rem;color:var(--muted)">
-              Edit source seperti <code>plugins/**/*.js</code>. Simpan = tulis disk + hot-reload.
-            </p>
-            <div id="adminPluginList" class="admin-plugin-list"></div>
-            <div id="adminPluginEditor" class="admin-plugin-editor hidden" style="margin-top:0.85rem">
-              <div class="field-row" style="gap:0.5rem;flex-wrap:wrap;align-items:flex-end">
-                <div class="field" style="flex:1;min-width:140px">
-                  <label>Path file</label>
-                  <input type="text" id="adminPluginPath" placeholder="tools/hello.js" />
+        <div id="adminPanelPlugins" class="admin-panel hidden">
+          <div class="pe-layout">
+            <aside class="pe-sidebar">
+              <div class="pe-sidebar-head">
+                <div>
+                  <h2 class="admin-h2" style="margin:0">Plugins</h2>
+                  <p class="pe-sub">File di disk · klik untuk edit</p>
                 </div>
-                <div class="field" style="width:120px">
-                  <label>Folder</label>
-                  <select id="adminPluginFolder"></select>
+                <div class="pe-sidebar-actions">
+                  <button class="btn btn-sm" type="button" id="adminPluginNew" title="Plugin baru">+</button>
+                  <button class="btn btn-sm btn-ghost" type="button" id="adminPluginReload" title="Reload">↻</button>
                 </div>
-                <div class="field" style="width:120px">
-                  <label>Command</label>
-                  <input type="text" id="adminPluginCmd" placeholder="hello" />
+              </div>
+              <input type="search" id="adminPluginSearch" class="pe-search" placeholder="Cari file / command…" />
+              <div id="adminPluginList" class="pe-list"></div>
+            </aside>
+            <section class="pe-editor" id="adminPluginEditor">
+              <div class="pe-editor-empty" id="adminPluginEmpty">
+                <div class="pe-empty-title">Pilih plugin</div>
+                <p class="pe-empty-desc">Klik item di kiri untuk edit, atau tekan <strong>+</strong> untuk buat plugin baru dari template.</p>
+              </div>
+              <div class="pe-editor-body hidden" id="adminPluginBody">
+                <div class="pe-toolbar">
+                  <div class="pe-path-row">
+                    <select id="adminPluginFolder" class="pe-folder" title="Folder"></select>
+                    <input type="text" id="adminPluginPath" class="pe-path" placeholder="tools/hello.js" spellcheck="false" />
+                  </div>
+                  <div class="pe-toolbar-actions">
+                    <input type="text" id="adminPluginCmd" class="pe-cmd" placeholder="command" title="Nama command untuk template" />
+                    <button class="btn btn-sm btn-ghost" type="button" id="adminPluginTpl">Template</button>
+                    <button class="btn btn-sm" type="button" id="adminPluginSave">Simpan</button>
+                    <button class="btn btn-sm btn-ghost pe-danger" type="button" id="adminPluginDelete">Hapus</button>
+                  </div>
                 </div>
-                <button class="btn btn-sm btn-ghost" type="button" id="adminPluginTpl">Isi template</button>
+                <div class="pe-meta" id="adminPluginMeta"></div>
+                <div class="pe-code-wrap">
+                  <textarea id="adminPluginSource" class="pe-code" spellcheck="false" wrap="off" placeholder="// source plugin…"></textarea>
+                </div>
+                <p class="pe-hint">Simpan menulis ke <code>plugins/</code> lalu hot-reload. Wrapper: <code>conn.sendSticker</code>, <code>sendAudio</code>, <code>sendAlbum</code>, <code>sendButton</code>.</p>
               </div>
-              <div class="field" style="margin-top:0.5rem">
-                <label>Source script</label>
-                <textarea id="adminPluginSource" rows="18" spellcheck="false" style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:0.78rem;line-height:1.45;tab-size:2"></textarea>
-              </div>
-              <div class="toolbar" style="margin-top:0.55rem;gap:0.4rem;flex-wrap:wrap">
-                <button class="btn btn-sm" type="button" id="adminPluginSave">Simpan &amp; reload</button>
-                <button class="btn btn-sm btn-ghost" type="button" id="adminPluginClose">Tutup editor</button>
-                <button class="btn btn-sm btn-ghost" type="button" id="adminPluginDelete" style="color:var(--red)">Hapus file</button>
-                <span id="adminPluginMeta" class="hint" style="margin-left:auto;font-size:0.78rem;color:var(--muted)"></span>
-              </div>
-            </div>
+            </section>
           </div>
         </div>
       `;
@@ -1970,6 +2054,7 @@
       renderAdminUsers(usersData.users || []);
       renderAdminSessions(sessionsData.sessions || []);
       setupAdminPluginEditor(pluginsData);
+      showAdminView(adminView || 'users');
 
       let searchTimer;
       $('#adminUserQ')?.addEventListener('input', (e) => {
@@ -2013,71 +2098,123 @@
       folderSel.value = 'tools';
     }
 
-    function renderList(plugins) {
+    let allPlugins = initial?.plugins || [];
+    let activeFile = '';
+
+    function renderList(plugins, filterQ) {
+      allPlugins = plugins || allPlugins;
       const el = $('#adminPluginList');
       if (!el) return;
-      if (!plugins?.length) {
-        el.innerHTML = '<div class="empty">Belum ada plugin di disk.</div>';
+      const q = String(filterQ ?? $('#adminPluginSearch')?.value ?? '')
+        .toLowerCase()
+        .trim();
+      let list = allPlugins;
+      if (q) {
+        list = list.filter((p) => {
+          const cmds = (p.commands || []).join(' ');
+          return (
+            String(p.file || '').toLowerCase().includes(q) ||
+            cmds.toLowerCase().includes(q) ||
+            String(p.folder || '').toLowerCase().includes(q)
+          );
+        });
+      }
+      if (!list.length) {
+        el.innerHTML = `<div class="pe-list-empty">${q ? 'Tidak ada hasil.' : 'Belum ada plugin.'}</div>`;
         return;
       }
       const byFolder = {};
-      for (const p of plugins) {
+      for (const p of list) {
         const f = p.folder || 'other';
         if (!byFolder[f]) byFolder[f] = [];
         byFolder[f].push(p);
       }
       let html = '';
       for (const f of Object.keys(byFolder).sort()) {
-        html += `<div class="plugin-folder open" style="margin-bottom:0.5rem">
-          <div class="plugin-folder-name" style="font-weight:700;margin-bottom:0.35rem">${escapeHtml(f)} <span class="hint">(${byFolder[f].length})</span></div>`;
-        for (const p of byFolder[f]) {
-          const cmds = (p.commands || []).map((c) => '.' + c).join('  ') || '—';
-          html += `<div class="card admin-plugin-card" data-file="${escapeAttr(p.file)}" style="padding:0.55rem 0.7rem;margin-bottom:0.35rem;cursor:pointer">
-            <div class="admin-user-top">
-              <div>
-                <div class="plugin-name">${escapeHtml(p.file)}${p.loaded ? '' : ' · <span style="color:var(--orange)">not loaded</span>'}${p.heavy ? ' · heavy' : ''}</div>
-                <div class="plugin-tags">${escapeHtml(cmds)}</div>
-              </div>
-              <button class="btn btn-sm btn-ghost" type="button" data-act="edit">Edit</button>
-            </div>
-          </div>`;
+        const items = byFolder[f].slice().sort((a, b) => String(a.file).localeCompare(String(b.file)));
+        html += `<div class="pe-folder-group">
+          <div class="pe-folder-label">${escapeHtml(f)} <span>${items.length}</span></div>`;
+        for (const p of items) {
+          const base = String(p.file || '').split('/').pop() || p.file;
+          const cmds = (p.commands || []).map((c) => '.' + c).join(' ') || '—';
+          const active = activeFile === p.file ? ' active' : '';
+          const badges = [
+            p.loaded ? '' : '<span class="pe-badge warn">not loaded</span>',
+            p.heavy ? '<span class="pe-badge">heavy</span>' : '',
+          ]
+            .filter(Boolean)
+            .join('');
+          html += `<button type="button" class="pe-item${active}" data-file="${escapeAttr(p.file)}">
+            <span class="pe-item-name">${escapeHtml(base)}</span>
+            <span class="pe-item-cmds">${escapeHtml(cmds)}</span>
+            ${badges ? `<span class="pe-item-badges">${badges}</span>` : ''}
+          </button>`;
         }
         html += '</div>';
       }
       el.innerHTML = html;
-      el.querySelectorAll('.admin-plugin-card').forEach((card) => {
-        const open = async () => {
+      el.querySelectorAll('.pe-item').forEach((btn) => {
+        btn.addEventListener('click', async () => {
           try {
-            const data = await API.adminPluginSource(card.dataset.file);
+            const data = await API.adminPluginSource(btn.dataset.file);
             openPluginEditor(data);
           } catch (e) {
             toast(e.message || 'Gagal baca source');
           }
-        };
-        card.addEventListener('click', (e) => {
-          if (e.target.closest('[data-act="edit"]') || e.currentTarget === card) open();
         });
       });
     }
 
     function openPluginEditor(data) {
-      const ed = $('#adminPluginEditor');
-      if (!ed) return;
-      ed.classList.remove('hidden');
+      activeFile = data.file || '';
+      $('#adminPluginEmpty')?.classList.add('hidden');
+      $('#adminPluginBody')?.classList.remove('hidden');
       $('#adminPluginPath').value = data.file || '';
       $('#adminPluginSource').value = data.source || '';
       const folder = (data.file || '').split('/')[0];
       if (folder && folderSel) folderSel.value = folder;
       const meta = $('#adminPluginMeta');
       if (meta) {
-        meta.textContent = data.loaded
-          ? `loaded · cmds: ${(data.commands || []).join(', ') || '—'}`
-          : 'file ada, belum ter-load';
+        const cmds = (data.commands || []).map((c) => '.' + c).join(' ') || '—';
+        meta.innerHTML = data.loaded
+          ? `<span class="pe-badge ok">loaded</span> <span>${escapeHtml(cmds)}</span>`
+          : `<span class="pe-badge warn">not loaded</span> <span>perbaiki syntax lalu simpan</span>`;
       }
-      ed.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      renderList(allPlugins);
+      const ta = $('#adminPluginSource');
+      if (ta) {
+        ta.focus();
+        // keep caret at top for large files
+        ta.scrollTop = 0;
+      }
     }
 
-    renderList(initial?.plugins || []);
+    function showEmptyEditor() {
+      activeFile = '';
+      $('#adminPluginEmpty')?.classList.remove('hidden');
+      $('#adminPluginBody')?.classList.add('hidden');
+      renderList(allPlugins);
+    }
+
+    renderList(allPlugins);
+
+    let searchTimer;
+    $('#adminPluginSearch')?.addEventListener('input', (e) => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => renderList(allPlugins, e.target.value), 120);
+    });
+
+    // Tab key inserts spaces in editor
+    $('#adminPluginSource')?.addEventListener('keydown', (e) => {
+      if (e.key !== 'Tab') return;
+      e.preventDefault();
+      const ta = e.target;
+      const start = ta.selectionStart;
+      const end = ta.selectionEnd;
+      const val = ta.value;
+      ta.value = val.slice(0, start) + '  ' + val.slice(end);
+      ta.selectionStart = ta.selectionEnd = start + 2;
+    });
 
     $('#adminPluginNew')?.addEventListener('click', async () => {
       const folder = folderSel?.value || 'tools';
@@ -2092,11 +2229,15 @@
 
     $('#adminPluginTpl')?.addEventListener('click', async () => {
       const folder = folderSel?.value || 'tools';
-      const cmd = ($('#adminPluginCmd')?.value || 'hello').trim() || 'hello';
+      const path = ($('#adminPluginPath')?.value || '').trim();
+      const fromPath = path.split('/').pop()?.replace(/\.js$/, '') || '';
+      const cmd = ($('#adminPluginCmd')?.value || fromPath || 'hello').trim() || 'hello';
       try {
         const tpl = await API.adminPluginTemplate({ folder, name: cmd, command: cmd });
-        $('#adminPluginPath').value = tpl.suggestedFile;
+        if (!$('#adminPluginPath').value) $('#adminPluginPath').value = tpl.suggestedFile;
         $('#adminPluginSource').value = tpl.source;
+        $('#adminPluginEmpty')?.classList.add('hidden');
+        $('#adminPluginBody')?.classList.remove('hidden');
         toast('Template diisi');
       } catch (e) {
         toast(e.message || 'Gagal template');
@@ -2107,19 +2248,23 @@
       const file = ($('#adminPluginPath')?.value || '').trim();
       const source = $('#adminPluginSource')?.value ?? '';
       if (!file) return toast('Isi path file (folder/nama.js)');
+      const btn = $('#adminPluginSave');
+      if (btn) btn.disabled = true;
       try {
         const res = await API.adminSavePluginSource(file, source);
-        toast((res.created ? 'Plugin dibuat · ' : 'Plugin diupdate · ') + res.file);
+        toast((res.created ? 'Dibuat · ' : 'Disimpan · ') + res.file);
         const list = await API.adminPlugins();
-        renderList(list.plugins || []);
         openPluginEditor({
           file: res.file,
           source,
           loaded: true,
           commands: res.commands,
         });
+        renderList(list.plugins || []);
       } catch (e) {
         toast(e.message || 'Save gagal');
+      } finally {
+        if (btn) btn.disabled = false;
       }
     });
 
@@ -2130,16 +2275,12 @@
       try {
         await API.adminDeletePluginSource(file);
         toast('Dihapus · ' + file);
-        $('#adminPluginEditor')?.classList.add('hidden');
         const list = await API.adminPlugins();
-        renderList(list.plugins || []);
+        allPlugins = list.plugins || [];
+        showEmptyEditor();
       } catch (e) {
         toast(e.message || 'Delete gagal');
       }
-    });
-
-    $('#adminPluginClose')?.addEventListener('click', () => {
-      $('#adminPluginEditor')?.classList.add('hidden');
     });
 
     $('#adminPluginReload')?.addEventListener('click', async () => {
@@ -2151,6 +2292,15 @@
       } catch (e) {
         toast(e.message || 'Reload gagal');
       }
+    });
+
+    // Sync folder select → path prefix when creating
+    folderSel?.addEventListener('change', () => {
+      const pathInput = $('#adminPluginPath');
+      if (!pathInput) return;
+      const cur = pathInput.value.trim();
+      const name = cur.includes('/') ? cur.split('/').pop() : cur || 'hello.js';
+      pathInput.value = `${folderSel.value}/${name.replace(/\.js$/i, '')}.js`.replace(/\.js\.js$/, '.js');
     });
   }
 

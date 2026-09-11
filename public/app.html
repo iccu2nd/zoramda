@@ -188,9 +188,12 @@
       <header class="dash-topbar">
         <a href="/dash" class="brand">botenv</a>
         <div class="dash-topbar-right">
-          <button class="icon-btn" id="menuBtn" type="button" aria-label="Menu">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
-          </button>
+          <div class="ctx-menu-wrap" id="ctxMenuWrap">
+            <button class="icon-btn" id="menuBtn" type="button" aria-label="Menu" aria-haspopup="true" aria-expanded="false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+            </button>
+            <div class="ctx-menu hidden" id="ctxMenu" role="menu"></div>
+          </div>
         </div>
       </header>
 
