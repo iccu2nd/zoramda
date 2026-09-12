@@ -38,6 +38,7 @@ const DEFAULTS = {
   premiumUsers: [],
   pluginResponses: {},
   plugins: {},
+  autoReplies: [],
   useLimit: false,
   defaultLimit: 10,
   premiumUnlimited: true,
@@ -51,6 +52,7 @@ const COLD_DEFAULTS = Object.freeze({
   ...DEFAULTS,
   plugins: Object.freeze({}),
   pluginResponses: Object.freeze({}),
+  autoReplies: Object.freeze([]),
   ownerNumbers: Object.freeze([]),
   bannedUsers: Object.freeze([]),
   premiumUsers: Object.freeze([]),
@@ -88,6 +90,7 @@ const EDITABLE_FIELDS = [
   'defaultLimit',
   'premiumUnlimited',
   'premiumDefaultLimit',
+  'autoReplies',
   'extra',
 ]
 
@@ -142,19 +145,53 @@ function cleanPartial(partial) {
     if (clean[b] !== undefined) clean[b] = Boolean(clean[b])
   }
 
+  if (clean.autoReplies !== undefined) {
+    clean.autoReplies = normalizeAutoReplies(clean.autoReplies)
+  }
+
   return clean
 }
 
-function normalizePermList(val, fallback = ['everyone']) {
+/** Max 50 rules; exact match (case-insensitive) on full message text. */
+function normalizeAutoReplies(raw) {
+  if (!Array.isArray(raw)) return []
+  const out = []
+  const seen = new Set()
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue
+    const trigger = String(item.trigger || '')
+      .trim()
+      .toLowerCase()
+      .slice(0, 200)
+    const reply = String(item.reply || '').trim().slice(0, 2000)
+    if (!trigger || !reply) continue
+    let scope = String(item.scope || 'all').toLowerCase()
+    if (scope !== 'group' && scope !== 'private') scope = 'all'
+    const key = `${scope}::${trigger}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push({ trigger, reply, scope })
+    if (out.length >= 50) break
+  }
+  return out
+}
+
+/**
+ * Empty permissions = public (siapa saja). Legacy "everyone" diabaikan.
+ */
+function normalizePermList(val, fallback = []) {
   let list = []
   if (Array.isArray(val)) list = val
   else if (typeof val === 'string' && val) list = [val]
   else if (val && typeof val === 'object' && Array.isArray(val.permissions)) list = val.permissions
   else if (val && typeof val === 'object' && typeof val.permission === 'string') list = [val.permission]
 
-  const cleaned = [...new Set(
-    list.map((p) => String(p).toLowerCase()).filter((p) => PERMISSIONS.includes(p))
-  )]
+  // pure "everyone" / empty → public
+  const lowered = list.map((p) => String(p).toLowerCase()).filter(Boolean)
+  if (!lowered.length || lowered.every((p) => p === 'everyone')) {
+    return []
+  }
+  const cleaned = [...new Set(lowered.filter((p) => p !== 'everyone' && PERMISSIONS.includes(p)))]
   return cleaned.length ? cleaned : [...fallback]
 }
 
@@ -173,7 +210,7 @@ function normalizePlugins(raw) {
     const limitCost = useLimit ? Math.max(0, parseInt(val.limitCost, 10) || 1) : 0
     out[key] = {
       enabled: val.enabled !== false,
-      permissions: normalizePermList(val.permissions ?? val.permission, ['everyone']),
+      permissions: normalizePermList(val.permissions ?? val.permission, []),
       commands: Array.isArray(val.commands)
         ? val.commands.map((c) => String(c).toLowerCase().trim()).filter(Boolean)
         : undefined,
@@ -214,7 +251,15 @@ function buildCustomCommandIndex(plugins) {
 }
 
 function toCache(doc) {
-  if (!doc) return { ...DEFAULTS, pluginResponses: {}, plugins: {}, _cmdIndex: new Map() }
+  if (!doc) {
+    return {
+      ...DEFAULTS,
+      pluginResponses: {},
+      plugins: {},
+      autoReplies: [],
+      _cmdIndex: new Map(),
+    }
+  }
 
   const next = { ...DEFAULTS }
   for (const key of EDITABLE_FIELDS) {
@@ -230,6 +275,7 @@ function toCache(doc) {
   next.pluginResponses =
     doc.pluginResponses && typeof doc.pluginResponses === 'object' ? doc.pluginResponses : {}
   next.plugins = normalizePlugins(doc.plugins)
+  next.autoReplies = normalizeAutoReplies(doc.autoReplies)
   next._cmdIndex = buildCustomCommandIndex(next.plugins)
   return next
 }
@@ -373,8 +419,8 @@ class ConfigService {
     return cfg.pluginResponses
   }
 
-  getPluginState(sessionId, pluginFile, defaultPermissions = ['everyone']) {
-    const defaults = normalizePermList(defaultPermissions, ['everyone'])
+  getPluginState(sessionId, pluginFile, defaultPermissions = []) {
+    const defaults = normalizePermList(defaultPermissions, [])
     const cfg = this.getCached(sessionId)
     const state = cfg.plugins && cfg.plugins[pluginFile]
     if (!state) {
@@ -389,7 +435,7 @@ class ConfigService {
     const useLimit = state.useLimit === true
     return {
       enabled: state.enabled !== false,
-      permissions: Array.isArray(state.permissions) && state.permissions.length
+      permissions: Array.isArray(state.permissions)
         ? normalizePermList(state.permissions, defaults)
         : defaults,
       commands:
@@ -446,19 +492,19 @@ class ConfigService {
               enabled: prev.enabled !== false,
               permissions: Array.isArray(prev.permissions)
                 ? [...prev.permissions]
-                : ['everyone'],
+                : [],
               commands: Array.isArray(prev.commands) ? [...prev.commands] : undefined,
               useLimit: prev.useLimit === true,
               limitCost: Math.max(0, parseInt(prev.limitCost, 10) || 0),
             }
-          : { enabled: true, permissions: ['everyone'], commands: undefined, useLimit: false, limitCost: 0 }
+          : { enabled: true, permissions: [], commands: undefined, useLimit: false, limitCost: 0 }
 
       if (val.enabled !== undefined) {
         cur.enabled = Boolean(val.enabled)
         changed = true
       }
       if (val.permissions !== undefined || val.permission !== undefined) {
-        cur.permissions = normalizePermList(val.permissions ?? val.permission, ['everyone'])
+        cur.permissions = normalizePermList(val.permissions ?? val.permission, [])
         changed = true
       }
       if (val.commands !== undefined) {

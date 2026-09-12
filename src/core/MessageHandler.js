@@ -30,7 +30,6 @@ import {
   releaseSessionSlot,
 } from './JobQueue.js'
 
-const PERM_EVERYONE = 'everyone'
 const PERM_GROUP = 'group'
 const PERM_PRIVATE = 'private'
 const PERM_ADMIN = 'admin'
@@ -146,13 +145,14 @@ export class MessageHandler {
     const cfg = configService.getCached(sessionId)
     const prefix = cfg.prefix || '.'
 
-    // Cheap pre-check: extract text early; skip non-commands before full parse
-    // (no session slot consumed for chat noise / stickers / non-prefix messages)
+    // Cheap pre-check: extract text early; skip noise before full parse
     const quickText = _quickText(raw)
     if (!quickText) return
-    if (!quickText.startsWith(prefix)) return
+    const isCmd = quickText.startsWith(prefix)
+    const autoList = Array.isArray(cfg.autoReplies) ? cfg.autoReplies : []
+    if (!isCmd && autoList.length === 0) return
 
-    // Only real command candidates take a concurrency slot
+    // Only candidates take a concurrency slot
     if (!tryAcquireSessionSlot(sessionId)) return
 
     const latency = new LatencyTracker(raw.key?.id, sessionId)
@@ -160,6 +160,35 @@ export class MessageHandler {
 
     try {
       latency.mark('handler_started')
+
+      // —— Auto-reply (tanpa prefix): match teks penuh, case-insensitive ——
+      if (!isCmd) {
+        const jid = raw.key?.remoteJid || ''
+        const isGroup = jid.endsWith('@g.us')
+        const textNorm = quickText.trim().toLowerCase()
+        let matched = null
+        for (let i = 0; i < autoList.length; i++) {
+          const rule = autoList[i]
+          if (!rule?.trigger || !rule?.reply) continue
+          if (rule.scope === 'group' && !isGroup) continue
+          if (rule.scope === 'private' && isGroup) continue
+          if (String(rule.trigger).toLowerCase() === textNorm) {
+            matched = rule
+            break
+          }
+        }
+        if (!matched) return
+        if (cfg.maintenanceMode) {
+          const owners = cfg.ownerNumbers || []
+          // non-owner check skipped on auto path for speed; still respect maintenance for all
+          await sock.sendMessage(jid, { text: cfg.maintenanceMessage || 'Bot sedang maintenance.' })
+          return
+        }
+        if (cfg.readMessages) sock.readMessages([raw.key]).catch(() => {})
+        if (cfg.sendTyping) sock.sendPresenceUpdate('composing', jid).catch(() => {})
+        await sock.sendMessage(jid, { text: matched.reply })
+        return
+      }
 
       const m = this._parseMessage(raw, sock, prefix, latency)
       if (!m || !m.command) return
@@ -208,7 +237,7 @@ export class MessageHandler {
           const state = configService.getPluginState(
             sessionId,
             p.file,
-            p.permissions || ['everyone']
+            p.permissions || []
           )
           if (state.enabled === false) continue
           // Custom command remap claimed this file for another name
@@ -380,8 +409,6 @@ export class MessageHandler {
 
   async _checkOnePermission(permission, m, sock, isOwner, metaBag, sessionId) {
     switch (permission) {
-      case PERM_EVERYONE:
-        return true
       case PERM_GROUP:
         return !!m.isGroup
       case PERM_PRIVATE:
@@ -428,8 +455,8 @@ export class MessageHandler {
   }
 
   async _checkPermissions(permissions, m, sock, isOwner, sessionId) {
-    const list = Array.isArray(permissions) ? permissions : [permissions || 'everyone']
-    const effective = list.filter((p) => p && p !== PERM_EVERYONE)
+    const list = Array.isArray(permissions) ? permissions : (permissions ? [permissions] : [])
+    const effective = list.filter((p) => p && p !== 'everyone')
     if (effective.length === 0) return { allowed: true }
 
     // Sync-only perms first (no I/O) — fail fast without waiting group metadata
@@ -481,7 +508,7 @@ export class MessageHandler {
   }
 
   async _runPlugin(plugin, m, sock, sessionId, userId, latency, isOwner, botCfg) {
-    const rawDefault = plugin.handler.permission ?? plugin.permission ?? 'everyone'
+    const rawDefault = plugin.handler.permission ?? plugin.permission ?? []
     const defaultPerms = Array.isArray(rawDefault)
       ? rawDefault.map((p) => String(p).toLowerCase())
       : [String(rawDefault).toLowerCase()]

@@ -4,8 +4,8 @@ import mongoose from 'mongoose'
  * Per-session bot settings.
  * One document per sessionId — Session A never shares state with Session B.
  */
+/** Restriction flags. Empty list = public (siapa saja, chat mana saja). */
 const PERMISSIONS = [
-  'everyone',
   'group',
   'private',
   'admin',
@@ -61,6 +61,21 @@ const sessionConfigSchema = new mongoose.Schema(
     bannedUsers: { type: [String], default: [] },
     premiumUsers: { type: [String], default: [] },
     pluginResponses: { type: mongoose.Schema.Types.Mixed, default: {} },
+
+    /**
+     * Custom auto-reply rules (tanpa prefix).
+     * { trigger, reply, scope: 'all'|'group'|'private' }
+     */
+    autoReplies: {
+      type: [
+        {
+          trigger: { type: String, default: '' },
+          reply: { type: String, default: '' },
+          scope: { type: String, enum: ['all', 'group', 'private'], default: 'all' },
+        },
+      ],
+      default: [],
+    },
 
     // Limit system — how many "uses" each WhatsApp user has for limited commands.
     useLimit: { type: Boolean, default: false },

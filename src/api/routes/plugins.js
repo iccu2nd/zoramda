@@ -30,7 +30,7 @@ export default function createPluginRoutes(sessionManager) {
         commands: p.commands,
         help: p.help,
         tags: p.tags,
-        defaultPermissions: p.permissions || ['everyone'],
+        defaultPermissions: p.permissions || [],
         hasResponses: !!(p.handler.responses && Object.keys(p.handler.responses).length),
       }))
       res.json({ plugins: out, permissions: PERMISSIONS })
@@ -54,7 +54,7 @@ export default function createPluginRoutes(sessionManager) {
 
       const plugins = sessionManager.pluginLoader.getAllPlugins()
       const out = plugins.map((p) => {
-        const defaultPerms = p.permissions || ['everyone']
+        const defaultPerms = p.permissions || []
         const state = configService.getPluginState(sessionId, p.file, defaultPerms)
         const defaults = p.handler.responses || {}
         const overrides = configService.getPluginResponses(sessionId, p.commands[0])
@@ -94,7 +94,7 @@ export default function createPluginRoutes(sessionManager) {
 
   /**
    * PATCH /api/plugins/session/:sessionId
-   * Body: { plugins: { "main/ping.js": { enabled: true, permission: "everyone" }, ... } }
+   * Body: { plugins: { "main/ping.js": { enabled: true, permissions: [] }, ... } }
    */
   router.patch('/session/:sessionId', async (req, res) => {
     try {

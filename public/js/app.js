@@ -1031,14 +1031,24 @@
         </div>
 
         <div class="config-tab-panel" data-panel="pesan" style="${activeTab === 'pesan' ? '' : 'display:none'}">
-          <div class="field"><label>pesan welcome</label><textarea data-k="welcomeMessage">${escapeHtml(config.welcomeMessage || '')}</textarea></div>
-          <div class="field"><label>pesan maintenance</label><textarea data-k="maintenanceMessage">${escapeHtml(config.maintenanceMessage || '')}</textarea></div>
-          <div class="field"><label>pesan khusus owner</label><textarea data-k="ownerOnlyMessage">${escapeHtml(config.ownerOnlyMessage || '')}</textarea></div>
-          <div class="field"><label>pesan khusus admin</label><textarea data-k="adminOnlyMessage">${escapeHtml(config.adminOnlyMessage || '')}</textarea></div>
-          <div class="field"><label>pesan khusus group</label><textarea data-k="groupOnlyMessage">${escapeHtml(config.groupOnlyMessage || '')}</textarea></div>
-          <div class="field"><label>pesan khusus private chat</label><textarea data-k="privateOnlyMessage">${escapeHtml(config.privateOnlyMessage || '')}</textarea></div>
-          <div class="field"><label>pesan khusus premium</label><textarea data-k="premiumOnlyMessage">${escapeHtml(config.premiumOnlyMessage || '')}</textarea></div>
-          <div class="field"><label>pesan khusus limit habis</label><textarea data-k="limitMessage">${escapeHtml(config.limitMessage || '')}</textarea></div>
+          <div class="ar-block">
+            <div class="ar-head">
+              <div>
+                <div class="ar-title">Auto-reply</div>
+                <p class="ar-hint">Tanpa prefix · cocok teks penuh</p>
+              </div>
+              <button type="button" class="btn btn-sm" id="arAddBtn">+ Tambah</button>
+            </div>
+            <div id="arList" class="ar-list"></div>
+          </div>
+          <div class="field"><label>welcome</label><textarea data-k="welcomeMessage" rows="2">${escapeHtml(config.welcomeMessage || '')}</textarea></div>
+          <div class="field"><label>maintenance</label><textarea data-k="maintenanceMessage" rows="2">${escapeHtml(config.maintenanceMessage || '')}</textarea></div>
+          <div class="field"><label>owner only</label><textarea data-k="ownerOnlyMessage" rows="2">${escapeHtml(config.ownerOnlyMessage || '')}</textarea></div>
+          <div class="field"><label>admin only</label><textarea data-k="adminOnlyMessage" rows="2">${escapeHtml(config.adminOnlyMessage || '')}</textarea></div>
+          <div class="field"><label>group only</label><textarea data-k="groupOnlyMessage" rows="2">${escapeHtml(config.groupOnlyMessage || '')}</textarea></div>
+          <div class="field"><label>private only</label><textarea data-k="privateOnlyMessage" rows="2">${escapeHtml(config.privateOnlyMessage || '')}</textarea></div>
+          <div class="field"><label>premium only</label><textarea data-k="premiumOnlyMessage" rows="2">${escapeHtml(config.premiumOnlyMessage || '')}</textarea></div>
+          <div class="field"><label>limit habis</label><textarea data-k="limitMessage" rows="2">${escapeHtml(config.limitMessage || '')}</textarea></div>
         </div>
 
         <div class="config-tab-panel" data-panel="system" style="${activeTab === 'system' ? '' : 'display:none'}">
@@ -1103,9 +1113,71 @@
           }
         });
       });
+      setupAutoReplyEditor(config.autoReplies || []);
     } catch (e) {
       box.innerHTML = `<p style="color:var(--red)">${escapeHtml(e.message)}</p>`;
     }
+  }
+
+  function setupAutoReplyEditor(rules) {
+    const list = $('#arList');
+    const addBtn = $('#arAddBtn');
+    if (!list) return;
+
+    function rowHtml(r = {}) {
+      const scope = r.scope === 'group' || r.scope === 'private' ? r.scope : 'all';
+      return `<div class="ar-row">
+        <input type="text" class="ar-trigger" placeholder="pesan" value="${escapeAttr(r.trigger || '')}" maxlength="200" />
+        <input type="text" class="ar-reply" placeholder="balasan" value="${escapeAttr(r.reply || '')}" maxlength="2000" />
+        <select class="ar-scope">
+          <option value="all"${scope === 'all' ? ' selected' : ''}>Semua</option>
+          <option value="group"${scope === 'group' ? ' selected' : ''}>Grup</option>
+          <option value="private"${scope === 'private' ? ' selected' : ''}>Private</option>
+        </select>
+        <button type="button" class="btn btn-sm btn-ghost ar-del" title="Hapus">×</button>
+      </div>`;
+    }
+
+    const initial = Array.isArray(rules) && rules.length ? rules : [];
+    list.innerHTML = initial.length
+      ? initial.map((r) => rowHtml(r)).join('')
+      : rowHtml();
+
+    list.addEventListener('click', (e) => {
+      const btn = e.target.closest('.ar-del');
+      if (!btn) return;
+      const row = btn.closest('.ar-row');
+      if (!row) return;
+      if (list.querySelectorAll('.ar-row').length <= 1) {
+        row.querySelector('.ar-trigger').value = '';
+        row.querySelector('.ar-reply').value = '';
+        row.querySelector('.ar-scope').value = 'all';
+        return;
+      }
+      row.remove();
+    });
+
+    addBtn?.addEventListener('click', () => {
+      if (list.querySelectorAll('.ar-row').length >= 50) {
+        toast('Maksimal 50 auto-reply');
+        return;
+      }
+      list.insertAdjacentHTML('beforeend', rowHtml());
+      list.lastElementChild?.querySelector('.ar-trigger')?.focus();
+    });
+  }
+
+  function collectAutoReplies() {
+    const rows = $$('#arList .ar-row');
+    const out = [];
+    rows.forEach((row) => {
+      const trigger = (row.querySelector('.ar-trigger')?.value || '').trim();
+      const reply = (row.querySelector('.ar-reply')?.value || '').trim();
+      const scope = row.querySelector('.ar-scope')?.value || 'all';
+      if (!trigger || !reply) return;
+      out.push({ trigger, reply, scope });
+    });
+    return out;
   }
 
   $('#saveConfigBtn').addEventListener('click', async () => {
@@ -1129,6 +1201,7 @@
         body[k] = el.value;
       }
     });
+    body.autoReplies = collectAutoReplies();
     try {
       await API.updateConfig(selectedConfigSession, body);
       toast('Settings saved');
@@ -1180,14 +1253,13 @@
         box.innerHTML = `<div class="empty">No plugins loaded.</div>`;
         return;
       }
-      const allPerms = permissions || ['everyone', 'group', 'private', 'admin', 'botadmin', 'owner'];
+      const allPerms = (permissions || ['group', 'private', 'admin', 'botadmin', 'owner', 'premium']).filter((p) => p !== 'everyone');
       const permLabels = {
-        everyone: 'Everyone',
-        group: 'Group Only',
-        private: 'Private Only',
-        admin: 'Admin Group',
-        botadmin: 'Bot Admin',
-        owner: 'Owner Only',
+        group: 'Group only',
+        private: 'Private only',
+        admin: 'Admin group',
+        botadmin: 'Bot admin',
+        owner: 'Owner only',
         premium: 'Premium',
       };
 
@@ -1228,8 +1300,8 @@
           const primary = (p.commands && p.commands[0]) || '';
           const baseName = String(p.file || '').split('/').pop() || p.file;
           const cmds = (p.commands || []).map((c) => '.' + c).join('  ');
-          const activePerms = new Set(p.permissions || p.defaultPermissions || ['everyone']);
-          const defaultPerms = p.defaultPermissions || ['everyone'];
+          const activePerms = new Set((p.permissions || p.defaultPermissions || []).filter((x) => x && x !== 'everyone'));
+          const defaultPerms = (p.defaultPermissions || []).filter((x) => x && x !== 'everyone');
           const defaultPermsAttr = escapeAttr(JSON.stringify(defaultPerms));
 
           const permToggles = allPerms
@@ -1280,7 +1352,7 @@
               <input type="number" min="0" data-act="limitCost" value="${escapeAttr(limitCostVal)}" />
             </div>
             <div class="perm-list">
-              <div class="perm-list-title">Permissions</div>
+              <div class="perm-list-title">Permissions <span style="font-weight:500;color:var(--muted);text-transform:none;letter-spacing:0">(kosong = semua orang)</span></div>
               ${permToggles}
             </div>
             ${responsesHtml}
@@ -1309,9 +1381,9 @@
       box.querySelectorAll('.plugin-card').forEach((card) => {
         const file = card.dataset.file;
         const command = card.dataset.command;
-        let defaults = ['everyone'];
+        let defaults = [];
         try {
-          defaults = JSON.parse(card.dataset.defaults || '["everyone"]');
+          defaults = JSON.parse(card.dataset.defaults || '[]');
         } catch (_) {}
 
         card.querySelectorAll('.switch').forEach((sw) => {
@@ -1333,7 +1405,7 @@
           const permissions = [...card.querySelectorAll('.switch[data-perm].on')].map(
             (el) => el.dataset.perm
           );
-          if (!permissions.length) permissions.push('everyone');
+          // kosong = public (siapa saja)
           const cmdInput = card.querySelector('[data-act="commands"]');
           const cmdRaw = (cmdInput?.value || '').trim();
           const commands = cmdRaw

@@ -96,7 +96,8 @@ export function getPluginTemplate({ folder = 'tools', name = 'hello', command = 
  *   handler.command    string | string[]
  *   handler.help       string | string[]
  *   handler.tags       string | string[]
- *   handler.permission 'everyone' | 'group' | 'private' | 'admin' | 'botadmin' | 'owner' | 'premium'
+ *   handler.permission  (opsional) 'group' | 'private' | 'admin' | 'botadmin' | 'owner' | 'premium'
+ *                      kosong / tidak di-set = public (siapa saja)
  *   handler.heavy      true → jalankan di heavyQueue (download/media/broadcast)
  *   handler.responses  { key: 'template {prefix} {botName}' }
  */
@@ -114,7 +115,7 @@ let handler = async (m, { conn, usedPrefix, command, args, text, isOwner, isPrem
 handler.help = ['${cmd}']
 handler.tags = ['${tag}']
 handler.command = ['${cmd}']
-handler.permission = 'everyone'
+// handler.permission = 'group' // kosong = public
 // handler.heavy = true
 handler.responses = {
   hello: 'Halo {name}! Bot *{botName}* siap membantu.',
@@ -236,14 +237,14 @@ export class PluginLoader {
       return null
     }
 
-    // Normalize permission to array (supports string or string[])
-    let permissions = ['everyone']
+    // Normalize permission to array. Empty = public (no restriction).
+    // Legacy "everyone" diabaikan.
+    let permissions = []
     if (handler.permission != null) {
       const raw = handler.permission
       permissions = (Array.isArray(raw) ? raw : [raw])
         .map((x) => String(x).toLowerCase())
-        .filter(Boolean)
-      if (!permissions.length) permissions = ['everyone']
+        .filter((x) => x && x !== 'everyone')
     }
 
     return {

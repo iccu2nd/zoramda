@@ -29,7 +29,6 @@ let handler = async (m, { conn, text, usedPrefix, command, config }) => {
 handler.help = ['brat <teks>']
 handler.tags = ['tools']
 handler.command = ['brat']
-handler.permission = 'everyone'
 handler.heavy = true
 
 export default handler

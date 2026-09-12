@@ -49,7 +49,6 @@ let handler = async (m, { conn, usedPrefix, command, config }) => {
 handler.help = ['sticker', 's (reply foto/video)']
 handler.tags = ['sticker']
 handler.command = ['s', 'sticker', 'stiker']
-handler.permission = 'everyone'
 handler.heavy = true
 
 export default handler

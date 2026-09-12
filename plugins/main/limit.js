@@ -22,6 +22,5 @@ let handler = async (m, { config, isOwner, isPremium, botConfig }) => {
 handler.help = ['limit']
 handler.tags = ['main']
 handler.command = ['limit', 'ceklimit']
-handler.permission = 'everyone'
 
 export default handler
