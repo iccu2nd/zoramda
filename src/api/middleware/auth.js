@@ -12,16 +12,27 @@ function safeEqual(a, b) {
   return crypto.timingSafeEqual(bufA, bufB)
 }
 
+function isAdminAccount(user) {
+  const email = String(user?.email || '')
+    .trim()
+    .toLowerCase()
+  const list = config.security.adminEmails || []
+  if (list.length) return !!email && list.includes(email)
+  return user?.role === 'admin'
+}
+
 function attachUser(user) {
   const effective = resolveEffectivePlan(user)
+  const isAdmin = isAdminAccount(user)
   return {
     userId: user.userId,
     username: user.username,
+    email: user.email || '',
     role: user.role,
-    isAdmin: user.role === 'admin',
+    isAdmin,
     plan: effective.id,
     planExpiresAt: user.planExpiresAt || null,
-    maxSessions: user.role === 'admin' ? Math.max(user.maxSessions || 15, 15) : effective.maxSessions,
+    maxSessions: isAdmin ? Math.max(user.maxSessions || 15, 15) : effective.maxSessions,
     features: effective.features || {},
   }
 }

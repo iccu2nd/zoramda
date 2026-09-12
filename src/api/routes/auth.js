@@ -25,18 +25,28 @@ function generateApiKey() {
   return `zb_${uuidv4().replace(/-/g, '')}${uuidv4().replace(/-/g, '').slice(0, 16)}`
 }
 
+function isAdminAccount(user) {
+  const email = String(user?.email || '')
+    .trim()
+    .toLowerCase()
+  const list = config.security?.adminEmails || []
+  if (list.length) return !!email && list.includes(email)
+  return user?.role === 'admin'
+}
+
 function publicUser(user) {
   const effective = resolveEffectivePlan(user)
+  const isAdmin = isAdminAccount(user)
   return {
     userId: user.userId,
     username: user.username,
     email: user.email || '',
     emailVerified: !!user.emailVerified,
     role: user.role,
-    isAdmin: user.role === 'admin',
+    isAdmin,
     plan: effective.id,
     planExpiresAt: user.planExpiresAt || null,
-    maxSessions: user.role === 'admin' ? user.maxSessions ?? 15 : effective.maxSessions,
+    maxSessions: isAdmin ? user.maxSessions ?? 15 : effective.maxSessions,
     features: effective.features || {},
     name: user.name || '',
   }

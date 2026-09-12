@@ -19,6 +19,11 @@ const config = {
     apiSecret: process.env.API_SECRET || 'dev-secret-change-me',
     jwtSecret: process.env.JWT_SECRET || 'dev-jwt-change-me',
     adminApiKey: process.env.ADMIN_API_KEY || 'dev-admin-key',
+    /** Comma-separated emails allowed to see / use admin panel. Empty = role:admin only. */
+    adminEmails: String(process.env.ADMIN_EMAILS || '')
+      .split(/[,;\s]+/)
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean),
   },
 
   email: {

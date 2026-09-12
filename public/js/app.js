@@ -193,9 +193,24 @@
     }
   }
 
+  function canSeeAdminPanel() {
+    return !!(currentUser && (currentUser.isAdmin || currentUser.role === 'admin'));
+  }
+
+  function updateAdminNav() {
+    const group = $('#navAdminGroup');
+    if (!group) return;
+    const show = canSeeAdminPanel();
+    group.classList.toggle('hidden', !show);
+    if (!show && currentPage === 'admin') {
+      activatePage('sessions');
+    }
+  }
+
   function showApp() {
     $('#loginView').classList.add('hidden');
     $('#appView').classList.remove('hidden');
+    updateAdminNav();
     // Restore page from URL so refresh tetap di fitur yang sama
     const path = location.pathname || '';
     if (path === '/login' || path === '/' || path === '/dash') {
@@ -206,8 +221,12 @@
     } else {
       const parsed = parseDashPath();
       if (parsed.page === 'admin') {
-        adminView = parsed.adminView || 'users';
-        activatePage('admin', { adminView, skipUrl: true });
+        if (!canSeeAdminPanel()) {
+          activatePage('sessions', { skipUrl: true });
+        } else {
+          adminView = parsed.adminView || 'users';
+          activatePage('admin', { adminView, skipUrl: true });
+        }
       } else if (parsed.page === 'config') {
         activatePage('config', { configTab: parsed.configTab || 'info', skipUrl: true });
       } else {
@@ -460,7 +479,8 @@
       return { page: 'admin', adminView: view };
     }
     if (a === 'config') {
-      const tab = b === 'pesan' || b === 'system' || b === 'info' ? b : 'info';
+      const tab =
+        b === 'pesan' || b === 'system' || b === 'info' || b === 'autoreply' ? b : 'info';
       return { page: 'config', configTab: tab };
     }
     if (PAGES.includes(a)) return { page: a };
@@ -1010,7 +1030,12 @@
         pendingConfigTab = null;
       }
       const activeTab = currentConfigTab || 'info';
-      const titleMap = { info: 'config', pesan: 'message', system: 'system' };
+      const titleMap = {
+        info: 'config',
+        pesan: 'message',
+        autoreply: 'autoreply',
+        system: 'system',
+      };
       const pageTitle = document.querySelector('#page-config .page-title');
       if (pageTitle) pageTitle.textContent = titleMap[activeTab] || 'config';
       box.innerHTML = `
@@ -1031,7 +1056,17 @@
         </div>
 
         <div class="config-tab-panel" data-panel="pesan" style="${activeTab === 'pesan' ? '' : 'display:none'}">
-          <div class="ar-block">
+          <div class="field"><label>welcome</label><textarea data-k="welcomeMessage" rows="2">${escapeHtml(config.welcomeMessage || '')}</textarea></div>
+          <div class="field"><label>maintenance</label><textarea data-k="maintenanceMessage" rows="2">${escapeHtml(config.maintenanceMessage || '')}</textarea></div>
+          <div class="field"><label>owner only</label><textarea data-k="ownerOnlyMessage" rows="2">${escapeHtml(config.ownerOnlyMessage || '')}</textarea></div>
+          <div class="field"><label>admin only</label><textarea data-k="adminOnlyMessage" rows="2">${escapeHtml(config.adminOnlyMessage || '')}</textarea></div>
+          <div class="field"><label>group only</label><textarea data-k="groupOnlyMessage" rows="2">${escapeHtml(config.groupOnlyMessage || '')}</textarea></div>
+          <div class="field"><label>private only</label><textarea data-k="privateOnlyMessage" rows="2">${escapeHtml(config.privateOnlyMessage || '')}</textarea></div>
+          <div class="field"><label>premium only</label><textarea data-k="premiumOnlyMessage" rows="2">${escapeHtml(config.premiumOnlyMessage || '')}</textarea></div>
+          <div class="field"><label>limit habis</label><textarea data-k="limitMessage" rows="2">${escapeHtml(config.limitMessage || '')}</textarea></div>
+        </div>
+        <div class="config-tab-panel" data-panel="autoreply" style="${activeTab === 'autoreply' ? '' : 'display:none'}">
+          <div class="ar-block" style="margin:0">
             <div class="ar-head">
               <div>
                 <div class="ar-title">Auto-reply</div>
@@ -1041,14 +1076,6 @@
             </div>
             <div id="arList" class="ar-list"></div>
           </div>
-          <div class="field"><label>welcome</label><textarea data-k="welcomeMessage" rows="2">${escapeHtml(config.welcomeMessage || '')}</textarea></div>
-          <div class="field"><label>maintenance</label><textarea data-k="maintenanceMessage" rows="2">${escapeHtml(config.maintenanceMessage || '')}</textarea></div>
-          <div class="field"><label>owner only</label><textarea data-k="ownerOnlyMessage" rows="2">${escapeHtml(config.ownerOnlyMessage || '')}</textarea></div>
-          <div class="field"><label>admin only</label><textarea data-k="adminOnlyMessage" rows="2">${escapeHtml(config.adminOnlyMessage || '')}</textarea></div>
-          <div class="field"><label>group only</label><textarea data-k="groupOnlyMessage" rows="2">${escapeHtml(config.groupOnlyMessage || '')}</textarea></div>
-          <div class="field"><label>private only</label><textarea data-k="privateOnlyMessage" rows="2">${escapeHtml(config.privateOnlyMessage || '')}</textarea></div>
-          <div class="field"><label>premium only</label><textarea data-k="premiumOnlyMessage" rows="2">${escapeHtml(config.premiumOnlyMessage || '')}</textarea></div>
-          <div class="field"><label>limit habis</label><textarea data-k="limitMessage" rows="2">${escapeHtml(config.limitMessage || '')}</textarea></div>
         </div>
 
         <div class="config-tab-panel" data-panel="system" style="${activeTab === 'system' ? '' : 'display:none'}">
@@ -2094,8 +2121,9 @@
     const box = $('#adminBox');
     if (!box) return;
 
-    if (!API.getAdminKey()) {
-      renderAdminGate(box);
+    // Hanya email di ADMIN_EMAILS (atau role admin jika env kosong)
+    if (!canSeeAdminPanel()) {
+      box.innerHTML = `<div class="empty">Admin panel tidak tersedia untuk akun ini.</div>`;
       return;
     }
 
@@ -2109,10 +2137,11 @@
       ]);
 
       const s = stats;
+      const showLock = !!API.getAdminKey();
       box.innerHTML = `
         <div class="toolbar" style="margin-bottom:0.75rem">
           <div class="spacer"></div>
-          <button class="btn btn-sm btn-ghost" type="button" id="adminLockBtn">Sign out admin</button>
+          ${showLock ? '<button class="btn btn-sm btn-ghost" type="button" id="adminLockBtn">Sign out admin key</button>' : ''}
         </div>
         <div class="admin-stats">
           <div class="admin-stat"><div class="admin-stat-val">${s.users?.total ?? 0}</div><div class="admin-stat-label">Users</div></div>
