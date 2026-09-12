@@ -196,10 +196,24 @@
   function showApp() {
     $('#loginView').classList.add('hidden');
     $('#appView').classList.remove('hidden');
-    if (location.pathname === '/login' || location.pathname === '/') {
-      try { history.replaceState(null, '', '/dash'); } catch (_) {}
+    // Restore page from URL so refresh tetap di fitur yang sama
+    const path = location.pathname || '';
+    if (path === '/login' || path === '/' || path === '/dash') {
+      try {
+        history.replaceState({ page: 'sessions' }, '', '/dash/sessions');
+      } catch (_) {}
+      activatePage('sessions', { skipUrl: true });
+    } else {
+      const parsed = parseDashPath();
+      if (parsed.page === 'admin') {
+        adminView = parsed.adminView || 'users';
+        activatePage('admin', { adminView, skipUrl: true });
+      } else if (parsed.page === 'config') {
+        activatePage('config', { configTab: parsed.configTab || 'info', skipUrl: true });
+      } else {
+        activatePage(parsed.page || 'sessions', { skipUrl: true });
+      }
     }
-    loadSessions();
     startPoll();
     maybeShowUpgradePrompt();
     updateVerifyBanner();
@@ -405,25 +419,117 @@
     toast('Berhasil keluar');
   });
 
-  /* ——— nav ——— */
+  /* ——— nav + URL endpoints (/dash/...) ——— */
   let currentPage = 'sessions';
   let adminView = 'users'; // users | bots | plugins
 
-  function activatePage(page) {
+  const PAGE_PATH = {
+    sessions: '/dash/sessions',
+    config: '/dash/config',
+    plugins: '/dash/plugins',
+    account: '/dash/account',
+    pricing: '/dash/pricing',
+    payment: '/dash/payment',
+    admin: '/dash/admin',
+  };
+
+  function pathFor(page, opts = {}) {
+    if (page === 'admin') {
+      const v = opts.adminView || adminView || 'users';
+      if (v === 'bots') return '/dash/admin/bots';
+      if (v === 'plugins') return '/dash/admin/plugins';
+      return '/dash/admin/users';
+    }
+    if (page === 'config' && opts.configTab) {
+      return `/dash/config/${opts.configTab}`;
+    }
+    return PAGE_PATH[page] || '/dash/sessions';
+  }
+
+  function parseDashPath() {
+    const raw = (location.pathname || '/dash').replace(/\/+$/, '') || '/dash';
+    // /dash or /dash/sessions
+    if (raw === '/dash') return { page: 'sessions' };
+    const m = raw.match(/^\/dash(?:\/([^/]+))?(?:\/([^/]+))?$/);
+    if (!m) return { page: 'sessions' };
+    const a = m[1];
+    const b = m[2];
+    if (!a) return { page: 'sessions' };
+    if (a === 'admin') {
+      const view = b === 'bots' || b === 'plugins' || b === 'users' ? b : 'users';
+      return { page: 'admin', adminView: view };
+    }
+    if (a === 'config') {
+      const tab = b === 'pesan' || b === 'system' || b === 'info' ? b : 'info';
+      return { page: 'config', configTab: tab };
+    }
+    if (PAGES.includes(a)) return { page: a };
+    return { page: 'sessions' };
+  }
+
+  function syncUrl(page, opts = {}, replace = false) {
+    const next = pathFor(page, opts);
+    if (location.pathname === next) return;
+    try {
+      if (replace) history.replaceState({ page, ...opts }, '', next);
+      else history.pushState({ page, ...opts }, '', next);
+    } catch (_) {}
+  }
+
+  function activatePage(page, opts = {}) {
+    const skipUrl = !!opts.skipUrl;
+    const replaceUrl = !!opts.replaceUrl;
     currentPage = page || 'sessions';
-    closeAdminMenu();
+    if (page === 'admin' && opts.adminView) adminView = opts.adminView;
+    if (page === 'config' && opts.configTab) pendingConfigTab = opts.configTab;
+
     $$('.side-link[data-page]').forEach((b) => b.classList.remove('active'));
     $$('.side-sublink').forEach((b) => b.classList.remove('active'));
-    $('#navBotSettings')?.classList.remove('active');
-    const link = document.querySelector('.side-link[data-page="' + page + '"]');
-    if (link) link.classList.add('active');
+    $('#navBotSettings')?.classList.remove('active', 'expanded');
+    $('#navAdmin')?.classList.remove('active', 'expanded');
+    $('#submenuBotSettings')?.classList.remove('open');
+    $('#submenuAdmin')?.classList.remove('open');
+
+    const topLink = document.querySelector(`.side-link[data-page="${page}"]`);
+    if (topLink) topLink.classList.add('active');
+
     if (page === 'config' || page === 'plugins') {
-      $('#navBotSettings')?.classList.add('active');
+      $('#navBotSettings')?.classList.add('active', 'expanded');
+      $('#submenuBotSettings')?.classList.add('open');
+      if (page === 'plugins') {
+        document.querySelector('.side-sublink[data-page="plugins"]')?.classList.add('active');
+      } else {
+        const tab = pendingConfigTab || 'info';
+        document
+          .querySelector(`.side-sublink[data-page="config"][data-config-tab="${tab}"]`)
+          ?.classList.add('active');
+      }
     }
+
+    if (page === 'admin') {
+      $('#navAdmin')?.classList.add('active', 'expanded');
+      $('#submenuAdmin')?.classList.add('open');
+      document
+        .querySelector(`.side-sublink[data-page="admin"][data-admin-view="${adminView}"]`)
+        ?.classList.add('active');
+    }
+
     PAGES.forEach((p) => {
       const el = $('#page-' + p);
       if (el) el.classList.toggle('hidden', p !== page);
     });
+
+    if (!skipUrl) {
+      syncUrl(
+        page,
+        {
+          adminView: page === 'admin' ? adminView : undefined,
+          configTab: page === 'config' ? pendingConfigTab || 'info' : undefined,
+        },
+        replaceUrl
+      );
+    }
+
     if (page === 'config') loadConfig();
     if (page === 'sessions') loadSessions();
     if (page === 'plugins') loadPlugins();
@@ -434,81 +540,7 @@
     if (page === 'admin') loadAdmin();
   }
 
-  $$('.side-link[data-page]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      activatePage(btn.dataset.page);
-      btn.classList.add('active');
-      closeSidebar();
-    });
-  });
-
-  /* Bot Settings submenu: parent expands/collapses, children navigate to
-     the config page and pick a tab (config / message / system) */
-  $('#navBotSettings')?.addEventListener('click', () => {
-    const submenu = $('#submenuBotSettings');
-    if (!submenu) return;
-    const isOpen = submenu.classList.toggle('open');
-    $('#navBotSettings').classList.toggle('expanded', isOpen);
-  });
-
-  $$('.side-sublink[data-page]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      pendingConfigTab = btn.dataset.configTab || null;
-      activatePage(btn.dataset.page);
-      btn.classList.add('active');
-      $('#navBotSettings')?.classList.add('active');
-      closeSidebar();
-    });
-  });
-
-  function openSidebar() {
-    closeAdminMenu();
-    $('#sidebar').classList.add('open');
-    $('#sideBackdrop').classList.add('show');
-  }
-  function closeSidebar() {
-    $('#sidebar').classList.remove('open');
-    $('#sideBackdrop').classList.remove('show');
-  }
-
-  /* Admin hamburger: only on admin page after key is saved */
-  function closeAdminMenu() {
-    $('#ctxMenu')?.classList.add('hidden');
-    $('#menuBtn')?.setAttribute('aria-expanded', 'false');
-  }
-
-  function openAdminMenu() {
-    const menu = $('#ctxMenu');
-    if (!menu) return;
-    menu.innerHTML = [
-      { label: 'Users', act: 'users' },
-      { label: 'Bots', act: 'bots' },
-      { label: 'Plugins', act: 'plugins' },
-      { sep: true },
-      { label: 'Back dashboard', act: 'dashboard' },
-    ]
-      .map((it) =>
-        it.sep
-          ? '<div class="ctx-menu-sep"></div>'
-          : `<button type="button" class="ctx-menu-item" data-admin-act="${it.act}"><span>${it.label}</span></button>`
-      )
-      .join('');
-    menu.querySelectorAll('[data-admin-act]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const act = btn.dataset.adminAct;
-        closeAdminMenu();
-        if (act === 'dashboard') {
-          activatePage('sessions');
-          return;
-        }
-        showAdminView(act === 'bots' ? 'bots' : act);
-      });
-    });
-    menu.classList.remove('hidden');
-    $('#menuBtn')?.setAttribute('aria-expanded', 'true');
-  }
-
-  function showAdminView(view) {
+  function showAdminView(view, opts = {}) {
     adminView = view || 'users';
     const map = {
       users: '#adminPanelUsers',
@@ -525,29 +557,74 @@
       else if (adminView === 'bots') sub.textContent = 'Bots yang konek';
       else if (adminView === 'plugins') sub.textContent = 'Plugins — edit / tambah script';
     }
+    // highlight sidebar
+    $$('.side-sublink[data-page="admin"]').forEach((b) =>
+      b.classList.toggle('active', b.dataset.adminView === adminView)
+    );
+    if (!opts.skipUrl) {
+      syncUrl('admin', { adminView }, !!opts.replaceUrl);
+    }
   }
 
-  $('#menuBtn')?.addEventListener('click', (e) => {
-    e.stopPropagation();
-    // Hanya di halaman admin + sudah login admin key → menu khusus
-    if (currentPage === 'admin' && API.getAdminKey()) {
-      const menu = $('#ctxMenu');
-      if (menu && !menu.classList.contains('hidden')) closeAdminMenu();
-      else openAdminMenu();
-      return;
+  $$('.side-link[data-page]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      activatePage(btn.dataset.page);
+      closeSidebar();
+    });
+  });
+
+  $('#navBotSettings')?.addEventListener('click', () => {
+    const submenu = $('#submenuBotSettings');
+    if (!submenu) return;
+    const isOpen = submenu.classList.toggle('open');
+    $('#navBotSettings').classList.toggle('expanded', isOpen);
+  });
+
+  $('#navAdmin')?.addEventListener('click', () => {
+    const submenu = $('#submenuAdmin');
+    if (!submenu) return;
+    const isOpen = submenu.classList.toggle('open');
+    $('#navAdmin').classList.toggle('expanded', isOpen);
+  });
+
+  // Bind all sublinks (config + admin + plugins)
+  document.querySelectorAll('.side-sublink[data-page]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const page = btn.dataset.page;
+      if (page === 'admin') {
+        activatePage('admin', { adminView: btn.dataset.adminView || 'users' });
+      } else if (page === 'config') {
+        pendingConfigTab = btn.dataset.configTab || 'info';
+        activatePage('config', { configTab: pendingConfigTab });
+      } else {
+        activatePage(page);
+      }
+      closeSidebar();
+    });
+  });
+
+  function openSidebar() {
+    $('#sidebar').classList.add('open');
+    $('#sideBackdrop').classList.add('show');
+  }
+  function closeSidebar() {
+    $('#sidebar').classList.remove('open');
+    $('#sideBackdrop').classList.remove('show');
+  }
+
+  $('#menuBtn')?.addEventListener('click', openSidebar);
+  $('#sideBackdrop')?.addEventListener('click', closeSidebar);
+
+  window.addEventListener('popstate', () => {
+    const parsed = parseDashPath();
+    if (parsed.page === 'admin') {
+      adminView = parsed.adminView || 'users';
+      activatePage('admin', { adminView, skipUrl: true });
+    } else if (parsed.page === 'config') {
+      activatePage('config', { configTab: parsed.configTab || 'info', skipUrl: true });
+    } else {
+      activatePage(parsed.page, { skipUrl: true });
     }
-    openSidebar();
-  });
-  $('#sideBackdrop')?.addEventListener('click', () => {
-    closeSidebar();
-    closeAdminMenu();
-  });
-  document.addEventListener('click', (e) => {
-    const wrap = $('#ctxMenuWrap');
-    if (wrap && !wrap.contains(e.target)) closeAdminMenu();
-  });
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeAdminMenu();
   });
 
   /* ——— sessions ——— */
@@ -1715,24 +1792,15 @@
             )}</div>
           </div>
         </div>
-        <div class="pay-meta">
-          <div class="pay-meta-row">
-            <span class="pay-meta-label">ID transaksi</span>
-            <code class="pay-meta-value allow-select">${escapeHtml(payment.trxId)}</code>
-          </div>
-          <div class="pay-meta-row">
-            <span class="pay-meta-label">Nominal</span>
-            <strong class="pay-meta-value">${formatRp(payment.totalAmount || payment.amount)}</strong>
-          </div>
-          <div class="pay-meta-row">
-            <span class="pay-meta-label">Berlaku hingga</span>
-            <strong class="pay-meta-value">${formatWib(payment.expiredAt)}</strong>
-          </div>
+        <div class="pay-amount-hero">
+          <div class="pay-amount-label">Total bayar</div>
+          <div class="pay-amount-value">${formatRp(payment.totalAmount || payment.amount)}</div>
+          ${payment.expiredAt ? `<div class="pay-amount-exp">Berlaku hingga ${formatWib(payment.expiredAt)}</div>` : ''}
         </div>
         ${canPay ? `<div class="pay-countdown" id="payCountdown">Berakhir dalam --:--</div>` : ''}
         ${canPay ? qrBlock : ''}
-        <p class="pay-note">Bayar hanya via QRIS. Setelah transfer, tekan <strong>Cek Status</strong> — status tidak dicek otomatis.</p>
-        <div class="toolbar" style="gap:0.5rem;flex-wrap:wrap;margin-top:0.15rem">
+        <p class="pay-note">Bayar hanya via QRIS. Setelah transfer, tekan <strong>Cek Status</strong>.</p>
+        <div class="toolbar" style="gap:0.5rem;flex-wrap:wrap;margin-top:0.15rem;justify-content:center">
           ${
             canPay
               ? `<button type="button" class="btn" id="checkPayBtn">Cek Status</button>`
@@ -2054,7 +2122,7 @@
       renderAdminUsers(usersData.users || []);
       renderAdminSessions(sessionsData.sessions || []);
       setupAdminPluginEditor(pluginsData);
-      showAdminView(adminView || 'users');
+      showAdminView(adminView || 'users', { skipUrl: true });
 
       let searchTimer;
       $('#adminUserQ')?.addEventListener('input', (e) => {
