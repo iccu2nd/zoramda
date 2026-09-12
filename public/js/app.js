@@ -1066,13 +1066,10 @@
           <div class="field"><label>limit habis</label><textarea data-k="limitMessage" rows="2">${escapeHtml(config.limitMessage || '')}</textarea></div>
         </div>
         <div class="config-tab-panel" data-panel="autoreply" style="${activeTab === 'autoreply' ? '' : 'display:none'}">
-          <div class="ar-block" style="margin:0">
-            <div class="ar-head">
-              <div>
-                <div class="ar-title">Auto-reply</div>
-                <p class="ar-hint">Tanpa prefix · cocok teks penuh</p>
-              </div>
-              <button type="button" class="btn btn-sm" id="arAddBtn">+ Tambah</button>
+          <div class="ar-wrap">
+            <div class="ar-toolbar">
+              <p class="ar-lead">User ketik teks → bot balas otomatis (tanpa prefix)</p>
+              <button type="button" class="btn btn-sm" id="arAddBtn">+ Aturan</button>
             </div>
             <div id="arList" class="ar-list"></div>
           </div>
@@ -1151,56 +1148,127 @@
     const addBtn = $('#arAddBtn');
     if (!list) return;
 
-    function rowHtml(r = {}) {
+    const SCOPE_OPTS = [
+      { value: 'all', label: 'Semua chat' },
+      { value: 'group', label: 'Grup saja' },
+      { value: 'private', label: 'Private saja' },
+    ];
+
+    function scopeLabel(v) {
+      return SCOPE_OPTS.find((o) => o.value === v)?.label || 'Semua chat';
+    }
+
+    function cardHtml(r = {}) {
       const scope = r.scope === 'group' || r.scope === 'private' ? r.scope : 'all';
-      return `<div class="ar-row">
-        <input type="text" class="ar-trigger" placeholder="pesan" value="${escapeAttr(r.trigger || '')}" maxlength="200" />
-        <input type="text" class="ar-reply" placeholder="balasan" value="${escapeAttr(r.reply || '')}" maxlength="2000" />
-        <select class="ar-scope">
-          <option value="all"${scope === 'all' ? ' selected' : ''}>Semua</option>
-          <option value="group"${scope === 'group' ? ' selected' : ''}>Grup</option>
-          <option value="private"${scope === 'private' ? ' selected' : ''}>Private</option>
-        </select>
-        <button type="button" class="btn btn-sm btn-ghost ar-del" title="Hapus">×</button>
+      const opts = SCOPE_OPTS.map(
+        (o) =>
+          `<button type="button" class="cdd-option${o.value === scope ? ' active' : ''}" data-value="${o.value}" role="option">${o.label}</button>`
+      ).join('');
+      return `<div class="ar-card" data-scope="${escapeAttr(scope)}">
+        <div class="ar-card-top">
+          <div class="cdd" data-cdd>
+            <button type="button" class="cdd-btn" aria-haspopup="listbox">
+              <span class="cdd-label">${escapeHtml(scopeLabel(scope))}</span>
+              <svg class="cdd-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <div class="cdd-menu hidden" role="listbox">${opts}</div>
+          </div>
+          <button type="button" class="ar-del" title="Hapus" aria-label="Hapus">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="ar-fields">
+          <div class="ar-field">
+            <label>User ketik</label>
+            <input type="text" class="ar-trigger" placeholder="contoh: halo" value="${escapeAttr(r.trigger || '')}" maxlength="200" />
+          </div>
+          <div class="ar-field">
+            <label>Bot balas</label>
+            <input type="text" class="ar-reply" placeholder="contoh: hai, ada perlu apa?" value="${escapeAttr(r.reply || '')}" maxlength="2000" />
+          </div>
+        </div>
       </div>`;
     }
 
-    const initial = Array.isArray(rules) && rules.length ? rules : [];
-    list.innerHTML = initial.length
-      ? initial.map((r) => rowHtml(r)).join('')
-      : rowHtml();
+    const initial = Array.isArray(rules) && rules.length ? rules : [{}];
+    list.innerHTML = initial.map((r) => cardHtml(r)).join('');
+
+    function closeAllCdd(except) {
+      list.querySelectorAll('[data-cdd]').forEach((el) => {
+        if (except && el === except) return;
+        el.classList.remove('open');
+        el.querySelector('.cdd-menu')?.classList.add('hidden');
+      });
+    }
 
     list.addEventListener('click', (e) => {
-      const btn = e.target.closest('.ar-del');
-      if (!btn) return;
-      const row = btn.closest('.ar-row');
-      if (!row) return;
-      if (list.querySelectorAll('.ar-row').length <= 1) {
-        row.querySelector('.ar-trigger').value = '';
-        row.querySelector('.ar-reply').value = '';
-        row.querySelector('.ar-scope').value = 'all';
+      const del = e.target.closest('.ar-del');
+      if (del) {
+        const card = del.closest('.ar-card');
+        if (!card) return;
+        if (list.querySelectorAll('.ar-card').length <= 1) {
+          card.querySelector('.ar-trigger').value = '';
+          card.querySelector('.ar-reply').value = '';
+          card.dataset.scope = 'all';
+          const lab = card.querySelector('.cdd-label');
+          if (lab) lab.textContent = scopeLabel('all');
+          card.querySelectorAll('.cdd-option').forEach((o) => {
+            o.classList.toggle('active', o.dataset.value === 'all');
+          });
+          return;
+        }
+        card.remove();
         return;
       }
-      row.remove();
+
+      const btn = e.target.closest('.cdd-btn');
+      if (btn) {
+        e.stopPropagation();
+        const cdd = btn.closest('[data-cdd]');
+        const open = cdd.classList.contains('open');
+        closeAllCdd();
+        if (!open) {
+          cdd.classList.add('open');
+          cdd.querySelector('.cdd-menu')?.classList.remove('hidden');
+        }
+        return;
+      }
+
+      const opt = e.target.closest('.cdd-option');
+      if (opt) {
+        e.stopPropagation();
+        const cdd = opt.closest('[data-cdd]');
+        const card = opt.closest('.ar-card');
+        const val = opt.dataset.value || 'all';
+        if (card) card.dataset.scope = val;
+        const lab = cdd.querySelector('.cdd-label');
+        if (lab) lab.textContent = scopeLabel(val);
+        cdd.querySelectorAll('.cdd-option').forEach((o) => {
+          o.classList.toggle('active', o === opt);
+        });
+        closeAllCdd();
+      }
     });
 
+    document.addEventListener('click', () => closeAllCdd());
+
     addBtn?.addEventListener('click', () => {
-      if (list.querySelectorAll('.ar-row').length >= 50) {
-        toast('Maksimal 50 auto-reply');
+      if (list.querySelectorAll('.ar-card').length >= 50) {
+        toast('Maksimal 50 aturan');
         return;
       }
-      list.insertAdjacentHTML('beforeend', rowHtml());
+      list.insertAdjacentHTML('beforeend', cardHtml());
       list.lastElementChild?.querySelector('.ar-trigger')?.focus();
     });
   }
 
   function collectAutoReplies() {
-    const rows = $$('#arList .ar-row');
+    const cards = $$('#arList .ar-card');
     const out = [];
-    rows.forEach((row) => {
-      const trigger = (row.querySelector('.ar-trigger')?.value || '').trim();
-      const reply = (row.querySelector('.ar-reply')?.value || '').trim();
-      const scope = row.querySelector('.ar-scope')?.value || 'all';
+    cards.forEach((card) => {
+      const trigger = (card.querySelector('.ar-trigger')?.value || '').trim();
+      const reply = (card.querySelector('.ar-reply')?.value || '').trim();
+      const scope = card.dataset.scope || 'all';
       if (!trigger || !reply) return;
       out.push({ trigger, reply, scope });
     });
