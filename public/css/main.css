@@ -3032,55 +3032,48 @@ code::-moz-selection,
 }
 
 /* Auto-reply + custom dropdown */
-.ar-wrap { margin: 0; }
+.ar-wrap { margin: 0; max-width: 560px; }
 .ar-toolbar {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 0.75rem;
-  margin-bottom: 0.85rem;
+  margin-bottom: 1rem;
 }
 .ar-lead {
   margin: 0;
-  font-size: 0.84rem;
-  font-weight: 550;
+  font-size: 0.88rem;
+  font-weight: 500;
   color: var(--muted);
-  line-height: 1.4;
+  line-height: 1.45;
 }
 .ar-list {
   display: flex;
   flex-direction: column;
-  gap: 0.65rem;
+  gap: 0.75rem;
 }
 .ar-card {
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--card);
-  padding: 0.85rem 0.9rem;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-.ar-card:focus-within {
-  border-color: color-mix(in srgb, var(--green) 35%, var(--border));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 12%, transparent);
+  padding: 1rem;
 }
 .ar-card-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  margin-bottom: 0.7rem;
+  margin-bottom: 0.85rem;
 }
 .ar-fields {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.65rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
 }
 .ar-field label {
   display: block;
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+  font-size: 0.82rem;
+  font-weight: 600;
   color: var(--muted);
   margin-bottom: 0.3rem;
 }
@@ -3088,8 +3081,8 @@ code::-moz-selection,
   width: 100%;
   box-sizing: border-box;
   font: inherit;
-  font-size: 0.9rem;
-  padding: 0.55rem 0.7rem;
+  font-size: 0.92rem;
+  padding: 0.55rem 0.75rem;
   border-radius: 10px;
   border: 1px solid var(--border);
   background: var(--bg, var(--card));
@@ -3112,44 +3105,38 @@ code::-moz-selection,
   cursor: pointer;
   flex-shrink: 0;
 }
-.ar-del svg { width: 16px; height: 16px; }
+.ar-del svg { width: 15px; height: 15px; }
 .ar-del:hover {
   color: var(--red);
   background: color-mix(in srgb, var(--red) 10%, transparent);
 }
 
-/* Custom dropdown */
-.cdd {
-  position: relative;
-  z-index: 2;
-}
+.cdd { position: relative; z-index: 2; }
 .cdd.open { z-index: 20; }
 .cdd-btn {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
   font: inherit;
-  font-size: 0.82rem;
-  font-weight: 650;
-  padding: 0.4rem 0.65rem;
-  border-radius: 999px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  padding: 0.4rem 0.7rem;
+  border-radius: 10px;
   border: 1px solid var(--border);
-  background: var(--chip, var(--bg));
+  background: var(--bg, var(--card));
   color: var(--text);
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease;
 }
 .cdd-btn:hover {
-  border-color: color-mix(in srgb, var(--text) 25%, var(--border));
+  border-color: color-mix(in srgb, var(--text) 22%, var(--border));
 }
 .cdd.open .cdd-btn {
   border-color: color-mix(in srgb, var(--green) 40%, var(--border));
-  background: color-mix(in srgb, var(--green) 8%, var(--card));
 }
 .cdd-caret {
   width: 14px;
   height: 14px;
-  opacity: 0.7;
+  opacity: 0.65;
   transition: transform 0.2s ease;
 }
 .cdd.open .cdd-caret { transform: rotate(180deg); }
@@ -3157,12 +3144,12 @@ code::-moz-selection,
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
-  min-width: 11rem;
+  min-width: 10.5rem;
   padding: 0.3rem;
   border-radius: 12px;
   border: 1px solid var(--border);
   background: var(--card);
-  box-shadow: 0 12px 32px color-mix(in srgb, #000 14%, transparent);
+  box-shadow: 0 12px 28px color-mix(in srgb, #000 12%, transparent);
 }
 .cdd-menu.hidden { display: none !important; }
 .cdd-option {
@@ -3170,23 +3157,18 @@ code::-moz-selection,
   width: 100%;
   text-align: left;
   font: inherit;
-  font-size: 0.84rem;
-  font-weight: 600;
-  padding: 0.5rem 0.65rem;
+  font-size: 0.86rem;
+  font-weight: 550;
+  padding: 0.48rem 0.65rem;
   border: none;
   border-radius: 8px;
   background: transparent;
   color: var(--text);
   cursor: pointer;
 }
-.cdd-option:hover {
-  background: var(--chip);
-}
+.cdd-option:hover { background: var(--chip); }
 .cdd-option.active {
   background: color-mix(in srgb, var(--green) 12%, var(--card));
   color: var(--green);
-}
-@media (max-width: 640px) {
-  .ar-fields { grid-template-columns: 1fr; }
-  .ar-toolbar { flex-wrap: wrap; }
+  font-weight: 650;
 }

@@ -1068,8 +1068,8 @@
         <div class="config-tab-panel" data-panel="autoreply" style="${activeTab === 'autoreply' ? '' : 'display:none'}">
           <div class="ar-wrap">
             <div class="ar-toolbar">
-              <p class="ar-lead">User ketik teks → bot balas otomatis (tanpa prefix)</p>
-              <button type="button" class="btn btn-sm" id="arAddBtn">+ Aturan</button>
+              <p class="ar-lead">Saat user mengirim teks ini, bot membalas otomatis (tanpa prefix).</p>
+              <button type="button" class="btn btn-sm" id="arAddBtn">Tambah</button>
             </div>
             <div id="arList" class="ar-list"></div>
           </div>
@@ -1150,8 +1150,8 @@
 
     const SCOPE_OPTS = [
       { value: 'all', label: 'Semua chat' },
-      { value: 'group', label: 'Grup saja' },
-      { value: 'private', label: 'Private saja' },
+      { value: 'group', label: 'Hanya grup' },
+      { value: 'private', label: 'Hanya private' },
     ];
 
     function scopeLabel(v) {
@@ -1179,12 +1179,12 @@
         </div>
         <div class="ar-fields">
           <div class="ar-field">
-            <label>User ketik</label>
-            <input type="text" class="ar-trigger" placeholder="contoh: halo" value="${escapeAttr(r.trigger || '')}" maxlength="200" />
+            <label>Pesan masuk</label>
+            <input type="text" class="ar-trigger" placeholder="halo" value="${escapeAttr(r.trigger || '')}" maxlength="200" />
           </div>
           <div class="ar-field">
-            <label>Bot balas</label>
-            <input type="text" class="ar-reply" placeholder="contoh: hai, ada perlu apa?" value="${escapeAttr(r.reply || '')}" maxlength="2000" />
+            <label>Balasan bot</label>
+            <input type="text" class="ar-reply" placeholder="hai, ada perlu apa?" value="${escapeAttr(r.reply || '')}" maxlength="2000" />
           </div>
         </div>
       </div>`;
