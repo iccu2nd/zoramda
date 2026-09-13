@@ -37,14 +37,16 @@
     // force reflow then show
     requestAnimationFrame(() => el.classList.add('show'));
 
-    const duration = type === 'error' ? 3800 : 2800;
+    const duration = type === 'error' ? 3600 : type === 'warning' ? 3000 : 2600;
+    const bar = el.querySelector('.toast-progress');
+    if (bar) bar.style.animationDuration = duration + 'ms';
     let closed = false;
     const close = () => {
       if (closed) return;
       closed = true;
       el.classList.remove('show');
       el.classList.add('hide');
-      setTimeout(() => el.remove(), 320);
+      setTimeout(() => el.remove(), 260);
     };
     el.querySelector('.toast-close')?.addEventListener('click', close);
     setTimeout(close, duration);

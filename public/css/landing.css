@@ -17,7 +17,7 @@ html { scroll-behavior: smooth; }
   width: min(90vw, 720px);
   height: min(70vw, 420px);
   transform: translateX(-50%);
-  background: radial-gradient(ellipse, color-mix(in srgb, var(--green) 14%, transparent), transparent 70%);
+  background: radial-gradient(ellipse, color-mix(in srgb, var(--text) 10%, transparent), transparent 70%);
   filter: blur(48px);
   opacity: 0.85;
 }
@@ -34,7 +34,7 @@ html { scroll-behavior: smooth; }
   padding: 5.5rem 0 3.25rem;
 }
 .hero h1 .hl {
-  color: var(--green);
+  color: var(--text);
 }
 .hero .sub {
   max-width: 34rem;
@@ -52,11 +52,11 @@ html { scroll-behavior: smooth; }
 .tile:hover,
 .card:hover {
   transform: translateY(-3px);
-  border-color: color-mix(in srgb, var(--green) 28%, var(--border));
+  border-color: color-mix(in srgb, var(--text) 28%, var(--border));
   box-shadow: 0 12px 28px color-mix(in srgb, #000 8%, transparent);
 }
 .tile:hover svg {
-  color: var(--green);
+  color: var(--text);
 }
 
 .lp-steps {
@@ -83,9 +83,9 @@ html { scroll-behavior: smooth; }
   font-size: 0.75rem;
   font-weight: 700;
   margin-bottom: 0.55rem;
-  color: var(--green);
-  background: color-mix(in srgb, var(--green) 12%, var(--card));
-  border: 1px solid color-mix(in srgb, var(--green) 25%, var(--border));
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 12%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--text) 25%, var(--border));
 }
 .lp-step h3 {
   font-size: 0.95rem;
