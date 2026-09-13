@@ -1158,20 +1158,32 @@
       return SCOPE_OPTS.find((o) => o.value === v)?.label || 'Semua chat';
     }
 
+    function renumber() {
+      list.querySelectorAll('.ar-card').forEach((card, i) => {
+        const n = card.querySelector('.ar-num');
+        if (n) n.textContent = String(i + 1);
+      });
+    }
+
     function cardHtml(r = {}) {
       const scope = r.scope === 'group' || r.scope === 'private' ? r.scope : 'all';
+      const trigger = String(r.trigger || '').trim();
+      const reply = String(r.reply || '').trim();
       const opts = SCOPE_OPTS.map(
         (o) =>
           `<button type="button" class="cdd-option${o.value === scope ? ' active' : ''}" data-value="${o.value}" role="option">${o.label}</button>`
       ).join('');
       return `<div class="ar-card" data-scope="${escapeAttr(scope)}">
         <div class="ar-card-top">
-          <div class="cdd" data-cdd>
-            <button type="button" class="cdd-btn" aria-haspopup="listbox">
-              <span class="cdd-label">${escapeHtml(scopeLabel(scope))}</span>
-              <svg class="cdd-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
-            </button>
-            <div class="cdd-menu hidden" role="listbox">${opts}</div>
+          <div class="ar-card-left">
+            <span class="ar-num">1</span>
+            <div class="cdd" data-cdd>
+              <button type="button" class="cdd-btn" aria-haspopup="listbox">
+                <span class="cdd-label">${escapeHtml(scopeLabel(scope))}</span>
+                <svg class="cdd-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+              </button>
+              <div class="cdd-menu hidden" role="listbox">${opts}</div>
+            </div>
           </div>
           <button type="button" class="ar-del" title="Hapus" aria-label="Hapus">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
@@ -1180,18 +1192,22 @@
         <div class="ar-fields">
           <div class="ar-field">
             <label>Pesan masuk</label>
-            <input type="text" class="ar-trigger" placeholder="halo" value="${escapeAttr(r.trigger || '')}" maxlength="200" />
+            <input type="text" class="ar-trigger" placeholder="contoh: halo" value="${escapeAttr(trigger)}" maxlength="200" autocomplete="off" />
           </div>
           <div class="ar-field">
             <label>Balasan bot</label>
-            <input type="text" class="ar-reply" placeholder="hai, ada perlu apa?" value="${escapeAttr(r.reply || '')}" maxlength="2000" />
+            <input type="text" class="ar-reply" placeholder="contoh: hai, ada perlu apa?" value="${escapeAttr(reply)}" maxlength="2000" autocomplete="off" />
           </div>
         </div>
       </div>`;
     }
 
-    const initial = Array.isArray(rules) && rules.length ? rules : [{}];
-    list.innerHTML = initial.map((r) => cardHtml(r)).join('');
+    // Hanya aturan valid; kosong → 1 kartu kosong (placeholder abu-abu)
+    const valid = (Array.isArray(rules) ? rules : []).filter(
+      (r) => r && String(r.trigger || '').trim() && String(r.reply || '').trim()
+    );
+    list.innerHTML = (valid.length ? valid : [{}]).map((r) => cardHtml(r)).join('');
+    renumber();
 
     function closeAllCdd(except) {
       list.querySelectorAll('[data-cdd]').forEach((el) => {
@@ -1215,9 +1231,11 @@
           card.querySelectorAll('.cdd-option').forEach((o) => {
             o.classList.toggle('active', o.dataset.value === 'all');
           });
+          renumber();
           return;
         }
         card.remove();
+        renumber();
         return;
       }
 
@@ -1258,7 +1276,9 @@
         return;
       }
       list.insertAdjacentHTML('beforeend', cardHtml());
+      renumber();
       list.lastElementChild?.querySelector('.ar-trigger')?.focus();
+      list.lastElementChild?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     });
   }
 
