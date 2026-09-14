@@ -484,4 +484,36 @@ router.post(
   }
 )
 
+
+router.post(
+  '/change-password',
+  authenticate,
+  validateBody({
+    currentPassword: { type: 'string', required: true, maxLength: 128 },
+    newPassword: { type: 'string', required: true, maxLength: 128 },
+  }),
+  async (req, res) => {
+    try {
+      const currentPassword = String(req.body.currentPassword || '')
+      const newPassword = String(req.body.newPassword || '')
+      if (!isValidPassword(newPassword)) {
+        return res.status(400).json({ error: 'Password baru minimal 6 karakter.' })
+      }
+      if (currentPassword === newPassword) {
+        return res.status(400).json({ error: 'Password baru harus berbeda.' })
+      }
+      const user = await User.findOne({ userId: req.user.userId, isActive: true })
+      if (!user) return res.status(404).json({ error: 'User tidak ditemukan' })
+      const ok = await verifyPassword(currentPassword, user.passwordHash)
+      if (!ok) return res.status(401).json({ error: 'Password saat ini salah' })
+      user.passwordHash = await hashPassword(newPassword)
+      await user.save()
+      res.json({ ok: true, message: 'Password berhasil diubah' })
+    } catch (err) {
+      logger.error({ err: err.message }, 'Change password error')
+      res.status(500).json({ error: 'Gagal mengubah password' })
+    }
+  }
+)
+
 export default router

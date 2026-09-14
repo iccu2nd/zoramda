@@ -217,7 +217,13 @@ export class SessionManager {
     })
   }
 
-  async getQr(sessionId) {
+  getSessionEvents(sessionId) {
+    const cm = this.sessions.get(sessionId)
+    if (cm && typeof cm.getEvents === 'function') return cm.getEvents()
+    return []
+  }
+
+    async getQr(sessionId) {
     const cm = this.sessions.get(sessionId)
     if (cm) return { qr: cm.qr, status: cm.status }
     const s = await Session.findOne({ sessionId }).lean()

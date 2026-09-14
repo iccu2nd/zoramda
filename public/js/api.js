@@ -67,6 +67,8 @@ const API = {
   login: (body) => API.request('/api/auth/login', { method: 'POST', body: JSON.stringify(body) }),
   me: () => API.request('/api/auth/me'),
   rotateApiKey: () => API.request('/api/auth/apikey/rotate', { method: 'POST' }),
+  changePassword: (body) =>
+    API.request('/api/auth/change-password', { method: 'POST', body: JSON.stringify(body) }),
   verifyEmail: (token) => API.request('/api/auth/verify-email?token=' + encodeURIComponent(token)),
   resendVerification: (body) =>
     API.request('/api/auth/resend-verification', { method: 'POST', body: JSON.stringify(body || {}) }),
@@ -74,6 +76,7 @@ const API = {
   sessions: () => API.request('/api/sessions'),
   createSession: (body) => API.request('/api/sessions', { method: 'POST', body: JSON.stringify(body || {}) }),
   session: (id) => API.request('/api/sessions/' + id),
+  sessionEvents: (id) => API.request('/api/sessions/' + encodeURIComponent(id) + '/events'),
   qr: (id) => API.request('/api/sessions/' + id + '/qr'),
   pairing: (id) => API.request('/api/sessions/' + id + '/pairing'),
   connect: (id, body) => API.request('/api/sessions/' + id + '/connect', { method: 'POST', body: JSON.stringify(body || {}) }),

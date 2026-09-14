@@ -64,6 +64,18 @@ export default function createSessionRoutes(sessionManager) {
     }
   })
 
+  // Recent activity (memory ring buffer)
+  router.get('/:sessionId/events', validateParam('sessionId'), async (req, res) => {
+    try {
+      await sessionManager.assertOwnership(req.params.sessionId, req.user.userId, req.user.isAdmin)
+      const events = sessionManager.getSessionEvents(req.params.sessionId) || []
+      res.json({ events })
+    } catch (err) {
+      if (err.code === 'FORBIDDEN') return res.status(403).json({ error: err.message })
+      res.status(500).json({ error: 'Failed to get events' })
+    }
+  })
+
   // Get QR
   router.get('/:sessionId/qr', validateParam('sessionId'), async (req, res) => {
     try {

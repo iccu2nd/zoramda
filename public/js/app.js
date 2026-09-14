@@ -1,7 +1,7 @@
 (function () {
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-  const PAGES = ['sessions', 'config', 'plugins', 'admin', 'account', 'pricing', 'payment', 'changelog'];
+  const PAGES = ['sessions', 'config', 'plugins', 'commands', 'admin', 'account', 'pricing', 'payment', 'changelog'];
   const WA_CHANNEL_URL = 'https://whatsapp.com/channel/0029VbC7SGt65yDCUxYwUS3U';
   const UPGRADE_DISMISS_KEY = 'zb_upgrade_dismiss_at';
 
@@ -442,12 +442,14 @@
 
   /* ——— nav + URL endpoints (/dash/...) ——— */
   let currentPage = 'sessions';
+  let lastSessionStatusMap = {};
   let adminView = 'users'; // users | bots | plugins | changelog
 
   const PAGE_PATH = {
     sessions: '/dash/sessions',
     config: '/dash/config',
     plugins: '/dash/plugins',
+    commands: '/dash/commands',
     account: '/dash/account',
     pricing: '/dash/pricing',
     payment: '/dash/payment',
@@ -517,7 +519,7 @@
     const topLink = document.querySelector(`.side-link[data-page="${page}"]`);
     if (topLink) topLink.classList.add('active');
 
-    if (page === 'config' || page === 'plugins') {
+    if (page === 'config' || page === 'plugins' || page === 'commands') {
       $('#navBotSettings')?.classList.add('active', 'expanded');
       $('#submenuBotSettings')?.classList.add('open');
       if (page === 'plugins') {
@@ -557,8 +559,9 @@
     if (page === 'config') loadConfig();
     if (page === 'sessions') loadSessions();
     if (page === 'plugins') loadPlugins();
+    if (page === 'commands') loadCommandsHelp();
     if (page === 'account') loadAccount();
-    if (page === 'config' || page === 'plugins') applyBotSettingsGate();
+    if (page === 'config' || page === 'plugins' || page === 'commands') applyBotSettingsGate();
     if (page === 'pricing') loadPricing();
     if (page === 'changelog') loadChangelog();
     if (page === 'payment') loadPaymentPage();
@@ -805,10 +808,16 @@
     try {
       const { sessions } = await API.sessions();
       updateConnectedNav(sessions);
+      notifySessionStatusChanges(sessions);
       if (!sessions?.length) {
-        list.innerHTML = `<div class="empty">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="2" width="14" height="20" rx="2.5"/><path d="M12 18h.01"/></svg>
-          belum ada session.<br>buat yang baru untuk mulai.
+        list.innerHTML = `<div class="onboard">
+          <div class="onboard-title">Mulai dalam 3 langkah</div>
+          <ol class="onboard-steps">
+            <li><strong>Buat session</strong> — nama bot kamu</li>
+            <li><strong>Connect</strong> — scan QR atau pairing</li>
+            <li><strong>Uji command</strong> — ketik di WhatsApp</li>
+          </ol>
+          <p class="onboard-hint">Tekan tombol session baru di atas untuk mulai.</p>
         </div>`;
         return;
       }
@@ -836,6 +845,7 @@
               <button class="btn btn-sm btn-ghost" data-act="connect" type="button">connect</button>
               <button class="btn btn-sm btn-ghost" data-act="disconnect" type="button">stop</button>
               <button class="btn btn-sm btn-ghost" data-act="delete" type="button">hapus</button>
+              <button class="btn btn-sm btn-ghost" data-act="activity" type="button">aktivitas</button>
             </div>
           </div>
           <div class="session-info">
@@ -866,6 +876,11 @@
   }
 
   async function handleSessionAct(act, id) {
+    if (act === 'activity') {
+      await showSessionActivity(id);
+      return;
+    }
+
     try {
       if (act === 'qr') {
         const data = await API.qr(id);
@@ -1350,6 +1365,10 @@
     });
     return out;
   }
+
+  $('#exportConfigBtn')?.addEventListener('click', () => {
+    exportSessionConfig(selectedConfigSession);
+  });
 
   $('#saveConfigBtn').addEventListener('click', async () => {
     if (!userHasBotSettings()) {
@@ -2190,8 +2209,41 @@
       <div class="toolbar" style="margin-top:0.75rem;gap:0.5rem;flex-wrap:wrap">
         <button class="btn btn-sm" id="accountUpgradeBtn" type="button">Upgrade plan</button>
       </div>
+      <div class="card" style="margin-top:1.25rem;padding:1rem">
+        <div class="sf-title" style="margin-bottom:0.65rem">Ganti password</div>
+        <div class="field"><label>Password saat ini</label><input type="password" id="accCurPass" autocomplete="current-password" /></div>
+        <div class="field"><label>Password baru</label><input type="password" id="accNewPass" autocomplete="new-password" /></div>
+        <div class="field"><label>Ulangi password baru</label><input type="password" id="accNewPass2" autocomplete="new-password" /></div>
+        <button class="btn btn-sm" type="button" id="accChangePassBtn">Simpan password</button>
+      </div>
     `;
     $('#accountUpgradeBtn')?.addEventListener('click', () => activatePage('pricing'));
+    $('#accChangePassBtn')?.addEventListener('click', async () => {
+      const currentPassword = ($('#accCurPass')?.value || '').trim();
+      const newPassword = ($('#accNewPass')?.value || '').trim();
+      const newPassword2 = ($('#accNewPass2')?.value || '').trim();
+      if (!currentPassword || !newPassword) {
+        toast('Lengkapi password', 'warning');
+        return;
+      }
+      if (newPassword.length < 6) {
+        toast('Password baru minimal 6 karakter', 'warning');
+        return;
+      }
+      if (newPassword !== newPassword2) {
+        toast('Konfirmasi password tidak cocok', 'warning');
+        return;
+      }
+      try {
+        await API.changePassword({ currentPassword, newPassword });
+        toast('Password diubah');
+        if ($('#accCurPass')) $('#accCurPass').value = '';
+        if ($('#accNewPass')) $('#accNewPass').value = '';
+        if ($('#accNewPass2')) $('#accNewPass2').value = '';
+      } catch (err) {
+        toast(err.message || 'Gagal ubah password', 'error');
+      }
+    });
     $('#accountResendBtn')?.addEventListener('click', async (e) => {
       const btn = e.currentTarget;
       btn.disabled = true;
@@ -2217,6 +2269,133 @@
     return escapeHtml(s).replace(/'/g, '&#39;');
   }
 
+
+
+  function notifySessionStatusChanges(sessions) {
+    const next = {};
+    (sessions || []).forEach((s) => {
+      const id = s.sessionId;
+      const st = s.status || '';
+      next[id] = st;
+      const prev = lastSessionStatusMap[id];
+      if (!prev || prev === st) return;
+      if (st === 'CONNECTED') toast((s.name || 'Bot') + ' terhubung', 'success');
+      else if (st === 'DISCONNECTED' || st === 'STOPPED')
+        toast((s.name || 'Bot') + ' terputus', 'warning');
+      else if (st === 'ERROR') toast((s.name || 'Bot') + ' error', 'error');
+      else if (st === 'RECONNECTING') toast((s.name || 'Bot') + ' reconnect…', 'info');
+    });
+    lastSessionStatusMap = next;
+  }
+
+  async function showSessionActivity(sessionId) {
+    try {
+      const data = await API.sessionEvents(sessionId);
+      const events = data.events || [];
+      const body = events.length
+        ? `<div class="act-list">${events
+            .map((ev) => {
+              const t = formatClDate(ev.at) || '';
+              const time = (() => {
+                try {
+                  return new Date(ev.at).toLocaleTimeString('id-ID', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                  });
+                } catch {
+                  return '';
+                }
+              })();
+              return `<div class="act-item">
+                <div class="act-type">${escapeHtml(ev.type || 'info')}</div>
+                <div class="act-msg">${escapeHtml(ev.message || '')}</div>
+                <div class="act-time">${escapeHtml(time)}</div>
+              </div>`;
+            })
+            .join('')}</div>`
+        : '<p style="color:var(--muted);font-weight:500">Belum ada aktivitas di memori (session perlu running).</p>';
+      showModal({
+        title: 'Aktivitas session',
+        sub: sessionId,
+        body,
+        actions: [{ label: 'Tutup', ghost: true }],
+      });
+    } catch (e) {
+      toast(e.message || 'Gagal memuat aktivitas', 'error');
+    }
+  }
+
+  async function exportSessionConfig(sessionId) {
+    if (!sessionId) {
+      toast('Pilih session dulu', 'warning');
+      return;
+    }
+    try {
+      const cfg = await API.config(sessionId);
+      const blob = new Blob([JSON.stringify(cfg, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `botenv-config-${sessionId.slice(0, 8)}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast('Config diunduh');
+    } catch (e) {
+      toast(e.message || 'Gagal export', 'error');
+    }
+  }
+
+  async function loadCommandsHelp() {
+    const box = $('#commandsBox');
+    if (!box) return;
+    if (!userHasBotSettings()) {
+      box.innerHTML =
+        '<div class="empty">Commands tersedia di paket Pro. <button class="btn btn-sm" type="button" id="cmdUpgrade">Lihat pricing</button></div>';
+      $('#cmdUpgrade')?.addEventListener('click', () => activatePage('pricing'));
+      return;
+    }
+    box.innerHTML = '<p style="color:var(--muted);font-weight:500">Memuat…</p>';
+    try {
+      box.innerHTML = `<div class="field session-pick"><label>Session</label><select id="cmdSessionSelect"></select></div><div id="cmdList"></div>`;
+      const select = $('#cmdSessionSelect');
+      const sessions = await fillSessionSelect(select, selectedPluginSession || selectedConfigSession);
+      toggleSessionPick(select, sessions);
+      if (!sessions.length) {
+        $('#cmdList').innerHTML = '<div class="empty">Buat session dulu.</div>';
+        return;
+      }
+      const loadFor = async (sid) => {
+        selectedPluginSession = sid;
+        const data = await API.sessionPlugins(sid);
+        const plugins = (data.plugins || data || []).filter((p) => p.enabled !== false);
+        if (!plugins.length) {
+          $('#cmdList').innerHTML = '<div class="empty">Tidak ada plugin aktif.</div>';
+          return;
+        }
+        // group by folder-ish
+        $('#cmdList').innerHTML = `<div class="cmd-grid">${plugins
+          .map((p) => {
+            const cmds = (p.customCommands && p.customCommands.length
+              ? p.customCommands
+              : p.commands || p.defaultCommands || []
+            ).filter(Boolean);
+            if (!cmds.length) return '';
+            return `<div class="cmd-card">
+              <div class="cmd-file">${escapeHtml(p.file || p.name || 'plugin')}</div>
+              <div class="cmd-tags">${cmds
+                .map((c) => `<code class="cmd-code">${escapeHtml(String(c).replace(/^\./, ''))}</code>`)
+                .join('')}</div>
+            </div>`;
+          })
+          .filter(Boolean)
+          .join('')}</div>`;
+      };
+      select.addEventListener('change', () => loadFor(select.value));
+      await loadFor(select.value);
+    } catch (e) {
+      box.innerHTML = `<p style="color:var(--red)">${escapeHtml(e.message || 'Gagal')}</p>`;
+    }
+  }
 
   function formatDuration(ms) {
     const n = Math.max(0, Math.floor(Number(ms) || 0) / 1000);
@@ -2251,31 +2430,49 @@
         box.innerHTML = '<div class="empty">Belum ada catatan rilis.</div>';
         return;
       }
-      box.innerHTML = `<div class="cl-list">${entries
-        .map((e, i) => {
-          const date = formatClDate(e.createdAt);
-          const ver = e.version ? escapeHtml(e.version) : '';
-          const tags = (e.tags || [])
-            .map((tg) => `<span class="cl-tag">${escapeHtml(tg)}</span>`)
-            .join('');
-          const body = e.body
-            ? `<p class="cl-body">${escapeHtml(e.body).replace(/\n/g, '<br>')}</p>`
-            : '';
-          return `<article class="cl-entry${i === 0 ? ' cl-entry-latest' : ''}">
-            <header class="cl-entry-head">
-              <h3 class="cl-entry-title">${escapeHtml(e.title)}</h3>
-              <div class="cl-entry-meta">
-                ${ver ? `<span class="cl-ver">${ver}</span>` : ''}
-                ${date ? `<time datetime="${escapeAttr(e.createdAt || '')}">${date}</time>` : ''}
-              </div>
-            </header>
-            ${tags ? `<div class="cl-tags">${tags}</div>` : ''}
-            ${body}
-          </article>`;
-        })
-        .join('')}</div>`;
+      box.innerHTML =
+        '<div class="cl-list">' +
+        entries
+          .map((e, i) => {
+            const date = formatClDate(e.createdAt);
+            const ver = e.version ? String(e.version).trim() : '';
+            const tags = (e.tags || [])
+              .map((tg) => '<span class="cl-tag">' + escapeHtml(tg) + '</span>')
+              .join('');
+            const body = e.body
+              ? '<p class="cl-body">' + escapeHtml(e.body).replace(/\n/g, '<br>') + '</p>'
+              : '';
+            return (
+              '<article class="cl-entry' +
+              (i === 0 ? ' is-latest' : '') +
+              '">' +
+              '<div class="cl-entry-top">' +
+              '<h3 class="cl-entry-title">' +
+              escapeHtml(e.title) +
+              '</h3>' +
+              (date
+                ? '<time class="cl-date" datetime="' +
+                  escapeAttr(e.createdAt || '') +
+                  '">' +
+                  escapeHtml(date) +
+                  '</time>'
+                : '') +
+              '</div>' +
+              (ver || tags
+                ? '<div class="cl-entry-meta">' +
+                  (ver ? '<span class="cl-ver">v' + escapeHtml(ver) + '</span>' : '') +
+                  tags +
+                  '</div>'
+                : '') +
+              body +
+              '</article>'
+            );
+          })
+          .join('') +
+        '</div>';
     } catch (e) {
-      box.innerHTML = `<p style="color:var(--red)">${escapeHtml(e.message || 'Gagal memuat')}</p>`;
+      box.innerHTML =
+        '<p style="color:var(--red)">' + escapeHtml(e.message || 'Gagal memuat') + '</p>';
     }
   }
 

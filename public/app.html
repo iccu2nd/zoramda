@@ -127,6 +127,7 @@
           <button class="side-sublink" data-page="config" data-config-tab="autoreply" type="button">autoreply</button>
           <button class="side-sublink" data-page="config" data-config-tab="system" type="button">system</button>
           <button class="side-sublink" data-page="plugins" type="button">plugins</button>
+          <button class="side-sublink" data-page="commands" type="button">commands</button>
         </div>
       </div>
       <button class="side-link" data-page="changelog" type="button">
@@ -235,14 +236,21 @@
           <div id="configLocked" class="feature-lock-overlay hidden"></div>
           <div class="feature-content" id="configContent">
             <div class="card" id="configForm" style="padding:1.25rem"></div>
-            <div class="toolbar" style="margin-top:1rem">
+            <div class="toolbar" style="margin-top:1rem;gap:0.5rem;flex-wrap:wrap">
               <button class="btn" id="saveConfigBtn" type="button">simpan</button>
+              <button class="btn btn-ghost" id="exportConfigBtn" type="button">export config</button>
             </div>
           </div>
         </div>
       </section>
 
       <!-- plugins page -->
+      <section id="page-commands" class="hidden">
+        <h1 class="page-title">Commands</h1>
+        <p class="page-sub">Daftar perintah aktif di session bot kamu</p>
+        <div id="commandsBox"></div>
+      </section>
+
       <section id="page-plugins" class="hidden">
         <h1 class="page-title">plugins</h1>
         <p class="page-sub">Enable plugins, permissions, custom commands, and responses per session</p>

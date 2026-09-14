@@ -84,6 +84,22 @@ export class ConnectionManager {
     this.messagesOut = 0
     this._statsDirty = false
     this._statsFlushTimer = null
+    /** Ring buffer of recent session events (memory only, max 40) */
+    this.events = []
+  }
+
+  pushEvent(type, message, extra = {}) {
+    this.events.push({
+      at: Date.now(),
+      type: String(type || 'info'),
+      message: String(message || '').slice(0, 240),
+      ...extra,
+    })
+    if (this.events.length > 40) this.events.splice(0, this.events.length - 40)
+  }
+
+  getEvents() {
+    return this.events.slice().reverse()
   }
 
   _scheduleStatsFlush() {
@@ -118,7 +134,13 @@ export class ConnectionManager {
   }
 
   async setStatus(status, extra = {}) {
+    const prev = this.status
     this.status = status
+    if (prev !== status) {
+      this.pushEvent('status', `${prev || '-'} → ${status}`, {
+        error: extra.error || null,
+      })
+    }
     this.onStatusChange(this.sessionId, status, extra)
     // Persist off the critical path so WS events stay responsive
     const payload = {
@@ -296,6 +318,7 @@ export class ConnectionManager {
         this.setStatus(STATES.CONNECTED, {
           fields: { phoneNumber: this.phoneNumber },
         }).catch(() => {})
+        this.pushEvent('connected', `Terhubung${this.phoneNumber ? ' · ' + this.phoneNumber : ''}`)
         this._statsDirty = true
         this._scheduleStatsFlush()
         logger.info({ sessionId: this.sessionId, phone: this.phoneNumber }, 'Session connected')
