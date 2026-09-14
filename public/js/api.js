@@ -168,6 +168,18 @@ const API = {
   adminReloadPlugins: () =>
     API.request('/api/admin/plugins/reload', { method: 'POST' }),
 
+  changelog: () => API.request('/api/changelog'),
+  adminChangelog: () => API.request('/api/changelog/admin/all'),
+  adminCreateChangelog: (body) =>
+    API.request('/api/changelog/admin', { method: 'POST', body: JSON.stringify(body) }),
+  adminUpdateChangelog: (entryId, body) =>
+    API.request('/api/changelog/admin/' + encodeURIComponent(entryId), {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  adminDeleteChangelog: (entryId) =>
+    API.request('/api/changelog/admin/' + encodeURIComponent(entryId), { method: 'DELETE' }),
+
   paymentPlans: () => API.request('/api/payment/plans'),
   paymentMe: () => API.request('/api/payment/me'),
   paymentCheckout: (plan) =>

@@ -1,7 +1,7 @@
 (function () {
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-  const PAGES = ['sessions', 'config', 'plugins', 'admin', 'account', 'pricing', 'payment', 'shared'];
+  const PAGES = ['sessions', 'config', 'plugins', 'admin', 'account', 'pricing', 'payment', 'shared', 'changelog'];
   const WA_CHANNEL_URL = 'https://whatsapp.com/channel/0029VbC7SGt65yDCUxYwUS3U';
   const UPGRADE_DISMISS_KEY = 'zb_upgrade_dismiss_at';
 
@@ -442,7 +442,7 @@
 
   /* ——— nav + URL endpoints (/dash/...) ——— */
   let currentPage = 'sessions';
-  let adminView = 'users'; // users | bots | plugins | share
+  let adminView = 'users'; // users | bots | plugins | share | changelog
 
   const PAGE_PATH = {
     sessions: '/dash/sessions',
@@ -453,6 +453,7 @@
     payment: '/dash/payment',
     admin: '/dash/admin',
     shared: '/dash/shared',
+    changelog: '/dash/changelog',
   };
 
   function pathFor(page, opts = {}) {
@@ -478,7 +479,10 @@
     const b = m[2];
     if (!a) return { page: 'sessions' };
     if (a === 'admin') {
-      const view = b === 'bots' || b === 'plugins' || b === 'users' || b === 'share' ? b : 'users';
+      const view =
+        b === 'bots' || b === 'plugins' || b === 'users' || b === 'share' || b === 'changelog'
+          ? b
+          : 'users';
       return { page: 'admin', adminView: view };
     }
     if (a === 'config') {
@@ -560,6 +564,7 @@
     if (page === 'config' || page === 'plugins') applyBotSettingsGate();
     if (page === 'pricing') loadPricing();
     if (page === 'shared') loadSharedFeatures();
+    if (page === 'changelog') loadChangelog();
     if (page === 'payment') loadPaymentPage();
     if (page === 'admin') loadAdmin();
   }
@@ -571,6 +576,7 @@
       bots: '#adminPanelSessions',
       plugins: '#adminPanelPlugins',
       share: '#adminPanelShare',
+      changelog: '#adminPanelChangelog',
     };
     Object.keys(map).forEach((k) => {
       const el = $(map[k]);
@@ -582,6 +588,7 @@
       else if (adminView === 'bots') sub.textContent = 'Bots yang konek';
       else if (adminView === 'plugins') sub.textContent = 'Plugins — edit / tambah script';
       else if (adminView === 'share') sub.textContent = 'Share fitur gratis';
+      else if (adminView === 'changelog') sub.textContent = 'Changelog';
     }
     // highlight sidebar
     $$('.side-sublink[data-page="admin"]').forEach((b) =>
@@ -2415,6 +2422,147 @@
     await refresh();
   }
 
+
+  function formatClDate(d) {
+    try {
+      const dt = new Date(d);
+      if (Number.isNaN(dt.getTime())) return '';
+      return dt.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+    } catch {
+      return '';
+    }
+  }
+
+  async function loadChangelog() {
+    const box = $('#changelogBox');
+    if (!box) return;
+    box.innerHTML = '<p style="color:var(--muted);font-weight:500">Loading…</p>';
+    try {
+      const data = await API.changelog();
+      const entries = data.entries || [];
+      if (!entries.length) {
+        box.innerHTML = '<div class="empty">Belum ada changelog.</div>';
+        return;
+      }
+      box.innerHTML = `<div class="cl-timeline">${entries
+        .map((e) => {
+          const tags = (e.tags || [])
+            .map((tg) => `<span class="cl-tag">${escapeHtml(tg)}</span>`)
+            .join('');
+          const ver = e.version ? `<span class="cl-ver">v${escapeHtml(e.version)}</span>` : '';
+          const body = e.body
+            ? `<div class="cl-body">${escapeHtml(e.body).replace(/\n/g, '<br>')}</div>`
+            : '';
+          return `<article class="cl-item">
+            <div class="cl-rail" aria-hidden="true"></div>
+            <div class="cl-content card">
+              <div class="cl-head">
+                <div class="cl-title-row">
+                  ${ver}
+                  <h3 class="cl-title">${escapeHtml(e.title)}</h3>
+                </div>
+                <time class="cl-date">${escapeHtml(formatClDate(e.createdAt))}</time>
+              </div>
+              ${tags ? `<div class="cl-tags">${tags}</div>` : ''}
+              ${body}
+            </div>
+          </article>`;
+        })
+        .join('')}</div>`;
+    } catch (e) {
+      box.innerHTML = `<p style="color:var(--red)">${escapeHtml(e.message || 'Gagal memuat')}</p>`;
+    }
+  }
+
+  async function setupAdminChangelogPanel() {
+    const listEl = $('#clAdminList');
+    if (!listEl) return;
+
+    async function refresh() {
+      listEl.innerHTML = '<p style="color:var(--muted)">Loading…</p>';
+      try {
+        const data = await API.adminChangelog();
+        const entries = data.entries || [];
+        if (!entries.length) {
+          listEl.innerHTML = '<div class="empty">Belum ada entry.</div>';
+          return;
+        }
+        listEl.innerHTML = entries
+          .map((e) => {
+            const tags = (e.tags || []).join(', ');
+            return `<div class="sf-card card" data-id="${escapeAttr(e.entryId)}">
+              <div class="sf-card-top">
+                <div>
+                  <div class="sf-title">${e.version ? escapeHtml('v' + e.version) + ' · ' : ''}${escapeHtml(e.title)} ${e.published ? '' : '<span class="sf-off">draft</span>'}</div>
+                  <div class="sf-meta">${escapeHtml(formatClDate(e.createdAt))}${tags ? ' · ' + escapeHtml(tags) : ''}</div>
+                </div>
+                <div class="sf-admin-actions">
+                  <button type="button" class="btn btn-sm btn-ghost cl-toggle">${e.published ? 'Sembunyikan' : 'Publikasikan'}</button>
+                  <button type="button" class="btn btn-sm btn-ghost cl-del">Hapus</button>
+                </div>
+              </div>
+              ${e.body ? `<p class="sf-desc">${escapeHtml(e.body)}</p>` : ''}
+            </div>`;
+          })
+          .join('');
+
+        listEl.querySelectorAll('.cl-toggle').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const id = btn.closest('[data-id]')?.dataset.id;
+            if (!id) return;
+            const publish = btn.textContent.includes('Publikasikan');
+            try {
+              await API.adminUpdateChangelog(id, { published: publish });
+              toast('Diperbarui');
+              refresh();
+            } catch (err) {
+              toast(err.message || 'Gagal', 'error');
+            }
+          });
+        });
+        listEl.querySelectorAll('.cl-del').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const id = btn.closest('[data-id]')?.dataset.id;
+            if (!id || !confirm('Hapus entry ini?')) return;
+            try {
+              await API.adminDeleteChangelog(id);
+              toast('Dihapus');
+              refresh();
+            } catch (err) {
+              toast(err.message || 'Gagal', 'error');
+            }
+          });
+        });
+      } catch (e) {
+        listEl.innerHTML = `<p style="color:var(--red)">${escapeHtml(e.message || 'Gagal')}</p>`;
+      }
+    }
+
+    $('#clCreateBtn')?.addEventListener('click', async () => {
+      const title = ($('#clTitle')?.value || '').trim();
+      const body = ($('#clBody')?.value || '').trim();
+      const version = ($('#clVersion')?.value || '').trim();
+      const tags = ($('#clTags')?.value || '').trim();
+      if (!title) {
+        toast('Judul wajib', 'warning');
+        return;
+      }
+      try {
+        await API.adminCreateChangelog({ title, body, version, tags });
+        toast('Changelog dipublikasikan');
+        if ($('#clTitle')) $('#clTitle').value = '';
+        if ($('#clBody')) $('#clBody').value = '';
+        if ($('#clVersion')) $('#clVersion').value = '';
+        if ($('#clTags')) $('#clTags').value = '';
+        refresh();
+      } catch (e) {
+        toast(e.message || 'Gagal', 'error');
+      }
+    });
+
+    await refresh();
+  }
+
   /* boot */
   (async () => {
     if (await tryAuth()) showApp();
@@ -2579,6 +2727,22 @@
             <div id="sfAdminList"></div>
           </div>
         </div>
+
+        <div id="adminPanelChangelog" class="admin-panel hidden">
+          <div class="cl-admin">
+            <div class="sf-admin-form card" style="padding:1rem;margin-bottom:1rem">
+              <h2 class="admin-h2" style="margin:0 0 0.75rem">Tambah changelog</h2>
+              <div class="field-row">
+                <div class="field"><label>Versi</label><input type="text" id="clVersion" placeholder="1.2.0" maxlength="40" /></div>
+                <div class="field"><label>Tag</label><input type="text" id="clTags" placeholder="new, fix" maxlength="80" /></div>
+              </div>
+              <div class="field"><label>Judul</label><input type="text" id="clTitle" placeholder="Perbaikan performa" maxlength="160" /></div>
+              <div class="field"><label>Isi</label><textarea id="clBody" rows="4" placeholder="Ringkas perubahan…" maxlength="5000"></textarea></div>
+              <button class="btn" type="button" id="clCreateBtn">Publikasikan</button>
+            </div>
+            <div id="clAdminList"></div>
+          </div>
+        </div>
       `;
 
       $('#adminLockBtn')?.addEventListener('click', () => {
@@ -2590,6 +2754,7 @@
       renderAdminSessions(sessionsData.sessions || []);
       setupAdminPluginEditor(pluginsData);
       setupAdminSharePanel();
+      setupAdminChangelogPanel();
       showAdminView(adminView || 'users', { skipUrl: true });
 
       let searchTimer;
