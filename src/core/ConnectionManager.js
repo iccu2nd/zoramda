@@ -76,6 +76,45 @@ export class ConnectionManager {
     this._pairingAttempts = 0
     this.pairingError = null
     this._boundHandlers = []
+
+    /** Runtime counters (in-memory; totals mirrored to Session.metadata.stats) */
+    this.startedAt = Date.now()
+    this.connectedAt = null
+    this.messagesIn = 0
+    this.messagesOut = 0
+    this._statsDirty = false
+    this._statsFlushTimer = null
+  }
+
+  _scheduleStatsFlush() {
+    if (this._statsFlushTimer) return
+    this._statsFlushTimer = setTimeout(() => {
+      this._statsFlushTimer = null
+      this._flushStats().catch(() => {})
+    }, 15000)
+  }
+
+  async _flushStats() {
+    if (!this._statsDirty) return
+    this._statsDirty = false
+    const stats = {
+      messagesIn: this.messagesIn,
+      messagesOut: this.messagesOut,
+      connectedAt: this.connectedAt,
+      startedAt: this.startedAt,
+      updatedAt: Date.now(),
+    }
+    await Session.findOneAndUpdate(
+      { sessionId: this.sessionId },
+      { $set: { 'metadata.stats': stats } }
+    ).catch(() => {})
+  }
+
+  _bumpMessage(fromMe) {
+    if (fromMe) this.messagesOut += 1
+    else this.messagesIn += 1
+    this._statsDirty = true
+    this._scheduleStatsFlush()
   }
 
   async setStatus(status, extra = {}) {
@@ -107,6 +146,17 @@ export class ConnectionManager {
     }
 
     try {
+      // Restore message counters from last flush (best-effort)
+      try {
+        const prev = await Session.findOne({ sessionId: this.sessionId }).select('metadata').lean()
+        const st = prev?.metadata?.stats
+        if (st && typeof st === 'object') {
+          if (Number.isFinite(st.messagesIn)) this.messagesIn = Math.max(this.messagesIn, st.messagesIn)
+          if (Number.isFinite(st.messagesOut)) this.messagesOut = Math.max(this.messagesOut, st.messagesOut)
+          if (st.startedAt && !this.startedAt) this.startedAt = st.startedAt
+        }
+      } catch {}
+
       await this.setStatus(STATES.CONNECTING)
 
       // Warm config in background — message path never awaits DB
@@ -242,9 +292,12 @@ export class ConnectionManager {
         this.pairingCode = null
         this.pendingPairingPhone = null
         this.phoneNumber = sock.user?.id?.split(':')[0] || null
+        this.connectedAt = Date.now()
         this.setStatus(STATES.CONNECTED, {
           fields: { phoneNumber: this.phoneNumber },
         }).catch(() => {})
+        this._statsDirty = true
+        this._scheduleStatsFlush()
         logger.info({ sessionId: this.sessionId, phone: this.phoneNumber }, 'Session connected')
       }
 
@@ -278,7 +331,17 @@ export class ConnectionManager {
     }
 
     const onMessagesUpsert = (m) => {
-      if (!this.messageHandler || this.isStopping || this.sock !== sock) return
+      if (this.isStopping || this.sock !== sock) return
+      // Count traffic lightly (no await)
+      try {
+        const list = m?.messages || []
+        for (let i = 0; i < list.length; i++) {
+          const msg = list[i]
+          if (!msg?.message) continue
+          this._bumpMessage(!!msg.key?.fromMe)
+        }
+      } catch {}
+      if (!this.messageHandler) return
       // Must not await — keeps Baileys event loop free for decrypt/send
       this.messageHandler.handle(this.sessionId, this.userId, sock, m).catch((err) => {
         const msg = err?.message || String(err)
@@ -379,6 +442,8 @@ export class ConnectionManager {
       this.sock = null
     }
 
+    await this._flushStats().catch(() => {})
+    this.connectedAt = null
     await this.setStatus(STATES.STOPPED)
   }
 
@@ -387,6 +452,7 @@ export class ConnectionManager {
   }
 
   getStatus() {
+    const now = Date.now()
     return {
       sessionId: this.sessionId,
       status: this.status,
@@ -395,6 +461,17 @@ export class ConnectionManager {
       pairingError: this.pairingError,
       phoneNumber: this.phoneNumber,
       reconnectAttempts: this.reconnectAttempts,
+      stats: {
+        messagesIn: this.messagesIn,
+        messagesOut: this.messagesOut,
+        connectedAt: this.connectedAt,
+        startedAt: this.startedAt,
+        runtimeMs:
+          this.status === STATES.CONNECTED && this.connectedAt
+            ? Math.max(0, now - this.connectedAt)
+            : 0,
+        processUptimeMs: Math.max(0, now - this.startedAt),
+      },
     }
   }
 }

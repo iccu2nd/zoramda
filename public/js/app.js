@@ -1,7 +1,7 @@
 (function () {
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-  const PAGES = ['sessions', 'config', 'plugins', 'admin', 'account', 'pricing', 'payment', 'shared', 'changelog'];
+  const PAGES = ['sessions', 'config', 'plugins', 'admin', 'account', 'pricing', 'payment', 'changelog'];
   const WA_CHANNEL_URL = 'https://whatsapp.com/channel/0029VbC7SGt65yDCUxYwUS3U';
   const UPGRADE_DISMISS_KEY = 'zb_upgrade_dismiss_at';
 
@@ -442,7 +442,7 @@
 
   /* ——— nav + URL endpoints (/dash/...) ——— */
   let currentPage = 'sessions';
-  let adminView = 'users'; // users | bots | plugins | share | changelog
+  let adminView = 'users'; // users | bots | plugins | changelog
 
   const PAGE_PATH = {
     sessions: '/dash/sessions',
@@ -452,7 +452,6 @@
     pricing: '/dash/pricing',
     payment: '/dash/payment',
     admin: '/dash/admin',
-    shared: '/dash/shared',
     changelog: '/dash/changelog',
   };
 
@@ -480,9 +479,7 @@
     if (!a) return { page: 'sessions' };
     if (a === 'admin') {
       const view =
-        b === 'bots' || b === 'plugins' || b === 'users' || b === 'share' || b === 'changelog'
-          ? b
-          : 'users';
+        b === 'bots' || b === 'plugins' || b === 'users' || b === 'changelog' ? b : 'users';
       return { page: 'admin', adminView: view };
     }
     if (a === 'config') {
@@ -563,7 +560,6 @@
     if (page === 'account') loadAccount();
     if (page === 'config' || page === 'plugins') applyBotSettingsGate();
     if (page === 'pricing') loadPricing();
-    if (page === 'shared') loadSharedFeatures();
     if (page === 'changelog') loadChangelog();
     if (page === 'payment') loadPaymentPage();
     if (page === 'admin') loadAdmin();
@@ -575,7 +571,6 @@
       users: '#adminPanelUsers',
       bots: '#adminPanelSessions',
       plugins: '#adminPanelPlugins',
-      share: '#adminPanelShare',
       changelog: '#adminPanelChangelog',
     };
     Object.keys(map).forEach((k) => {
@@ -587,7 +582,6 @@
       if (adminView === 'users') sub.textContent = 'Users';
       else if (adminView === 'bots') sub.textContent = 'Bots yang konek';
       else if (adminView === 'plugins') sub.textContent = 'Plugins — edit / tambah script';
-      else if (adminView === 'share') sub.textContent = 'Share fitur gratis';
       else if (adminView === 'changelog') sub.textContent = 'Changelog';
     }
     // highlight sidebar
@@ -819,24 +813,41 @@
         return;
       }
       list.innerHTML = sessions
-        .map(
-          (s) => `
-        <div class="session-card" data-id="${s.sessionId}">
-          <div>
-            <div class="session-name">${escapeHtml(s.name || 'session')}</div>
-            <div class="session-meta">
-              <span class="${statusClass(s.status)}">${(s.status || '').toLowerCase()}</span>
-              ${s.phoneNumber ? ' · ' + escapeHtml(s.phoneNumber) : ''}
+        .map((s) => {
+          const st = s.stats || {};
+          const runtime =
+            s.status === 'CONNECTED' && st.runtimeMs
+              ? formatDuration(st.runtimeMs)
+              : '—';
+          const up = st.processUptimeMs ? formatDuration(st.processUptimeMs) : '—';
+          const created = s.createdAt ? formatClDate(s.createdAt) : '';
+          return `
+        <div class="session-card" data-id="${escapeAttr(s.sessionId)}">
+          <div class="session-main">
+            <div>
+              <div class="session-name">${escapeHtml(s.name || 'session')}</div>
+              <div class="session-meta">
+                <span class="${statusClass(s.status)}">${(s.status || '').toLowerCase()}</span>
+                ${s.phoneNumber ? ' · ' + escapeHtml(s.phoneNumber) : ''}
+              </div>
+            </div>
+            <div class="session-actions">
+              <button class="btn btn-sm btn-ghost" data-act="qr" type="button">qr</button>
+              <button class="btn btn-sm btn-ghost" data-act="connect" type="button">connect</button>
+              <button class="btn btn-sm btn-ghost" data-act="disconnect" type="button">stop</button>
+              <button class="btn btn-sm btn-ghost" data-act="delete" type="button">hapus</button>
             </div>
           </div>
-          <div class="session-actions">
-            <button class="btn btn-sm btn-ghost" data-act="qr" type="button">qr</button>
-            <button class="btn btn-sm btn-ghost" data-act="connect" type="button">connect</button>
-            <button class="btn btn-sm btn-ghost" data-act="disconnect" type="button">stop</button>
-            <button class="btn btn-sm btn-ghost" data-act="delete" type="button">hapus</button>
+          <div class="session-info">
+            <div class="si-item"><span class="si-label">Runtime</span><span class="si-val">${escapeHtml(runtime)}</span></div>
+            <div class="si-item"><span class="si-label">Proses</span><span class="si-val">${escapeHtml(up)}</span></div>
+            <div class="si-item"><span class="si-label">Masuk</span><span class="si-val">${Number(st.messagesIn || 0).toLocaleString('id-ID')}</span></div>
+            <div class="si-item"><span class="si-label">Terkirim</span><span class="si-val">${Number(st.messagesOut || 0).toLocaleString('id-ID')}</span></div>
+            ${created ? `<div class="si-item"><span class="si-label">Dibuat</span><span class="si-val">${escapeHtml(created)}</span></div>` : ''}
+            <div class="si-item si-wide"><span class="si-label">ID</span><span class="si-val si-mono">${escapeHtml(s.sessionId)}</span></div>
           </div>
-        </div>`
-        )
+        </div>`;
+        })
         .join('');
 
       list.querySelectorAll('[data-act]').forEach((btn) => {
@@ -2207,221 +2218,17 @@
   }
 
 
-  /* ——— fitur gratis (shared features) ——— */
-  async function loadSharedFeatures() {
-    const box = $('#sharedBox');
-    if (!box) return;
-    box.innerHTML = '<p style="color:var(--muted);font-weight:500">Loading…</p>';
-    try {
-      const [featRes, sessions] = await Promise.all([
-        API.sharedFeatures(),
-        API.sessions().catch(() => []),
-      ]);
-      const features = featRes.features || [];
-      const sessList = Array.isArray(sessions) ? sessions : sessions?.sessions || [];
-      if (!features.length) {
-        box.innerHTML =
-          '<div class="empty">Belum ada fitur untuk paket kamu. Admin membagikan dari share fitur.</div>';
-        return;
-      }
-      const sessOpts = sessList.length
-        ? sessList
-            .map(
-              (s) =>
-                `<option value="${escapeAttr(s.sessionId)}">${escapeHtml(s.name || s.sessionId)}</option>`
-            )
-            .join('')
-        : '<option value="">Buat session dulu</option>';
-      box.innerHTML = `<div class="sf-list">${features
-        .map((f) => {
-          const plans = (f.plans || []).join(', ');
-          const count = f.pluginCount || 0;
-          return `<div class="sf-card card" data-id="${escapeAttr(f.featureId)}">
-            <div class="sf-card-top">
-              <div>
-                <div class="sf-title">${escapeHtml(f.title)}</div>
-                <div class="sf-meta">${count} plugin · ${escapeHtml(plans || 'semua paket')}</div>
-              </div>
-              <span class="sf-chip">Plugin</span>
-            </div>
-            ${f.description ? `<p class="sf-desc">${escapeHtml(f.description)}</p>` : ''}
-            <div class="sf-apply-row">
-              <select class="sf-session">${sessOpts}</select>
-              <button type="button" class="btn btn-sm sf-apply">Apply</button>
-            </div>
-          </div>`;
-        })
-        .join('')}</div>`;
-
-      box.querySelectorAll('.sf-apply').forEach((btn) => {
-        btn.addEventListener('click', async () => {
-          const card = btn.closest('.sf-card');
-          const id = card?.dataset.id;
-          const sessionId = card?.querySelector('.sf-session')?.value;
-          if (!id || !sessionId) {
-            toast('Pilih session dulu', 'warning');
-            return;
-          }
-          btn.disabled = true;
-          try {
-            const r = await API.applySharedFeature(id, sessionId);
-            toast(`Berhasil apply (${r.applied || 0} plugin)`);
-          } catch (e) {
-            toast(e.message || 'Gagal apply', 'error');
-          } finally {
-            btn.disabled = false;
-          }
-        });
-      });
-    } catch (e) {
-      box.innerHTML = `<p style="color:var(--red)">${escapeHtml(e.message || 'Gagal memuat')}</p>`;
-    }
+  function formatDuration(ms) {
+    const n = Math.max(0, Math.floor(Number(ms) || 0) / 1000);
+    const d = Math.floor(n / 86400);
+    const h = Math.floor((n % 86400) / 3600);
+    const m = Math.floor((n % 3600) / 60);
+    const s = Math.floor(n % 60);
+    if (d > 0) return d + ' hari ' + h + ' jam';
+    if (h > 0) return h + ' jam ' + m + ' mnt';
+    if (m > 0) return m + ' mnt ' + s + ' dtk';
+    return s + ' dtk';
   }
-
-  async function setupAdminSharePanel() {
-    const listEl = $('#sfAdminList');
-    const pickEl = $('#sfPluginPick');
-    if (!listEl || !pickEl) return;
-
-    let allPlugins = [];
-    try {
-      const data = await API.adminPlugins();
-      allPlugins = data.plugins || [];
-    } catch (_) {
-      allPlugins = [];
-    }
-
-    function renderPick(q = '') {
-      const qq = String(q || '').toLowerCase().trim();
-      const items = allPlugins.filter((p) => {
-        if (!qq) return true;
-        return (
-          String(p.file || '').toLowerCase().includes(qq) ||
-          String((p.commands || []).join(' ')).toLowerCase().includes(qq)
-        );
-      });
-      if (!items.length) {
-        pickEl.innerHTML = '<div class="empty" style="padding:0.75rem">Tidak ada plugin</div>';
-        return;
-      }
-      pickEl.innerHTML = items
-        .map((p) => {
-          const cmds = (p.commands || p.defaultCommands || []).slice(0, 4).join(', ');
-          return `<label class="sf-pick-item">
-            <input type="checkbox" class="sf-pick-cb" value="${escapeAttr(p.file)}" />
-            <span class="sf-pick-body">
-              <span class="sf-pick-file">${escapeHtml(p.file)}</span>
-              ${cmds ? `<span class="sf-pick-cmd">${escapeHtml(cmds)}</span>` : ''}
-            </span>
-          </label>`;
-        })
-        .join('');
-    }
-
-    renderPick();
-    $('#sfPluginSearch')?.addEventListener('input', (e) => renderPick(e.target.value));
-
-    async function refresh() {
-      listEl.innerHTML = '<p style="color:var(--muted)">Loading…</p>';
-      try {
-        const data = await API.adminSharedFeatures();
-        const features = data.features || [];
-        if (!features.length) {
-          listEl.innerHTML = '<div class="empty">Belum ada fitur dibagikan.</div>';
-          return;
-        }
-        listEl.innerHTML = features
-          .map((f) => {
-            const plans = (f.plans || []).join(', ');
-            const count = f.pluginCount || (f.plugins || []).length || 0;
-            const files = (f.plugins || []).map((x) => x.file).slice(0, 6).join(', ');
-            return `<div class="sf-card card" data-id="${escapeAttr(f.featureId)}">
-              <div class="sf-card-top">
-                <div>
-                  <div class="sf-title">${escapeHtml(f.title)} ${f.active ? '' : '<span class="sf-off">off</span>'}</div>
-                  <div class="sf-meta">${count} plugin · ${escapeHtml(plans)}</div>
-                  ${files ? `<div class="sf-meta" style="margin-top:0.2rem">${escapeHtml(files)}</div>` : ''}
-                </div>
-                <div class="sf-admin-actions">
-                  <button type="button" class="btn btn-sm btn-ghost sf-toggle">${f.active ? 'Nonaktif' : 'Aktifkan'}</button>
-                  <button type="button" class="btn btn-sm btn-ghost sf-del">Hapus</button>
-                </div>
-              </div>
-              ${f.description ? `<p class="sf-desc">${escapeHtml(f.description)}</p>` : ''}
-            </div>`;
-          })
-          .join('');
-
-        listEl.querySelectorAll('.sf-toggle').forEach((btn) => {
-          btn.addEventListener('click', async () => {
-            const id = btn.closest('.sf-card')?.dataset.id;
-            if (!id) return;
-            const on = btn.textContent.includes('Nonaktif');
-            try {
-              await API.adminUpdateSharedFeature(id, { active: !on });
-              toast('Diperbarui');
-              refresh();
-            } catch (e) {
-              toast(e.message || 'Gagal', 'error');
-            }
-          });
-        });
-        listEl.querySelectorAll('.sf-del').forEach((btn) => {
-          btn.addEventListener('click', async () => {
-            const id = btn.closest('.sf-card')?.dataset.id;
-            if (!id || !confirm('Hapus fitur ini?')) return;
-            try {
-              await API.adminDeleteSharedFeature(id);
-              toast('Dihapus');
-              refresh();
-            } catch (e) {
-              toast(e.message || 'Gagal', 'error');
-            }
-          });
-        });
-      } catch (e) {
-        listEl.innerHTML = `<p style="color:var(--red)">${escapeHtml(e.message || 'Gagal')}</p>`;
-      }
-    }
-
-    $('#sfCreateBtn')?.addEventListener('click', async () => {
-      const title = ($('#sfTitle')?.value || '').trim();
-      const description = ($('#sfDesc')?.value || '').trim();
-      const plans = [...$$('#sfPlans input:checked')].map((el) => el.value);
-      const plugins = [...$$('#sfPluginPick .sf-pick-cb:checked')].map((el) => ({
-        file: el.value,
-        enabled: true,
-        permissions: [],
-      }));
-      if (!title) {
-        toast('Judul wajib', 'warning');
-        return;
-      }
-      if (!plans.length) {
-        toast('Pilih minimal 1 paket', 'warning');
-        return;
-      }
-      if (!plugins.length) {
-        toast('Pilih minimal 1 plugin', 'warning');
-        return;
-      }
-      try {
-        await API.adminCreateSharedFeature({ title, description, plans, plugins });
-        toast('Fitur dibagikan');
-        if ($('#sfTitle')) $('#sfTitle').value = '';
-        if ($('#sfDesc')) $('#sfDesc').value = '';
-        $$('#sfPluginPick .sf-pick-cb').forEach((el) => {
-          el.checked = false;
-        });
-        refresh();
-      } catch (e) {
-        toast(e.message || 'Gagal', 'error');
-      }
-    });
-
-    await refresh();
-  }
-
 
   function formatClDate(d) {
     try {
@@ -2436,36 +2243,34 @@
   async function loadChangelog() {
     const box = $('#changelogBox');
     if (!box) return;
-    box.innerHTML = '<p style="color:var(--muted);font-weight:500">Loading…</p>';
+    box.innerHTML = '<p class="cl-loading">Memuat…</p>';
     try {
       const data = await API.changelog();
       const entries = data.entries || [];
       if (!entries.length) {
-        box.innerHTML = '<div class="empty">Belum ada changelog.</div>';
+        box.innerHTML = '<div class="empty">Belum ada catatan rilis.</div>';
         return;
       }
-      box.innerHTML = `<div class="cl-timeline">${entries
-        .map((e) => {
+      box.innerHTML = `<div class="cl-list">${entries
+        .map((e, i) => {
+          const date = formatClDate(e.createdAt);
+          const ver = e.version ? escapeHtml(e.version) : '';
           const tags = (e.tags || [])
             .map((tg) => `<span class="cl-tag">${escapeHtml(tg)}</span>`)
             .join('');
-          const ver = e.version ? `<span class="cl-ver">v${escapeHtml(e.version)}</span>` : '';
           const body = e.body
-            ? `<div class="cl-body">${escapeHtml(e.body).replace(/\n/g, '<br>')}</div>`
+            ? `<p class="cl-body">${escapeHtml(e.body).replace(/\n/g, '<br>')}</p>`
             : '';
-          return `<article class="cl-item">
-            <div class="cl-rail" aria-hidden="true"></div>
-            <div class="cl-content card">
-              <div class="cl-head">
-                <div class="cl-title-row">
-                  ${ver}
-                  <h3 class="cl-title">${escapeHtml(e.title)}</h3>
-                </div>
-                <time class="cl-date">${escapeHtml(formatClDate(e.createdAt))}</time>
+          return `<article class="cl-entry${i === 0 ? ' cl-entry-latest' : ''}">
+            <header class="cl-entry-head">
+              <h3 class="cl-entry-title">${escapeHtml(e.title)}</h3>
+              <div class="cl-entry-meta">
+                ${ver ? `<span class="cl-ver">${ver}</span>` : ''}
+                ${date ? `<time datetime="${escapeAttr(e.createdAt || '')}">${date}</time>` : ''}
               </div>
-              ${tags ? `<div class="cl-tags">${tags}</div>` : ''}
-              ${body}
-            </div>
+            </header>
+            ${tags ? `<div class="cl-tags">${tags}</div>` : ''}
+            ${body}
           </article>`;
         })
         .join('')}</div>`;
@@ -2704,41 +2509,18 @@
           </div>
         </div>
 
-        <div id="adminPanelShare" class="admin-panel hidden">
-          <div class="sf-admin">
-            <div class="sf-admin-form card" style="padding:1rem;margin-bottom:1rem">
-              <h2 class="admin-h2" style="margin:0 0 0.75rem">Bagikan plugin</h2>
-              <p class="hint" style="margin:0 0 0.85rem">User apply ke bot — kode tetap di server, tidak terlihat user.</p>
-              <div class="field"><label>Judul</label><input type="text" id="sfTitle" placeholder="Contoh: Paket utility" maxlength="120" /></div>
-              <div class="field"><label>Deskripsi</label><input type="text" id="sfDesc" placeholder="Singkat saja" maxlength="500" /></div>
-              <div class="field"><label>Untuk paket</label>
-                <div class="sf-plans" id="sfPlans">
-                  <label class="sf-plan"><input type="checkbox" value="free" checked /> Free</label>
-                  <label class="sf-plan"><input type="checkbox" value="pro" checked /> Pro</label>
-                  <label class="sf-plan"><input type="checkbox" value="business" checked /> Business</label>
-                </div>
-              </div>
-              <div class="field"><label>Pilih plugin</label>
-                <input type="search" id="sfPluginSearch" class="pe-search" placeholder="Cari plugin…" style="margin-bottom:0.5rem" />
-                <div id="sfPluginPick" class="sf-plugin-pick"></div>
-              </div>
-              <button class="btn" type="button" id="sfCreateBtn">Bagikan</button>
-            </div>
-            <div id="sfAdminList"></div>
-          </div>
-        </div>
 
         <div id="adminPanelChangelog" class="admin-panel hidden">
           <div class="cl-admin">
             <div class="sf-admin-form card" style="padding:1rem;margin-bottom:1rem">
-              <h2 class="admin-h2" style="margin:0 0 0.75rem">Tambah changelog</h2>
+              <h2 class="admin-h2" style="margin:0 0 0.75rem">Tulis catatan rilis</h2>
               <div class="field-row">
                 <div class="field"><label>Versi</label><input type="text" id="clVersion" placeholder="1.2.0" maxlength="40" /></div>
-                <div class="field"><label>Tag</label><input type="text" id="clTags" placeholder="new, fix" maxlength="80" /></div>
+                <div class="field"><label>Tag</label><input type="text" id="clTags" placeholder="fitur, perbaikan" maxlength="80" /></div>
               </div>
-              <div class="field"><label>Judul</label><input type="text" id="clTitle" placeholder="Perbaikan performa" maxlength="160" /></div>
-              <div class="field"><label>Isi</label><textarea id="clBody" rows="4" placeholder="Ringkas perubahan…" maxlength="5000"></textarea></div>
-              <button class="btn" type="button" id="clCreateBtn">Publikasikan</button>
+              <div class="field"><label>Judul</label><input type="text" id="clTitle" placeholder="Apa yang berubah" maxlength="160" /></div>
+              <div class="field"><label>Detail</label><textarea id="clBody" rows="4" placeholder="Satu–dua kalimat saja" maxlength="5000"></textarea></div>
+              <button class="btn" type="button" id="clCreateBtn">Simpan</button>
             </div>
             <div id="clAdminList"></div>
           </div>
@@ -2753,7 +2535,6 @@
       renderAdminUsers(usersData.users || []);
       renderAdminSessions(sessionsData.sessions || []);
       setupAdminPluginEditor(pluginsData);
-      setupAdminSharePanel();
       setupAdminChangelogPanel();
       showAdminView(adminView || 'users', { skipUrl: true });
 

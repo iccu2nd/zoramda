@@ -190,6 +190,18 @@ export class SessionManager {
     const docs = await Session.find(filter).sort({ createdAt: -1 }).lean()
     return docs.map((s) => {
       const live = this.sessions.get(s.sessionId)
+      const liveStatus = live ? live.getStatus() : null
+      const dbStats = s.metadata?.stats || {}
+      const stats = liveStatus?.stats
+        ? liveStatus.stats
+        : {
+            messagesIn: dbStats.messagesIn || 0,
+            messagesOut: dbStats.messagesOut || 0,
+            connectedAt: dbStats.connectedAt || null,
+            startedAt: dbStats.startedAt || null,
+            runtimeMs: 0,
+            processUptimeMs: 0,
+          }
       return {
         sessionId: s.sessionId,
         name: s.name,
@@ -199,6 +211,8 @@ export class SessionManager {
         pairingCode: live?.pairingCode || s.pairingCode,
         createdAt: s.createdAt,
         updatedAt: s.updatedAt,
+        lastError: s.lastError || null,
+        stats,
       }
     })
   }
