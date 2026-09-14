@@ -1071,7 +1071,10 @@
           <div class="ar-wrap">
             <div class="ar-toolbar">
               <p class="ar-lead">Saat user mengirim teks ini, bot membalas otomatis (tanpa prefix).</p>
-              <button type="button" class="btn btn-sm" id="arAddBtn">Tambah</button>
+              <div class="ar-toolbar-actions">
+                <button type="button" class="btn btn-sm btn-ghost" id="arClearBtn">Kosongkan</button>
+                <button type="button" class="btn btn-sm" id="arAddBtn">Tambah</button>
+              </div>
             </div>
             <div id="arList" class="ar-list"></div>
           </div>
@@ -1175,7 +1178,8 @@
         (o) =>
           `<button type="button" class="cdd-option${o.value === scope ? ' active' : ''}" data-value="${o.value}" role="option">${o.label}</button>`
       ).join('');
-      return `<div class="ar-card" data-scope="${escapeAttr(scope)}">
+      // value tidak di-set di HTML (hindari autofill); diisi lewat JS bila ada data tersimpan
+      return `<div class="ar-card" data-scope="${escapeAttr(scope)}" data-trigger="${escapeAttr(trigger)}" data-reply="${escapeAttr(reply)}">
         <div class="ar-card-top">
           <div class="ar-card-left">
             <span class="ar-num">1</span>
@@ -1194,22 +1198,42 @@
         <div class="ar-fields">
           <div class="ar-field">
             <label>Pesan masuk</label>
-            <input type="text" class="ar-trigger" placeholder="contoh: halo" value="${escapeAttr(trigger)}" maxlength="200" autocomplete="off" />
+            <input type="text" class="ar-trigger" name="ar_trigger_new" placeholder="contoh: halo" value="" maxlength="200" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-form-type="other" />
           </div>
           <div class="ar-field">
             <label>Balasan bot</label>
-            <input type="text" class="ar-reply" placeholder="contoh: hai, ada perlu apa?" value="${escapeAttr(reply)}" maxlength="2000" autocomplete="off" />
+            <input type="text" class="ar-reply" name="ar_reply_new" placeholder="contoh: hai, ada perlu apa?" value="" maxlength="2000" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-form-type="other" />
           </div>
         </div>
       </div>`;
     }
 
-    // Hanya aturan valid; kosong → 1 kartu kosong (placeholder abu-abu)
-    const valid = (Array.isArray(rules) ? rules : []).filter(
-      (r) => r && String(r.trigger || '').trim() && String(r.reply || '').trim()
-    );
+    function applyCardValues() {
+      list.querySelectorAll('.ar-card').forEach((card) => {
+        const tr = card.querySelector('.ar-trigger');
+        const rp = card.querySelector('.ar-reply');
+        if (tr) {
+          tr.value = card.dataset.trigger || '';
+          tr.setAttribute('value', tr.value);
+        }
+        if (rp) {
+          rp.value = card.dataset.reply || '';
+          rp.setAttribute('value', rp.value);
+        }
+      });
+    }
+
+    // Hanya aturan valid dari server; kosong → 1 kartu kosong (hanya placeholder abu-abu)
+    const valid = (Array.isArray(rules) ? rules : []).filter((r) => {
+      if (!r) return false;
+      const a = String(r.trigger || '').trim();
+      const b = String(r.reply || '').trim();
+      if (!a || !b) return false;
+      return true;
+    });
     list.innerHTML = (valid.length ? valid : [{}]).map((r) => cardHtml(r)).join('');
     renumber();
+    applyCardValues();
 
     function closeAllCdd(except) {
       list.querySelectorAll('[data-cdd]').forEach((el) => {
@@ -1277,10 +1301,18 @@
         toast('Maksimal 50 aturan');
         return;
       }
-      list.insertAdjacentHTML('beforeend', cardHtml());
+      list.insertAdjacentHTML('beforeend', cardHtml({}));
       renumber();
+      applyCardValues();
       list.lastElementChild?.querySelector('.ar-trigger')?.focus();
       list.lastElementChild?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+
+    $('#arClearBtn')?.addEventListener('click', () => {
+      list.innerHTML = cardHtml({});
+      renumber();
+      applyCardValues();
+      toast('Daftar dikosongkan — tekan simpan agar berlaku');
     });
   }
 
