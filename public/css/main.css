@@ -3448,3 +3448,44 @@ html, body {
   .sf-list { grid-template-columns: 1fr; }
   .sf-apply-row { flex-direction: column; align-items: stretch; }
 }
+
+
+.sf-plans {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+.sf-plan {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  padding: 0.4rem 0.7rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg, var(--card));
+  cursor: pointer;
+}
+.sf-plan input { accent-color: var(--text); }
+.sf-plugin-pick {
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg, var(--card));
+  padding: 0.35rem;
+}
+.sf-pick-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding: 0.45rem 0.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.86rem;
+}
+.sf-pick-item:hover { background: var(--chip); }
+.sf-pick-body { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+.sf-pick-file { font-weight: 650; word-break: break-all; }
+.sf-pick-cmd { font-size: 0.75rem; color: var(--muted); font-weight: 550; }

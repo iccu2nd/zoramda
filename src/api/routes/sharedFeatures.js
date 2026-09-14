@@ -5,81 +5,98 @@ import SharedFeature from '../../db/models/SharedFeature.js'
 import Session from '../../db/models/Session.js'
 import configService from '../../core/ConfigService.js'
 import logger from '../../utils/logger.js'
+import { resolveEffectivePlan } from '../../config/plans.js'
 
-function publicFeature(doc) {
-  return {
-    featureId: doc.featureId,
-    title: doc.title,
-    description: doc.description || '',
-    kind: doc.kind,
-    data: doc.data || [],
-    active: !!doc.active,
-    createdAt: doc.createdAt,
+const PLAN_IDS = ['free', 'pro', 'business']
+
+function normalizePlans(raw) {
+  const set = new Set()
+  const arr = Array.isArray(raw) ? raw : String(raw || '').split(/[,;\s]+/)
+  for (const p of arr) {
+    const id = String(p || '').toLowerCase().trim()
+    if (PLAN_IDS.includes(id)) set.add(id)
   }
+  if (!set.size) return [...PLAN_IDS]
+  return PLAN_IDS.filter((id) => set.has(id))
 }
 
-function normalizeAutoreplyData(raw) {
+function normalizePlugins(raw) {
   if (!Array.isArray(raw)) return []
   const out = []
   const seen = new Set()
   for (const item of raw) {
-    if (!item || typeof item !== 'object') continue
-    const trigger = String(item.trigger || '')
-      .trim()
-      .toLowerCase()
-      .slice(0, 200)
-    const reply = String(item.reply || '').trim().slice(0, 2000)
-    if (!trigger || !reply) continue
-    let scope = String(item.scope || 'all').toLowerCase()
-    if (scope !== 'group' && scope !== 'private') scope = 'all'
-    const key = `${scope}::${trigger}`
-    if (seen.has(key)) continue
-    seen.add(key)
-    out.push({ trigger, reply, scope })
-    if (out.length >= 50) break
-  }
-  return out
-}
-
-function normalizePluginsData(raw) {
-  if (!Array.isArray(raw)) return []
-  const out = []
-  for (const item of raw) {
-    if (!item) continue
+    let file = ''
+    let enabled = true
+    let permissions = []
     if (typeof item === 'string') {
-      const file = item.trim()
-      if (file) out.push({ file, enabled: true, permissions: [] })
-      continue
+      file = item.trim()
+    } else if (item && typeof item === 'object') {
+      file = String(item.file || '').trim()
+      enabled = item.enabled !== false
+      permissions = Array.isArray(item.permissions) ? item.permissions.map(String) : []
     }
-    if (typeof item === 'object' && item.file) {
-      const file = String(item.file).trim()
-      if (!file) continue
-      out.push({
-        file,
-        enabled: item.enabled !== false,
-        permissions: Array.isArray(item.permissions) ? item.permissions : [],
-      })
-    }
+    if (!file || seen.has(file)) continue
+    seen.add(file)
+    out.push({ file, enabled, permissions })
     if (out.length >= 80) break
   }
   return out
 }
 
-export default function createSharedFeatureRoutes() {
+function resolvePlugins(doc) {
+  if (Array.isArray(doc.plugins) && doc.plugins.length) return normalizePlugins(doc.plugins)
+  if (Array.isArray(doc.data) && doc.data.length) return normalizePlugins(doc.data)
+  return []
+}
+
+/** User-facing — tanpa source / tanpa daftar file detail berlebih */
+function publicFeature(doc, { admin = false } = {}) {
+  const plugins = resolvePlugins(doc)
+  const base = {
+    featureId: doc.featureId,
+    title: doc.title,
+    description: doc.description || '',
+    kind: 'plugins',
+    plans: normalizePlans(doc.plans),
+    pluginCount: plugins.length,
+    active: !!doc.active,
+    createdAt: doc.createdAt,
+  }
+  if (admin) {
+    base.plugins = plugins
+  }
+  return base
+}
+
+function userPlanId(req) {
+  if (req.user?.isAdmin) return 'business'
+  const effective = resolveEffectivePlan({
+    role: req.user?.role,
+    plan: req.user?.plan,
+    planExpiresAt: req.user?.planExpiresAt,
+  })
+  return effective?.id || 'free'
+}
+
+export default function createSharedFeatureRoutes(sessionManager) {
   const router = Router()
 
-  /** List fitur gratis aktif (user login) */
+  /** List fitur aktif yang cocok dengan paket user (tanpa kode plugin) */
   router.get('/', authenticate, async (req, res) => {
     try {
+      const plan = userPlanId(req)
       const list = await SharedFeature.find({ active: true }).sort({ createdAt: -1 }).lean()
-      res.json({ features: list.map(publicFeature) })
+      const features = list
+        .filter((doc) => normalizePlans(doc.plans).includes(plan))
+        .map((doc) => publicFeature(doc, { admin: false }))
+      res.json({ features, plan })
     } catch (err) {
       logger.error({ err: err.message }, 'List shared features error')
       res.status(500).json({ error: 'Gagal memuat fitur' })
     }
   })
 
-  /** Apply ke session milik user */
+  /** Apply plugin ke session — enable file di server, user tidak perlu source */
   router.post('/:featureId/apply', authenticate, async (req, res) => {
     try {
       const featureId = String(req.params.featureId || '').trim()
@@ -98,90 +115,90 @@ export default function createSharedFeatureRoutes() {
       const feature = await SharedFeature.findOne({ featureId, active: true }).lean()
       if (!feature) return res.status(404).json({ error: 'Fitur tidak ditemukan' })
 
-      await configService.getConfig(sessionId, req.user.userId)
-
-      if (feature.kind === 'autoreply') {
-        const incoming = normalizeAutoreplyData(feature.data)
-        const cfg = configService.getCached(sessionId)
-        const existing = Array.isArray(cfg.autoReplies) ? cfg.autoReplies : []
-        const merged = normalizeAutoreplyData([...existing, ...incoming])
-        await configService.update(sessionId, req.user.userId, { autoReplies: merged })
-        return res.json({
-          ok: true,
-          kind: 'autoreply',
-          applied: incoming.length,
-          total: merged.length,
-        })
+      const plan = userPlanId(req)
+      if (!normalizePlans(feature.plans).includes(plan)) {
+        return res.status(403).json({ error: 'Fitur ini tidak tersedia untuk paket kamu' })
       }
 
-      if (feature.kind === 'plugins') {
-        const items = normalizePluginsData(feature.data)
-        const states = {}
-        for (const it of items) {
-          states[it.file] = {
-            enabled: it.enabled !== false,
-            permissions: it.permissions || [],
-          }
+      const items = resolvePlugins(feature)
+      if (!items.length) return res.status(400).json({ error: 'Fitur tidak punya plugin' })
+
+      // Optional: pastikan file ada di loader
+      const loader = sessionManager?.pluginLoader
+      if (loader?.getAllPlugins) {
+        const known = new Set(loader.getAllPlugins().map((p) => p.file))
+        const missing = items.filter((it) => !known.has(it.file))
+        if (missing.length === items.length) {
+          return res.status(400).json({ error: 'Plugin fitur tidak tersedia di server' })
         }
-        await configService.updatePluginStates(sessionId, req.user.userId, states)
-        return res.json({ ok: true, kind: 'plugins', applied: items.length })
       }
 
-      return res.status(400).json({ error: 'Jenis fitur tidak didukung' })
+      await configService.getConfig(sessionId, req.user.userId)
+      const states = {}
+      for (const it of items) {
+        states[it.file] = {
+          enabled: it.enabled !== false,
+          permissions: it.permissions || [],
+        }
+      }
+      await configService.updatePluginStates(sessionId, req.user.userId, states)
+      res.json({ ok: true, kind: 'plugins', applied: Object.keys(states).length })
     } catch (err) {
       logger.error({ err: err.message }, 'Apply shared feature error')
       res.status(500).json({ error: err.message || 'Gagal apply fitur' })
     }
   })
 
-  /** Admin list all */
+  /** Admin list */
   router.get('/admin/all', authenticate, requireAdmin, async (req, res) => {
     try {
       const list = await SharedFeature.find({}).sort({ createdAt: -1 }).lean()
-      res.json({ features: list.map(publicFeature) })
+      res.json({ features: list.map((d) => publicFeature(d, { admin: true })) })
     } catch (err) {
       logger.error({ err: err.message }, 'Admin list shared features error')
       res.status(500).json({ error: 'Gagal memuat fitur' })
     }
   })
 
-  /** Admin create */
+  /** Admin create — pilih plugin file + paket */
   router.post('/admin', authenticate, requireAdmin, async (req, res) => {
     try {
       const title = String(req.body?.title || '').trim().slice(0, 120)
       const description = String(req.body?.description || '').trim().slice(0, 500)
-      const kind = req.body?.kind === 'plugins' ? 'plugins' : 'autoreply'
       if (!title) return res.status(400).json({ error: 'Judul wajib' })
 
-      let data = req.body?.data
-      if (typeof data === 'string') {
+      let plugins = req.body?.plugins ?? req.body?.data
+      if (typeof plugins === 'string') {
         try {
-          data = JSON.parse(data)
+          plugins = JSON.parse(plugins)
         } catch {
-          return res.status(400).json({ error: 'Data JSON tidak valid' })
+          return res.status(400).json({ error: 'Data plugin tidak valid' })
         }
       }
-      data = kind === 'plugins' ? normalizePluginsData(data) : normalizeAutoreplyData(data)
-      if (!data.length) return res.status(400).json({ error: 'Isi minimal 1 item data' })
+      plugins = normalizePlugins(plugins)
+      if (!plugins.length) return res.status(400).json({ error: 'Pilih minimal 1 plugin' })
+
+      const plans = normalizePlans(req.body?.plans)
 
       const featureId = `sf_${uuidv4().replace(/-/g, '').slice(0, 16)}`
       const doc = await SharedFeature.create({
         featureId,
         title,
         description,
-        kind,
-        data,
+        kind: 'plugins',
+        plugins,
+        data: plugins,
+        plans,
         active: true,
         createdBy: req.user.userId || 'admin',
       })
-      res.status(201).json({ feature: publicFeature(doc) })
+      res.status(201).json({ feature: publicFeature(doc, { admin: true }) })
     } catch (err) {
       logger.error({ err: err.message }, 'Create shared feature error')
       res.status(500).json({ error: 'Gagal membuat fitur' })
     }
   })
 
-  /** Admin update */
   router.patch('/admin/:featureId', authenticate, requireAdmin, async (req, res) => {
     try {
       const featureId = String(req.params.featureId || '').trim()
@@ -190,25 +207,24 @@ export default function createSharedFeatureRoutes() {
       if (req.body?.description !== undefined)
         update.description = String(req.body.description).trim().slice(0, 500)
       if (req.body?.active !== undefined) update.active = Boolean(req.body.active)
-      if (req.body?.kind !== undefined)
-        update.kind = req.body.kind === 'plugins' ? 'plugins' : 'autoreply'
-      if (req.body?.data !== undefined) {
-        let data = req.body.data
-        if (typeof data === 'string') data = JSON.parse(data)
-        const existing = await SharedFeature.findOne({ featureId }).lean()
-        const kind = update.kind || existing?.kind || 'autoreply'
-        update.data = kind === 'plugins' ? normalizePluginsData(data) : normalizeAutoreplyData(data)
+      if (req.body?.plans !== undefined) update.plans = normalizePlans(req.body.plans)
+      if (req.body?.plugins !== undefined || req.body?.data !== undefined) {
+        let plugins = req.body.plugins ?? req.body.data
+        if (typeof plugins === 'string') plugins = JSON.parse(plugins)
+        plugins = normalizePlugins(plugins)
+        update.plugins = plugins
+        update.data = plugins
+        update.kind = 'plugins'
       }
       const doc = await SharedFeature.findOneAndUpdate({ featureId }, { $set: update }, { new: true })
       if (!doc) return res.status(404).json({ error: 'Tidak ditemukan' })
-      res.json({ feature: publicFeature(doc) })
+      res.json({ feature: publicFeature(doc, { admin: true }) })
     } catch (err) {
       logger.error({ err: err.message }, 'Patch shared feature error')
       res.status(500).json({ error: 'Gagal update fitur' })
     }
   })
 
-  /** Admin delete */
   router.delete('/admin/:featureId', authenticate, requireAdmin, async (req, res) => {
     try {
       const featureId = String(req.params.featureId || '').trim()

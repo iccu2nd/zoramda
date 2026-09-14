@@ -62,7 +62,7 @@ export function createServer(sessionManager) {
   app.use('/api/plugins', createPluginRoutes(sessionManager))
   app.use('/api/sessions', createSessionRoutes(sessionManager))
   app.use('/api/admin', createAdminRoutes(sessionManager))
-  app.use('/api/shared-features', createSharedFeatureRoutes())
+  app.use('/api/shared-features', createSharedFeatureRoutes(sessionManager))
   app.use('/api/payment', paymentRoutes)
 
   // 404

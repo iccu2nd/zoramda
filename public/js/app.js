@@ -2213,7 +2213,8 @@
       const features = featRes.features || [];
       const sessList = Array.isArray(sessions) ? sessions : sessions?.sessions || [];
       if (!features.length) {
-        box.innerHTML = '<div class="empty">Belum ada fitur gratis. Admin bisa membagikan dari menu share fitur.</div>';
+        box.innerHTML =
+          '<div class="empty">Belum ada fitur untuk paket kamu. Admin membagikan dari share fitur.</div>';
         return;
       }
       const sessOpts = sessList.length
@@ -2226,15 +2227,15 @@
         : '<option value="">Buat session dulu</option>';
       box.innerHTML = `<div class="sf-list">${features
         .map((f) => {
-          const kindLabel = f.kind === 'plugins' ? 'Plugins' : 'Auto-reply';
-          const count = Array.isArray(f.data) ? f.data.length : 0;
+          const plans = (f.plans || []).join(', ');
+          const count = f.pluginCount || 0;
           return `<div class="sf-card card" data-id="${escapeAttr(f.featureId)}">
             <div class="sf-card-top">
               <div>
                 <div class="sf-title">${escapeHtml(f.title)}</div>
-                <div class="sf-meta">${escapeHtml(kindLabel)} · ${count} item</div>
+                <div class="sf-meta">${count} plugin · ${escapeHtml(plans || 'semua paket')}</div>
               </div>
-              <span class="sf-chip">${escapeHtml(kindLabel)}</span>
+              <span class="sf-chip">Plugin</span>
             </div>
             ${f.description ? `<p class="sf-desc">${escapeHtml(f.description)}</p>` : ''}
             <div class="sf-apply-row">
@@ -2257,7 +2258,7 @@
           btn.disabled = true;
           try {
             const r = await API.applySharedFeature(id, sessionId);
-            toast(`Berhasil apply (${r.applied || 0} item)`);
+            toast(`Berhasil apply (${r.applied || 0} plugin)`);
           } catch (e) {
             toast(e.message || 'Gagal apply', 'error');
           } finally {
@@ -2272,7 +2273,46 @@
 
   async function setupAdminSharePanel() {
     const listEl = $('#sfAdminList');
-    if (!listEl) return;
+    const pickEl = $('#sfPluginPick');
+    if (!listEl || !pickEl) return;
+
+    let allPlugins = [];
+    try {
+      const data = await API.adminPlugins();
+      allPlugins = data.plugins || [];
+    } catch (_) {
+      allPlugins = [];
+    }
+
+    function renderPick(q = '') {
+      const qq = String(q || '').toLowerCase().trim();
+      const items = allPlugins.filter((p) => {
+        if (!qq) return true;
+        return (
+          String(p.file || '').toLowerCase().includes(qq) ||
+          String((p.commands || []).join(' ')).toLowerCase().includes(qq)
+        );
+      });
+      if (!items.length) {
+        pickEl.innerHTML = '<div class="empty" style="padding:0.75rem">Tidak ada plugin</div>';
+        return;
+      }
+      pickEl.innerHTML = items
+        .map((p) => {
+          const cmds = (p.commands || p.defaultCommands || []).slice(0, 4).join(', ');
+          return `<label class="sf-pick-item">
+            <input type="checkbox" class="sf-pick-cb" value="${escapeAttr(p.file)}" />
+            <span class="sf-pick-body">
+              <span class="sf-pick-file">${escapeHtml(p.file)}</span>
+              ${cmds ? `<span class="sf-pick-cmd">${escapeHtml(cmds)}</span>` : ''}
+            </span>
+          </label>`;
+        })
+        .join('');
+    }
+
+    renderPick();
+    $('#sfPluginSearch')?.addEventListener('input', (e) => renderPick(e.target.value));
 
     async function refresh() {
       listEl.innerHTML = '<p style="color:var(--muted)">Loading…</p>';
@@ -2285,13 +2325,15 @@
         }
         listEl.innerHTML = features
           .map((f) => {
-            const kindLabel = f.kind === 'plugins' ? 'Plugins' : 'Auto-reply';
-            const count = Array.isArray(f.data) ? f.data.length : 0;
+            const plans = (f.plans || []).join(', ');
+            const count = f.pluginCount || (f.plugins || []).length || 0;
+            const files = (f.plugins || []).map((x) => x.file).slice(0, 6).join(', ');
             return `<div class="sf-card card" data-id="${escapeAttr(f.featureId)}">
               <div class="sf-card-top">
                 <div>
                   <div class="sf-title">${escapeHtml(f.title)} ${f.active ? '' : '<span class="sf-off">off</span>'}</div>
-                  <div class="sf-meta">${escapeHtml(kindLabel)} · ${count} item</div>
+                  <div class="sf-meta">${count} plugin · ${escapeHtml(plans)}</div>
+                  ${files ? `<div class="sf-meta" style="margin-top:0.2rem">${escapeHtml(files)}</div>` : ''}
                 </div>
                 <div class="sf-admin-actions">
                   <button type="button" class="btn btn-sm btn-ghost sf-toggle">${f.active ? 'Nonaktif' : 'Aktifkan'}</button>
@@ -2335,56 +2377,35 @@
       }
     }
 
-    // kind dropdown
-    const cdd = $('#sfKindCdd');
-    cdd?.addEventListener('click', (e) => {
-      const btn = e.target.closest('.cdd-btn');
-      if (btn) {
-        e.stopPropagation();
-        cdd.classList.toggle('open');
-        cdd.querySelector('.cdd-menu')?.classList.toggle('hidden');
-        return;
-      }
-      const opt = e.target.closest('.cdd-option');
-      if (opt) {
-        e.stopPropagation();
-        cdd.dataset.value = opt.dataset.value || 'autoreply';
-        cdd.querySelector('.cdd-label').textContent = opt.textContent;
-        cdd.querySelectorAll('.cdd-option').forEach((o) => o.classList.toggle('active', o === opt));
-        cdd.classList.remove('open');
-        cdd.querySelector('.cdd-menu')?.classList.add('hidden');
-        const hint = $('#sfHint');
-        if (hint) {
-          hint.textContent =
-            cdd.dataset.value === 'plugins'
-              ? 'Plugins: [{"file":"main/ping.js","enabled":true,"permissions":[]}]'
-              : 'Auto-reply: [{"trigger":"halo","reply":"hai","scope":"all"}]';
-        }
-      }
-    });
-
     $('#sfCreateBtn')?.addEventListener('click', async () => {
       const title = ($('#sfTitle')?.value || '').trim();
       const description = ($('#sfDesc')?.value || '').trim();
-      const kind = $('#sfKindCdd')?.dataset.value || 'autoreply';
-      let dataRaw = ($('#sfData')?.value || '').trim();
-      if (!title || !dataRaw) {
-        toast('Judul dan data wajib', 'warning');
+      const plans = [...$$('#sfPlans input:checked')].map((el) => el.value);
+      const plugins = [...$$('#sfPluginPick .sf-pick-cb:checked')].map((el) => ({
+        file: el.value,
+        enabled: true,
+        permissions: [],
+      }));
+      if (!title) {
+        toast('Judul wajib', 'warning');
         return;
       }
-      let data;
-      try {
-        data = JSON.parse(dataRaw);
-      } catch {
-        toast('JSON tidak valid', 'error');
+      if (!plans.length) {
+        toast('Pilih minimal 1 paket', 'warning');
+        return;
+      }
+      if (!plugins.length) {
+        toast('Pilih minimal 1 plugin', 'warning');
         return;
       }
       try {
-        await API.adminCreateSharedFeature({ title, description, kind, data });
+        await API.adminCreateSharedFeature({ title, description, plans, plugins });
         toast('Fitur dibagikan');
         if ($('#sfTitle')) $('#sfTitle').value = '';
         if ($('#sfDesc')) $('#sfDesc').value = '';
-        if ($('#sfData')) $('#sfData').value = '';
+        $$('#sfPluginPick .sf-pick-cb').forEach((el) => {
+          el.checked = false;
+        });
         refresh();
       } catch (e) {
         toast(e.message || 'Gagal', 'error');
@@ -2538,24 +2559,21 @@
         <div id="adminPanelShare" class="admin-panel hidden">
           <div class="sf-admin">
             <div class="sf-admin-form card" style="padding:1rem;margin-bottom:1rem">
-              <h2 class="admin-h2" style="margin:0 0 0.75rem">Bagikan fitur gratis</h2>
-              <div class="field"><label>Judul</label><input type="text" id="sfTitle" placeholder="Contoh: Auto-reply sambutan" maxlength="120" /></div>
+              <h2 class="admin-h2" style="margin:0 0 0.75rem">Bagikan plugin</h2>
+              <p class="hint" style="margin:0 0 0.85rem">User apply ke bot — kode tetap di server, tidak terlihat user.</p>
+              <div class="field"><label>Judul</label><input type="text" id="sfTitle" placeholder="Contoh: Paket utility" maxlength="120" /></div>
               <div class="field"><label>Deskripsi</label><input type="text" id="sfDesc" placeholder="Singkat saja" maxlength="500" /></div>
-              <div class="field"><label>Jenis</label>
-                <div class="cdd" id="sfKindCdd" data-cdd data-value="autoreply" style="display:inline-block">
-                  <button type="button" class="cdd-btn" id="sfKindBtn"><span class="cdd-label">Auto-reply</span>
-                    <svg class="cdd-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m6 9 6 6 6-6"/></svg>
-                  </button>
-                  <div class="cdd-menu hidden" role="listbox">
-                    <button type="button" class="cdd-option active" data-value="autoreply">Auto-reply</button>
-                    <button type="button" class="cdd-option" data-value="plugins">Plugins</button>
-                  </div>
+              <div class="field"><label>Untuk paket</label>
+                <div class="sf-plans" id="sfPlans">
+                  <label class="sf-plan"><input type="checkbox" value="free" checked /> Free</label>
+                  <label class="sf-plan"><input type="checkbox" value="pro" checked /> Pro</label>
+                  <label class="sf-plan"><input type="checkbox" value="business" checked /> Business</label>
                 </div>
               </div>
-              <div class="field"><label>Data (JSON)</label>
-                <textarea id="sfData" rows="6" spellcheck="false" placeholder='[{"trigger":"halo","reply":"hai","scope":"all"}]'></textarea>
+              <div class="field"><label>Pilih plugin</label>
+                <input type="search" id="sfPluginSearch" class="pe-search" placeholder="Cari plugin…" style="margin-bottom:0.5rem" />
+                <div id="sfPluginPick" class="sf-plugin-pick"></div>
               </div>
-              <p class="hint" id="sfHint">Auto-reply: array { trigger, reply, scope }. Plugins: array { file, enabled, permissions }.</p>
               <button class="btn" type="button" id="sfCreateBtn">Bagikan</button>
             </div>
             <div id="sfAdminList"></div>
