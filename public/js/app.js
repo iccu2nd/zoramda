@@ -443,6 +443,8 @@
   /* ——— nav + URL endpoints (/dash/...) ——— */
   let currentPage = 'sessions';
   let lastSessionStatusMap = {};
+  let sessionFilter = 'all';
+  let cachedSessions = [];
   let adminView = 'users'; // users | bots | plugins | changelog
 
   const PAGE_PATH = {
@@ -807,34 +809,94 @@
     const list = $('#sessionList');
     try {
       const { sessions } = await API.sessions();
-      updateConnectedNav(sessions);
-      notifySessionStatusChanges(sessions);
-      if (!sessions?.length) {
-        list.innerHTML = `<div class="onboard">
+      cachedSessions = sessions || [];
+      updateConnectedNav(cachedSessions);
+      notifySessionStatusChanges(cachedSessions);
+      updateSessionDashboard(cachedSessions);
+
+      const name = currentUser?.username || currentUser?.name || '';
+      const greet = $('#sessionsGreeting');
+      if (greet) {
+        const hour = new Date().getHours();
+        const hi =
+          hour < 11 ? 'Selamat pagi' : hour < 15 ? 'Selamat siang' : hour < 18 ? 'Selamat sore' : 'Selamat malam';
+        greet.textContent = name ? hi + ', ' + name : 'Sessions';
+      }
+      const sub = $('#sessionsSub');
+      if (sub) {
+        const plan = (currentUser?.plan || 'free').toUpperCase();
+        sub.textContent = 'Paket ' + plan + ' · kelola koneksi WhatsApp bot kamu';
+      }
+
+      renderSessionList(cachedSessions);
+    } catch (e) {
+      if (e.status === 401) {
+        showLogin();
+        return;
+      }
+      list.innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`;
+    }
+  }
+
+  function updateSessionDashboard(sessions) {
+    const list = sessions || [];
+    const online = list.filter((s) => s.status === 'CONNECTED').length;
+    let msgIn = 0;
+    let msgOut = 0;
+    list.forEach((s) => {
+      msgIn += Number(s.stats?.messagesIn || 0);
+      msgOut += Number(s.stats?.messagesOut || 0);
+    });
+    const set = (id, v) => {
+      const el = $(id);
+      if (el) el.textContent = Number(v).toLocaleString('id-ID');
+    };
+    set('#statTotal', list.length);
+    set('#statOnline', online);
+    set('#statMsgIn', msgIn);
+    set('#statMsgOut', msgOut);
+  }
+
+  function renderSessionList(sessions) {
+    const list = $('#sessionList');
+    if (!list) return;
+    let rows = sessions || [];
+    if (sessionFilter === 'CONNECTED') {
+      rows = rows.filter((s) => s.status === 'CONNECTED');
+    } else if (sessionFilter === 'other') {
+      rows = rows.filter((s) => s.status !== 'CONNECTED');
+    }
+    if (!(sessions || []).length) {
+      list.innerHTML = `<div class="onboard">
           <div class="onboard-title">Mulai dalam 3 langkah</div>
           <ol class="onboard-steps">
             <li><strong>Buat session</strong> — nama bot kamu</li>
             <li><strong>Connect</strong> — scan QR atau pairing</li>
             <li><strong>Uji command</strong> — ketik di WhatsApp</li>
           </ol>
-          <p class="onboard-hint">Tekan tombol session baru di atas untuk mulai.</p>
+          <p class="onboard-hint">Tekan tombol Session baru di atas untuk mulai.</p>
         </div>`;
-        return;
-      }
-      list.innerHTML = sessions
-        .map((s) => {
-          const st = s.stats || {};
-          const runtime =
-            s.status === 'CONNECTED' && st.runtimeMs
-              ? formatDuration(st.runtimeMs)
-              : '—';
-          const up = st.processUptimeMs ? formatDuration(st.processUptimeMs) : '—';
-          const created = s.createdAt ? formatClDate(s.createdAt) : '';
-          return `
-        <div class="session-card" data-id="${escapeAttr(s.sessionId)}">
+      return;
+    }
+    if (!rows.length) {
+      list.innerHTML = `<div class="empty">Tidak ada session di filter ini.</div>`;
+      return;
+    }
+    list.innerHTML = rows
+      .map((s) => {
+        const st = s.stats || {};
+        const runtime =
+          s.status === 'CONNECTED' && st.runtimeMs ? formatDuration(st.runtimeMs) : '—';
+        const up = st.processUptimeMs ? formatDuration(st.processUptimeMs) : '—';
+        const created = s.createdAt ? formatClDate(s.createdAt) : '';
+        const pulse = s.status === 'CONNECTED' ? ' is-live' : '';
+        return `
+        <div class="session-card${pulse}" data-id="${escapeAttr(s.sessionId)}" data-status="${escapeAttr(s.status || '')}">
           <div class="session-main">
             <div>
-              <div class="session-name">${escapeHtml(s.name || 'session')}</div>
+              <div class="session-name">${escapeHtml(s.name || 'session')}
+                ${s.status === 'CONNECTED' ? '<span class="live-dot" title="Online"></span>' : ''}
+              </div>
               <div class="session-meta">
                 <span class="${statusClass(s.status)}">${(s.status || '').toLowerCase()}</span>
                 ${s.phoneNumber ? ' · ' + escapeHtml(s.phoneNumber) : ''}
@@ -857,22 +919,15 @@
             <div class="si-item si-wide"><span class="si-label">ID</span><span class="si-val si-mono">${escapeHtml(s.sessionId)}</span></div>
           </div>
         </div>`;
-        })
-        .join('');
+      })
+      .join('');
 
-      list.querySelectorAll('[data-act]').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          const id = btn.closest('.session-card').dataset.id;
-          handleSessionAct(btn.dataset.act, id);
-        });
+    list.querySelectorAll('[data-act]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.closest('.session-card').dataset.id;
+        handleSessionAct(btn.dataset.act, id);
       });
-    } catch (e) {
-      if (e.status === 401) {
-        showLogin();
-        return;
-      }
-      list.innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`;
-    }
+    });
   }
 
   async function handleSessionAct(act, id) {

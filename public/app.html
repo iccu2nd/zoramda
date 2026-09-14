@@ -218,12 +218,26 @@
 
       <!-- sessions page -->
       <section id="page-sessions">
-        <h1 class="page-title">sessions</h1>
-        <p class="page-sub">Manage WhatsApp connections and session status</p>
-        <div class="toolbar">
-          <button class="btn btn-sm" id="refreshSessions" type="button">refresh</button>
-          <div class="spacer"></div>
-          <button class="btn btn-sm" id="newSessionBtn" type="button">+ session baru</button>
+        <div class="page-hero">
+          <div>
+            <h1 class="page-title" id="sessionsGreeting">Sessions</h1>
+            <p class="page-sub" id="sessionsSub">Kelola koneksi WhatsApp bot kamu</p>
+          </div>
+          <div class="page-hero-actions">
+            <button class="btn btn-sm btn-ghost" id="refreshSessions" type="button">Refresh</button>
+            <button class="btn btn-sm" id="newSessionBtn" type="button">+ Session baru</button>
+          </div>
+        </div>
+        <div class="dash-stats" id="sessionStats">
+          <div class="dash-stat"><div class="dash-stat-val" id="statTotal">0</div><div class="dash-stat-label">Total</div></div>
+          <div class="dash-stat"><div class="dash-stat-val" id="statOnline">0</div><div class="dash-stat-label">Online</div></div>
+          <div class="dash-stat"><div class="dash-stat-val" id="statMsgOut">0</div><div class="dash-stat-label">Terkirim</div></div>
+          <div class="dash-stat"><div class="dash-stat-val" id="statMsgIn">0</div><div class="dash-stat-label">Masuk</div></div>
+        </div>
+        <div class="filter-chips" id="sessionFilters">
+          <button type="button" class="filter-chip active" data-filter="all">Semua</button>
+          <button type="button" class="filter-chip" data-filter="CONNECTED">Online</button>
+          <button type="button" class="filter-chip" data-filter="other">Offline</button>
         </div>
         <div id="sessionList" class="session-grid"></div>
       </section>
