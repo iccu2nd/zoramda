@@ -131,6 +131,24 @@ const API = {
     API.request('/api/admin/sessions/' + encodeURIComponent(id), { method: 'DELETE' }),
 
   adminPlugins: () => API.request('/api/admin/plugins'),
+
+  sharedFeatures: () => API.request('/api/shared-features'),
+  applySharedFeature: (featureId, sessionId) =>
+    API.request('/api/shared-features/' + encodeURIComponent(featureId) + '/apply', {
+      method: 'POST',
+      body: JSON.stringify({ sessionId }),
+    }),
+  adminSharedFeatures: () => API.request('/api/shared-features/admin/all'),
+  adminCreateSharedFeature: (body) =>
+    API.request('/api/shared-features/admin', { method: 'POST', body: JSON.stringify(body) }),
+  adminUpdateSharedFeature: (featureId, body) =>
+    API.request('/api/shared-features/admin/' + encodeURIComponent(featureId), {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  adminDeleteSharedFeature: (featureId) =>
+    API.request('/api/shared-features/admin/' + encodeURIComponent(featureId), { method: 'DELETE' }),
+
   adminPluginTemplate: (params = {}) => {
     const q = new URLSearchParams(params).toString();
     return API.request('/api/admin/plugins/template' + (q ? '?' + q : ''));
