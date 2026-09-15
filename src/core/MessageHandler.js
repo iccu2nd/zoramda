@@ -191,6 +191,21 @@ export class MessageHandler {
       }
 
       const m = this._parseMessage(raw, sock, prefix, latency)
+      if (m) {
+        // rezora-compatible in-memory chat store
+        if (!global.db) global.db = { data: { chats: {}, users: {}, settings: {} } }
+        if (!global.db.data.chats) global.db.data.chats = {}
+        if (!global.db.data.chats[m.chat]) {
+          global.db.data.chats[m.chat] = {
+            antiLink: false,
+            antiLinkMode: 'delete',
+            welcome: false,
+            goodbye: false,
+            antidelete: false,
+            antispam: false,
+          }
+        }
+      }
       if (!m || !m.command) return
 
       latency.mark('command_detected')
@@ -383,10 +398,36 @@ export class MessageHandler {
       return await sock.sendMessage(jid, { react: { text: emoji || '', key: raw.key } })
     }
 
+    const isMedia = MEDIA_TYPES.includes(type)
+
+    /** Download media dari pesan ini, atau dari yang di-quote */
+    const download = async () => {
+      let buf
+      let mime = content?.[type]?.mimetype || ''
+      if (isMedia) {
+        buf = await downloadMediaMessage(
+          raw,
+          'buffer',
+          {},
+          { reuploadRequest: sock.updateMediaMessage }
+        )
+      } else if (quoted?.download) {
+        buf = await quoted.download()
+        mime = quoted.mimetype || mime
+      } else {
+        throw new Error('Tidak ada media untuk diunduh')
+      }
+      if (Buffer.isBuffer(buf)) {
+        buf.mimetype = mime
+      }
+      return buf
+    }
+
     return {
       raw,
       key: raw.key,
       chat: jid,
+      from: jid, // alias rezora-style
       sender: sender || normalizeJid(raw.key.participant || raw.key.remoteJid),
       senderLid,
       senderPn,
@@ -395,15 +436,17 @@ export class MessageHandler {
       text,
       command: parsed?.command || null,
       args: parsed?.args || [],
-      body: parsed?.text || '',
+      body: parsed?.text || text || '',
       usedPrefix: prefix,
       type,
+      mimetype: content?.[type]?.mimetype || '',
       mentionedJid: contextInfo?.mentionedJid || [],
       quoted,
       pushName: raw.pushName || '',
       timestamp: raw.messageTimestamp,
       reply,
       react,
+      download,
     }
   }
 
@@ -552,36 +595,67 @@ export class MessageHandler {
       responses[key] = applyTemplate(raw, vars)
     }
 
+    // group admin flags (best-effort, cached)
+    let isAdmin = false
+    let isBotAdmin = false
+    if (m.isGroup) {
+      try {
+        const meta = await getGroupMeta(sock, m.chat, false)
+        const participants = meta?.participants || []
+        const adminSet = new Set(
+          participants
+            .filter((p) => p.admin === 'admin' || p.admin === 'superadmin')
+            .map((p) => String(p.id || '').split(':')[0])
+        )
+        const senderBase = String(m.senderPn || m.sender || '').split('@')[0].split(':')[0]
+        const botBase = String(sock.user?.id || '')
+          .split(':')[0]
+          .split('@')[0]
+        isAdmin = isOwner || adminSet.has(senderBase)
+        isBotAdmin = adminSet.has(botBase)
+      } catch {}
+    }
+    m.isAdmin = isAdmin
+    m.isBotAdmin = isBotAdmin
+
+        const configProxy = {
+      ...botCfg,
+      botName: botCfg.botName,
+      get: (key) => (key ? botCfg[key] : { ...botCfg }),
+      getAll: () => ({ ...botCfg }),
+      update: (partial) => configService.update(sessionId, userId, partial),
+      isOwner: (jid) => configService.isOwner(sessionId, jid),
+      ban: (jid) => configService.banUser(sessionId, userId, jid),
+      unban: (jid) => configService.unbanUser(sessionId, userId, jid),
+      isBanned: (jid) => configService.isBanned(sessionId, jid),
+      getBannedUsers: () => configService.getBannedUsers(sessionId),
+      isPremium: (jid) => configService.isPremium(sessionId, jid),
+      addPremium: (jid) => configService.addPremium(sessionId, userId, jid),
+      removePremium: (jid) => configService.removePremium(sessionId, userId, jid),
+      getPremiumUsers: () => configService.getPremiumUsers(sessionId),
+      getUserLimit: (jid) => configService.getUserLimit(sessionId, jid),
+      setUserLimit: (jid, amount) => configService.setUserLimit(sessionId, userId, jid, amount),
+    }
+
     const ctx = {
       conn: sock,
+      sock, // alias rezora-style
       text: m.body,
       args: m.args,
       usedPrefix: m.usedPrefix,
+      prefix: m.usedPrefix,
       command: m.command,
       sessionId,
       userId,
       isOwner,
       isPremium: isOwner || configService.isPremium(sessionId, m.senderPn || m.sender),
+      isAdmin,
+      isBotAdmin,
       plugins: this.pluginLoader,
       botConfig: botCfg,
       botName: botCfg.botName,
       responses,
-      config: {
-        get: (key) => (key ? botCfg[key] : { ...botCfg }),
-        getAll: () => ({ ...botCfg }),
-        update: (partial) => configService.update(sessionId, userId, partial),
-        isOwner: (jid) => configService.isOwner(sessionId, jid),
-        ban: (jid) => configService.banUser(sessionId, userId, jid),
-        unban: (jid) => configService.unbanUser(sessionId, userId, jid),
-        isBanned: (jid) => configService.isBanned(sessionId, jid),
-        getBannedUsers: () => configService.getBannedUsers(sessionId),
-        isPremium: (jid) => configService.isPremium(sessionId, jid),
-        addPremium: (jid) => configService.addPremium(sessionId, userId, jid),
-        removePremium: (jid) => configService.removePremium(sessionId, userId, jid),
-        getPremiumUsers: () => configService.getPremiumUsers(sessionId),
-        getUserLimit: (jid) => configService.getUserLimit(sessionId, jid),
-        setUserLimit: (jid, amount) => configService.setUserLimit(sessionId, userId, jid, amount),
-      },
+      config: configProxy,
     }
 
     latency.mark('plugin_exec')

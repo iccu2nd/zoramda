@@ -1,3 +1,5 @@
+if (!global.db) global.db = { data: { chats: {}, users: {}, settings: {} } }
+
 /**
  * Botenv – Production-ready multi-session WhatsApp Gateway
  * Entry point

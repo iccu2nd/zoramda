@@ -469,6 +469,35 @@ export function attachMessageWrappers(sock) {
     })
   }
 
+  /**
+   * sock.sendImage(jid, source, caption, quoted)
+   * source: Buffer | url string
+   */
+  sock.sendImage = async (jid, source, caption = '', quoted = null, options = {}) => {
+    const image = Buffer.isBuffer(source)
+      ? source
+      : typeof source === 'string'
+        ? { url: source }
+        : source
+    return sock.sendMessage(jid, { image, caption: caption || undefined, ...options }, { quoted })
+  }
+
+  /**
+   * sock.sendVideo(jid, source, caption, quoted)
+   */
+  sock.sendVideo = async (jid, source, caption = '', quoted = null, options = {}) => {
+    const video = Buffer.isBuffer(source)
+      ? source
+      : typeof source === 'string'
+        ? { url: source }
+        : source
+    return sock.sendMessage(
+      jid,
+      { video, caption: caption || undefined, mimetype: 'video/mp4', ...options },
+      { quoted }
+    )
+  }
+
   return sock
 }
 
